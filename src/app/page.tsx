@@ -443,11 +443,16 @@ export default function DesignPage() {
           if (savedPages) {
             try {
               const parsed = JSON.parse(savedPages)
-              if (parsed.pages?.[0]?.canvasJSON) {
-                engineRef.current.loadFromJSON(parsed.pages[0].canvasJSON).then(() => {
+              if (parsed.pages?.length > 0) {
+                const currentPage = parsed.pages.find((p: any) => p.id === parsed.currentPageId) || parsed.pages[0]
+                if (currentPage?.canvasJSON) {
+                  engineRef.current.loadFromJSON(currentPage.canvasJSON).then(() => {
+                    isReloadingSoloRef.current = false
+                    refreshLayers()
+                  })
+                } else {
                   isReloadingSoloRef.current = false
-                  refreshLayers()
-                })
+                }
               } else {
                 isReloadingSoloRef.current = false
               }
