@@ -746,12 +746,17 @@ export class CanvasEngine {
     this.canvas.zoomToPoint(new Point(bound.left + bound.width / 2, bound.top + bound.height / 2), zoom)
     this.canvas.renderAll()
     this.onZoomChange?.(zoom)
+    const vpt = this.canvas.viewportTransform
+    if (vpt) {
+      this.onViewportChange?.(zoom, vpt[4], vpt[5])
+    }
   }
 
   resetZoom() {
     this.canvas.setViewportTransform([1, 0, 0, 1, 0, 0])
     this.canvas.renderAll()
     this.onZoomChange?.(1)
+    this.onViewportChange?.(1, 0, 0)
   }
 
   // PAN (HAND TOOL)

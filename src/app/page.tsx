@@ -694,9 +694,10 @@ export default function DesignPage() {
   }, [])
 
   const handleFlatten = useCallback(() => {
-    engineRef.current?.flattenSelected()
-    refreshLayers()
-    refreshObjectProps()
+    engineRef.current?.flattenSelected().then(() => {
+      refreshLayers()
+      refreshObjectProps()
+    })
   }, [])
 
   // DROP handler for images
