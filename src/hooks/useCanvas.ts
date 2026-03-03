@@ -275,7 +275,7 @@ export function useCanvas() {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const activeObj = canvas.getActiveObject();
-    if (!activeObj || activeObj.type !== 'activeSelection') return;
+    if (!activeObj || activeObj.type !== 'activeselection') return;
 
     const objects = (activeObj as fabric.ActiveSelection).getObjects();
     canvas.discardActiveObject();
