@@ -40,7 +40,7 @@ export default function DesignPage() {
   const [canUndo, setCanUndo] = useState(false)
   const [canRedo, setCanRedo] = useState(false)
   const [zoom, setZoom] = useState(1)
-  const [contextMenu, setContextMenu] = useState({ visible: false, x: 0, y: 0 })
+  const [contextMenu, setContextMenu] = useState({ visible: false, x: 0, y: 0, hasSelection: false, multipleSelected: false, isLocked: false })
   const [isDrawingShape, setIsDrawingShape] = useState(false)
   const drawStartRef = useRef<{ x: number; y: number } | null>(null)
 
@@ -281,10 +281,16 @@ export default function DesignPage() {
       if (opt.e.button !== 2) return
       opt.e.preventDefault()
       opt.e.stopPropagation()
+      // Capture selection state NOW before Fabric.js changes it
+      const active = engine.canvas.getActiveObject()
+      const selCount = active ? ((active as any).type === 'activeselection' ? (active as any).getObjects().length : 1) : 0
       setContextMenu({
         visible: true,
         x: opt.e.clientX,
         y: opt.e.clientY,
+        hasSelection: selCount > 0,
+        multipleSelected: selCount > 1,
+        isLocked: active ? !!(active as any).lockMovementX : false,
       })
     }
 
@@ -388,7 +394,7 @@ export default function DesignPage() {
         engine.canvas.discardActiveObject()
         engine.canvas.renderAll()
         setActiveTool('select')
-        setContextMenu({ visible: false, x: 0, y: 0 })
+        setContextMenu({ visible: false, x: 0, y: 0, hasSelection: false, multipleSelected: false, isLocked: false })
       }
 
       // Space bar for temporary hand tool
@@ -887,7 +893,7 @@ export default function DesignPage() {
         x={contextMenu.x}
         y={contextMenu.y}
         visible={contextMenu.visible}
-        onClose={() => setContextMenu({ visible: false, x: 0, y: 0 })}
+        onClose={() => setContextMenu({ visible: false, x: 0, y: 0, hasSelection: false, multipleSelected: false, isLocked: false })}
         onCopy={() => engineRef.current?.copy()}
         onCut={() => { engineRef.current?.cut().then(() => refreshLayers()) }}
         onPaste={() => { engineRef.current?.paste().then(() => refreshLayers()) }}
@@ -916,9 +922,9 @@ export default function DesignPage() {
         onBooleanExclude={() => { engineRef.current?.booleanExclude(); refreshLayers(); refreshObjectProps() }}
         onMask={() => { engineRef.current?.applyMask(); refreshLayers(); refreshObjectProps() }}
         onRemoveMask={() => { engineRef.current?.removeMask(); refreshLayers(); refreshObjectProps() }}
-        hasSelection={selectedIds.length > 0}
-        isLocked={objectProps?.locked || false}
-        multipleSelected={selectedIds.length > 1}
+        hasSelection={contextMenu.hasSelection}
+        isLocked={contextMenu.isLocked}
+        multipleSelected={contextMenu.multipleSelected}
       />
     </div>
   )
