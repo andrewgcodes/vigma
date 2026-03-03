@@ -1,0 +1,34 @@
+{
+  "name": "vigma",
+  "version": "1.0.0",
+  "private": true,
+  "description": "vibecoded figma",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@tailwindcss/postcss": "^4.2.1",
+    "autoprefixer": "^10.4.27",
+    "fabric": "^7.2.0",
+    "file-saver": "^2.0.5",
+    "lucide-react": "^0.576.0",
+    "next": "^16.1.6",
+    "postcss": "^8.5.8",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "tailwindcss": "^4.2.1",
+    "uuid": "^13.0.0",
+    "zustand": "^5.0.11"
+  },
+  "devDependencies": {
+    "@types/file-saver": "^2.0.7",
+    "@types/node": "^25.3.3",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@types/uuid": "^10.0.0",
+    "typescript": "^5.9.3"
+  }
+}
