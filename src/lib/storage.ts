@@ -51,7 +51,7 @@ function openDB(): Promise<IDBDatabase> {
 export async function idbSet(key: string, value: unknown): Promise<void> {
   try {
     const db = await openDB()
-    return new Promise((resolve, reject) => {
+    await new Promise<void>((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, 'readwrite')
       tx.objectStore(STORE_NAME).put(value, key)
       tx.oncomplete = () => { db.close(); resolve() }
@@ -69,7 +69,7 @@ export async function idbSet(key: string, value: unknown): Promise<void> {
 export async function idbGet<T = unknown>(key: string): Promise<T | null> {
   try {
     const db = await openDB()
-    return new Promise((resolve, reject) => {
+    return await new Promise<T | null>((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, 'readonly')
       const req = tx.objectStore(STORE_NAME).get(key)
       req.onsuccess = () => { db.close(); resolve(req.result ?? null) }
@@ -87,7 +87,7 @@ export async function idbGet<T = unknown>(key: string): Promise<T | null> {
 export async function idbRemove(key: string): Promise<void> {
   try {
     const db = await openDB()
-    return new Promise((resolve, reject) => {
+    await new Promise<void>((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, 'readwrite')
       tx.objectStore(STORE_NAME).delete(key)
       tx.oncomplete = () => { db.close(); resolve() }
