@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import {
   Settings2,
   AlignLeft,
@@ -359,6 +359,7 @@ export default function PropertiesPanel({
   const isText = obj?.type === "textbox" || obj?.type === "i-text";
   const isRect = obj?.type === "rect";
   const [lockAspect, setLockAspect] = useState(false);
+  const opacityBeforeDragRef = useRef<number | null>(null);
   const { fillColor, setFillColor, strokeColor, setStrokeColor } = useStore();
 
   return (
@@ -689,12 +690,19 @@ export default function PropertiesPanel({
                   min={0}
                   max={100}
                   value={obj.opacity * 100}
+                  onMouseDown={() => {
+                    opacityBeforeDragRef.current = obj.opacity;
+                  }}
                   onChange={(e) =>
                     onPropertyChange("opacity", parseInt(e.target.value) / 100, { skipHistory: true })
                   }
-                  onMouseUp={(e) =>
-                    onPropertyChange("opacity", parseInt((e.target as HTMLInputElement).value) / 100)
-                  }
+                  onMouseUp={(e) => {
+                    const newVal = parseInt((e.target as HTMLInputElement).value) / 100;
+                    if (opacityBeforeDragRef.current !== null && newVal !== opacityBeforeDragRef.current) {
+                      onPropertyChange("opacity", newVal);
+                    }
+                    opacityBeforeDragRef.current = null;
+                  }}
                   style={{ width: 60 }}
                 />
                 <span style={{ fontSize: 11, color: "#6e6e73", minWidth: 28, textAlign: "right" }}>
