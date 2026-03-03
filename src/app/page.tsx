@@ -74,10 +74,11 @@ export default function DesignPage() {
   const collabRef = useRef<CollaborationManager | null>(null)
   const userRef = useRef<UserIdentity>(getUserIdentity())
   // Track which object IDs are currently being applied from remote peers.
-  // Using a Set<string> instead of a counter prevents race conditions where
-  // async enlivenObjects resolves after the counter is decremented by other
-  // synchronous paths, causing objects to be echoed back to Yjs (Bug 1 fix).
-  const remoteObjectIdsRef = useRef<Set<string>>(new Set())
+  // Using a Map<string, number> for reference counting prevents race conditions
+  // both when async enlivenObjects interleaves with sync paths (Bug 1) AND when
+  // the same object ID appears in multiple concurrent remote batches (the count
+  // ensures the guard stays up until ALL batches processing that ID have completed).
+  const remoteObjectIdsRef = useRef<Map<string, number>>(new Map())
 
   // Panel resize handlers
   const handleResizeStart = useCallback((side: 'left' | 'right', e: React.MouseEvent) => {
@@ -232,7 +233,7 @@ export default function DesignPage() {
     if (!collab) return
     if (!obj || !obj.id) return
     // Skip if this object is currently being applied from a remote peer
-    if (remoteObjectIdsRef.current.has(obj.id)) return
+    if ((remoteObjectIdsRef.current.get(obj.id) ?? 0) > 0) return
     try {
       const json = JSON.stringify(obj.toJSON(['id', 'name', 'isFrame', 'lockMovementX', 'lockMovementY', 'lockRotation', 'lockScalingX', 'lockScalingY', 'hasControls', 'selectable', 'evented']))
       collab.syncObjectToYjs(obj.id, json)
@@ -245,7 +246,7 @@ export default function DesignPage() {
   const syncAllObjectsToCollab = useCallback(() => {
     const collab = collabRef.current
     const engine = engineRef.current
-    if (!collab || !engine || remoteObjectIdsRef.current.size > 0) return
+    if (!collab || !engine || remoteObjectIdsRef.current.size > 0) return  // Map.size > 0 means some IDs still being processed
     const objects = engine.canvas.getObjects().filter((o: any) => !o.isPreview && !o.isGrid)
     const items = objects.map((obj: any) => {
       if (!obj.id) obj.id = uuidv4()
@@ -291,7 +292,7 @@ export default function DesignPage() {
       ...changes.updated,
     ])
     for (const id of processingIds) {
-      remoteObjectIdsRef.current.add(id)
+      remoteObjectIdsRef.current.set(id, (remoteObjectIdsRef.current.get(id) ?? 0) + 1)
     }
 
     // Handle deletions
@@ -369,7 +370,12 @@ export default function DesignPage() {
         }
       }).finally(() => {
         for (const id of processingIds) {
-          remoteObjectIdsRef.current.delete(id)
+          const count = (remoteObjectIdsRef.current.get(id) ?? 1) - 1
+          if (count <= 0) {
+            remoteObjectIdsRef.current.delete(id)
+          } else {
+            remoteObjectIdsRef.current.set(id, count)
+          }
         }
       })
     } else {
@@ -377,7 +383,12 @@ export default function DesignPage() {
       // (like object:removed) have fired before we remove the guard
       queueMicrotask(() => {
         for (const id of processingIds) {
-          remoteObjectIdsRef.current.delete(id)
+          const count = (remoteObjectIdsRef.current.get(id) ?? 1) - 1
+          if (count <= 0) {
+            remoteObjectIdsRef.current.delete(id)
+          } else {
+            remoteObjectIdsRef.current.set(id, count)
+          }
         }
       })
     }
@@ -482,13 +493,13 @@ export default function DesignPage() {
       if ((target as any).type === 'activeselection') {
         const objects = (target as any).getObjects()
         for (const obj of objects) {
-          // Per-object remote check (Bug 1 fix)
-          if (!remoteObjectIdsRef.current.has(obj.id)) {
+              // Per-object remote check (Bug 1 fix)
+              if (!((remoteObjectIdsRef.current.get(obj.id) ?? 0) > 0)) {
             syncObjectToCollab(obj)
           }
         }
       } else {
-        if (target.id && remoteObjectIdsRef.current.has(target.id)) return
+        if (target.id && (remoteObjectIdsRef.current.get(target.id) ?? 0) > 0) return
         syncObjectToCollab(target)
       }
     }
@@ -498,7 +509,7 @@ export default function DesignPage() {
       if (!target || (target as any).isPreview || (target as any).isGrid) return
       if (!target.id) target.id = uuidv4()
       // Check if THIS specific object is being applied from remote (Bug 1 fix)
-      if (remoteObjectIdsRef.current.has(target.id)) return
+      if ((remoteObjectIdsRef.current.get(target.id) ?? 0) > 0) return
       syncObjectToCollab(target)
     }
 
@@ -506,7 +517,7 @@ export default function DesignPage() {
       const target = opt.target
       if (!target || !target.id || (target as any).isPreview || (target as any).isGrid) return
       // Check if THIS specific object is being removed from remote (Bug 1 fix)
-      if (remoteObjectIdsRef.current.has(target.id)) return
+      if ((remoteObjectIdsRef.current.get(target.id) ?? 0) > 0) return
       collabRef.current?.removeObjectFromYjs(target.id)
     }
 
@@ -521,7 +532,7 @@ export default function DesignPage() {
     const onTextEditingExited = (opt: any) => {
       const target = opt.target
       if (!target) return
-      if (target.id && remoteObjectIdsRef.current.has(target.id)) return
+      if (target.id && (remoteObjectIdsRef.current.get(target.id) ?? 0) > 0) return
       syncObjectToCollab(target)
     }
 
@@ -529,7 +540,7 @@ export default function DesignPage() {
     const onTextChanged = (opt: any) => {
       const target = opt.target
       if (!target) return
-      if (target.id && remoteObjectIdsRef.current.has(target.id)) return
+      if (target.id && (remoteObjectIdsRef.current.get(target.id) ?? 0) > 0) return
       syncObjectToCollab(target)
     }
 

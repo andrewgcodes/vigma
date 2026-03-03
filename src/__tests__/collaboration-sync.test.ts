@@ -189,6 +189,56 @@ describe('Bug 1: Async enliven race condition', () => {
     expect(syncedToYjs).toEqual(['local-after'])
   })
 
+  test('Overlapping batches with same object ID should use reference counting (Map guard)', () => {
+    // This tests the Map<string, number> refcount fix: when the same object ID
+    // appears in two concurrent batches, the guard must stay up until BOTH complete.
+    const remoteObjectIds = new Map<string, number>()
+    const syncedToYjs: string[] = []
+    const canvas = createMockCanvas()
+
+    canvas.on('object:added', (opt: any) => {
+      const target = opt.target
+      if (!target) return
+      if ((remoteObjectIds.get(target.id) ?? 0) > 0) return // Map-based guard
+      syncedToYjs.push(target.id)
+    })
+
+    // Batch 1: starts processing object 'A' (async image update)
+    remoteObjectIds.set('A', (remoteObjectIds.get('A') ?? 0) + 1) // count=1
+
+    // Batch 2: also processing object 'A' (rapid remote update)
+    remoteObjectIds.set('A', (remoteObjectIds.get('A') ?? 0) + 1) // count=2
+
+    // Batch 1 completes — with Set, this would remove 'A' entirely
+    // With Map refcount, count goes from 2 to 1
+    const count1 = (remoteObjectIds.get('A') ?? 1) - 1
+    if (count1 <= 0) {
+      remoteObjectIds.delete('A')
+    } else {
+      remoteObjectIds.set('A', count1)
+    }
+    expect(remoteObjectIds.get('A')).toBe(1) // Still guarded!
+
+    // Batch 2's async enliven resolves — canvas.add fires object:added
+    canvas.add({ id: 'A', type: 'image', src: 'data:image/png;base64,mock' })
+
+    // Guard is still up (count=1), so no echo
+    expect(syncedToYjs).toEqual([])
+
+    // Batch 2 completes cleanup
+    const count2 = (remoteObjectIds.get('A') ?? 1) - 1
+    if (count2 <= 0) {
+      remoteObjectIds.delete('A')
+    } else {
+      remoteObjectIds.set('A', count2)
+    }
+    expect(remoteObjectIds.has('A')).toBe(false) // Fully cleaned up
+
+    // Now local objects should sync fine
+    canvas.add({ id: 'local-1', type: 'rect' })
+    expect(syncedToYjs).toEqual(['local-1'])
+  })
+
   test('Object removal during remote processing should not trigger sync', () => {
     const remoteObjectIds = new Set<string>()
     const removedFromYjs: string[] = []
