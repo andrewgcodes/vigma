@@ -13,7 +13,7 @@ import Rulers from '@/components/Rulers'
 import CursorOverlay from '@/components/CursorOverlay'
 import CommentPins from '@/components/CommentPins'
 import CommentsPanel from '@/components/CommentsPanel'
-import { CollaborationManager, generateRoomId, getRoomIdFromHash, setRoomIdInHash, clearRoomFromHash } from '@/lib/collaboration'
+import { CollaborationManager, generateRoomId, getRoomIdFromHash, setRoomIdInHash, clearRoomFromHash, prewarmSignalingServer } from '@/lib/collaboration'
 import type { Comment, CommentReply, RemoteUser } from '@/lib/collaboration'
 import { getUserIdentity } from '@/lib/userIdentity'
 import type { UserIdentity } from '@/lib/userIdentity'
@@ -307,11 +307,13 @@ export default function DesignPage() {
 
     setRoomId(rid)
     setIsCollaborating(true)
-    setConnectionStatus('connecting')
+    // Don't set 'connecting' here — collab.connect() already fires
+    // onConnectionStatusChange('connected') synchronously, and React 18
+    // batches setState calls so the last one wins.
 
-    // Wait for IndexedDB persistence to finish loading (or timeout after 3s)
+    // Wait for IndexedDB persistence to finish loading (or timeout after 500ms)
     // This ensures we don't push empty state before persisted data loads
-    await collab.waitForSync(3000)
+    await collab.waitForSync(500)
 
     // Guard: if user left the room or component unmounted during sync, bail out
     if (collabRef.current !== collab) return
@@ -412,6 +414,7 @@ export default function DesignPage() {
 
   // === SHARE HANDLER ===
   const handleShare = useCallback(() => {
+    prewarmSignalingServer() // Wake up Fly.io server before WebSocket connects
     const rid = generateRoomId()
     setRoomIdInHash(rid)
     startCollaboration(rid)
