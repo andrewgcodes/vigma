@@ -98,8 +98,14 @@ function handleMessage(msg: Record<string, unknown>) {
       if (msg.comments) {
         store.setComments(msg.comments as CanvasComment[]);
       }
-      // Send current canvas state to the room
-      sendCanvasUpdate();
+      // Only send canvas state if we're the first user in the room
+      // (avoid overwriting existing room canvas when a second user joins)
+      {
+        const users = msg.users as { id: string; name: string; color: string }[];
+        if (users.length <= 1) {
+          sendCanvasUpdate();
+        }
+      }
       break;
 
     case 'canvas_sync':
