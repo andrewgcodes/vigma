@@ -1403,9 +1403,18 @@ export class CanvasEngine {
 
   // EYEDROPPER
   getColorAtPoint(x: number, y: number): string {
-    const ctx = this.canvas.getContext()
-    const pixel = ctx.getImageData(x, y, 1, 1).data
-    return `rgb(${pixel[0]}, ${pixel[1]}, ${pixel[2]})`
+    const el = (this.canvas as any).lowerCanvasEl as HTMLCanvasElement
+    if (!el) return '#000000'
+    const ctx = el.getContext('2d')
+    if (!ctx) return '#000000'
+    // Account for device pixel ratio
+    const dpr = window.devicePixelRatio || 1
+    const px = Math.round(x * dpr)
+    const py = Math.round(y * dpr)
+    const pixel = ctx.getImageData(px, py, 1, 1).data
+    // Convert to hex
+    const toHex = (n: number) => n.toString(16).padStart(2, '0')
+    return `#${toHex(pixel[0])}${toHex(pixel[1])}${toHex(pixel[2])}`
   }
 
   // DISPOSE

@@ -181,6 +181,8 @@ export default function DesignPage() {
         break
       case 'eyedropper':
         engine.canvas.defaultCursor = 'crosshair'
+        engine.canvas.selection = false
+        engine.canvas.forEachObject(o => { o.selectable = false; o.evented = false })
         break
     }
   }, [activeTool, brushSettings])
