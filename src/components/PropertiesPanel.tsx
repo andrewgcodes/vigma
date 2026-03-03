@@ -1,7 +1,25 @@
 "use client";
 
 import React from "react";
-import { Settings2 } from "lucide-react";
+import {
+  Settings2,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
+  AlignJustify,
+  Bold,
+  Italic,
+  Underline,
+  Strikethrough,
+  FlipHorizontal2,
+  FlipVertical2,
+  AlignHorizontalJustifyStart,
+  AlignHorizontalJustifyCenter,
+  AlignHorizontalJustifyEnd,
+  AlignVerticalJustifyStart,
+  AlignVerticalJustifyCenter,
+  AlignVerticalJustifyEnd,
+} from "lucide-react";
 import { useStore } from "@/store/useStore";
 
 interface PropertiesPanelProps {
@@ -21,11 +39,20 @@ interface PropertiesPanelProps {
     fontFamily?: string;
     fontSize?: number;
     fontWeight?: string;
+    fontStyle?: string;
+    textAlign?: string;
+    underline?: boolean;
+    linethrough?: boolean;
     text?: string;
     scaleX: number;
     scaleY: number;
+    shadow?: { color: string; blur: number; offsetX: number; offsetY: number } | null;
+    flipX?: boolean;
+    flipY?: boolean;
   } | null;
-  onPropertyChange: (property: string, value: number | string) => void;
+  onPropertyChange: (property: string, value: number | string | boolean) => void;
+  onAlignObjects?: (alignment: string) => void;
+  hasMultipleSelection?: boolean;
 }
 
 function PropertyRow({ label, children }: { label: string; children: React.ReactNode }) {
@@ -183,9 +210,51 @@ const FONT_FAMILIES = [
   "Garamond",
 ];
 
+function SmallButton({
+  icon,
+  active,
+  onClick,
+  title,
+}: {
+  icon: React.ReactNode;
+  active?: boolean;
+  onClick: () => void;
+  title?: string;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      title={title}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        width: 28,
+        height: 28,
+        borderRadius: 6,
+        border: "1px solid " + (active ? "#0071e3" : "#e5e5e7"),
+        background: active ? "#e8f4fd" : "white",
+        color: active ? "#0071e3" : "#6e6e73",
+        cursor: "pointer",
+        transition: "all 0.12s ease",
+      }}
+      onMouseEnter={(e) => {
+        if (!active) e.currentTarget.style.background = "#f5f5f7";
+      }}
+      onMouseLeave={(e) => {
+        if (!active) e.currentTarget.style.background = "white";
+      }}
+    >
+      {icon}
+    </button>
+  );
+}
+
 export default function PropertiesPanel({
   selectedObject,
   onPropertyChange,
+  onAlignObjects,
+  hasMultipleSelection,
 }: PropertiesPanelProps) {
   const obj = selectedObject;
   const isText = obj?.type === "textbox" || obj?.type === "i-text";
@@ -439,6 +508,173 @@ export default function PropertiesPanel({
                     <option value="800">Extra Bold</option>
                   </select>
                 </PropertyRow>
+                {/* Text style buttons */}
+                <div style={{ display: "flex", gap: 4, padding: "6px 0" }}>
+                  <SmallButton
+                    icon={<Bold size={13} />}
+                    active={obj.fontWeight === "bold" || obj.fontWeight === "700"}
+                    onClick={() => onPropertyChange("fontWeight", obj.fontWeight === "bold" || obj.fontWeight === "700" ? "normal" : "bold")}
+                    title="Bold"
+                  />
+                  <SmallButton
+                    icon={<Italic size={13} />}
+                    active={obj.fontStyle === "italic"}
+                    onClick={() => onPropertyChange("fontStyle", obj.fontStyle === "italic" ? "normal" : "italic")}
+                    title="Italic"
+                  />
+                  <SmallButton
+                    icon={<Underline size={13} />}
+                    active={obj.underline === true}
+                    onClick={() => onPropertyChange("underline", !obj.underline)}
+                    title="Underline"
+                  />
+                  <SmallButton
+                    icon={<Strikethrough size={13} />}
+                    active={obj.linethrough === true}
+                    onClick={() => onPropertyChange("linethrough", !obj.linethrough)}
+                    title="Strikethrough"
+                  />
+                </div>
+                {/* Text alignment */}
+                <PropertyRow label="Align">
+                  <div style={{ display: "flex", gap: 4 }}>
+                    <SmallButton
+                      icon={<AlignLeft size={13} />}
+                      active={obj.textAlign === "left" || !obj.textAlign}
+                      onClick={() => onPropertyChange("textAlign", "left")}
+                      title="Align Left"
+                    />
+                    <SmallButton
+                      icon={<AlignCenter size={13} />}
+                      active={obj.textAlign === "center"}
+                      onClick={() => onPropertyChange("textAlign", "center")}
+                      title="Align Center"
+                    />
+                    <SmallButton
+                      icon={<AlignRight size={13} />}
+                      active={obj.textAlign === "right"}
+                      onClick={() => onPropertyChange("textAlign", "right")}
+                      title="Align Right"
+                    />
+                    <SmallButton
+                      icon={<AlignJustify size={13} />}
+                      active={obj.textAlign === "justify"}
+                      onClick={() => onPropertyChange("textAlign", "justify")}
+                      title="Justify"
+                    />
+                  </div>
+                </PropertyRow>
+              </>
+            )}
+
+            {/* Shadow */}
+            <SectionHeader title="Effects" />
+            <PropertyRow label="Shadow">
+              <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                <input
+                  type="checkbox"
+                  checked={!!obj.shadow}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      onPropertyChange("shadowEnabled", true);
+                    } else {
+                      onPropertyChange("shadowEnabled", false);
+                    }
+                  }}
+                  style={{ cursor: "pointer" }}
+                />
+                <span style={{ fontSize: 11, color: "#6e6e73" }}>
+                  {obj.shadow ? "On" : "Off"}
+                </span>
+              </div>
+            </PropertyRow>
+            {obj.shadow && (
+              <>
+                <PropertyRow label="Color">
+                  <ColorInput
+                    value={obj.shadow.color || "#000000"}
+                    onChange={(v) => onPropertyChange("shadowColor", v)}
+                    label="Shadow"
+                  />
+                </PropertyRow>
+                <PropertyRow label="Blur">
+                  <NumberInput
+                    value={obj.shadow.blur || 0}
+                    onChange={(v) => onPropertyChange("shadowBlur", v)}
+                    min={0}
+                    max={100}
+                  />
+                </PropertyRow>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                  <PropertyRow label="X">
+                    <NumberInput
+                      value={obj.shadow.offsetX || 0}
+                      onChange={(v) => onPropertyChange("shadowOffsetX", v)}
+                    />
+                  </PropertyRow>
+                  <PropertyRow label="Y">
+                    <NumberInput
+                      value={obj.shadow.offsetY || 0}
+                      onChange={(v) => onPropertyChange("shadowOffsetY", v)}
+                    />
+                  </PropertyRow>
+                </div>
+              </>
+            )}
+
+            {/* Transform */}
+            <SectionHeader title="Transform" />
+            <div style={{ display: "flex", gap: 4, padding: "4px 0" }}>
+              <SmallButton
+                icon={<FlipHorizontal2 size={13} />}
+                active={obj.flipX === true}
+                onClick={() => onPropertyChange("flipX", !obj.flipX)}
+                title="Flip Horizontal"
+              />
+              <SmallButton
+                icon={<FlipVertical2 size={13} />}
+                active={obj.flipY === true}
+                onClick={() => onPropertyChange("flipY", !obj.flipY)}
+                title="Flip Vertical"
+              />
+            </div>
+
+            {/* Alignment (when multiple selected) */}
+            {hasMultipleSelection && onAlignObjects && (
+              <>
+                <SectionHeader title="Align" />
+                <div style={{ display: "flex", gap: 4, flexWrap: "wrap", padding: "4px 0" }}>
+                  <SmallButton
+                    icon={<AlignHorizontalJustifyStart size={13} />}
+                    onClick={() => onAlignObjects("left")}
+                    title="Align Left"
+                  />
+                  <SmallButton
+                    icon={<AlignHorizontalJustifyCenter size={13} />}
+                    onClick={() => onAlignObjects("centerH")}
+                    title="Align Center Horizontal"
+                  />
+                  <SmallButton
+                    icon={<AlignHorizontalJustifyEnd size={13} />}
+                    onClick={() => onAlignObjects("right")}
+                    title="Align Right"
+                  />
+                  <SmallButton
+                    icon={<AlignVerticalJustifyStart size={13} />}
+                    onClick={() => onAlignObjects("top")}
+                    title="Align Top"
+                  />
+                  <SmallButton
+                    icon={<AlignVerticalJustifyCenter size={13} />}
+                    onClick={() => onAlignObjects("centerV")}
+                    title="Align Center Vertical"
+                  />
+                  <SmallButton
+                    icon={<AlignVerticalJustifyEnd size={13} />}
+                    onClick={() => onAlignObjects("bottom")}
+                    title="Align Bottom"
+                  />
+                </div>
               </>
             )}
           </>

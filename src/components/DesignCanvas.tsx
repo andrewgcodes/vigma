@@ -12,11 +12,6 @@ import {
   createArrow,
   createStar,
   createTextbox,
-  addImageToCanvas,
-  exportCanvasAsPNG,
-  exportCanvasAsSVG,
-  exportCanvasAsJSON,
-  loadCanvasFromJSON,
 } from "@/lib/fabricUtils";
 import type { LayerInfo } from "@/types";
 
@@ -35,10 +30,14 @@ export default function DesignCanvas({ canvasRef, historyRef }: DesignCanvasProp
   const lastPosRef = useRef({ x: 0, y: 0 });
   const spaceHeldRef = useRef(false);
 
+  // Drag-to-draw refs
+  const isDrawingRef = useRef(false);
+  const drawStartRef = useRef({ x: 0, y: 0 });
+  const drawingObjRef = useRef<fabric.FabricObject | null>(null);
+
   const {
     activeTool,
     setActiveTool,
-    zoom,
     setZoom,
     setSelectedObjectId,
     setLayers,
@@ -53,6 +52,9 @@ export default function DesignCanvas({ canvasRef, historyRef }: DesignCanvasProp
     penWidth,
     setCanUndo,
     setCanRedo,
+    setContextMenu,
+    clipboardData,
+    setClipboardData,
   } = useStore();
 
   const syncLayers = useCallback((canvas: fabric.Canvas) => {
@@ -203,7 +205,7 @@ export default function DesignCanvas({ canvasRef, historyRef }: DesignCanvasProp
     canvas.renderAll();
   }, [activeTool, penColor, penWidth, canvasRef]);
 
-  // Mouse events for shape creation and panning
+  // Mouse events for drag-to-draw, panning, and context menu
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -211,10 +213,18 @@ export default function DesignCanvas({ canvasRef, historyRef }: DesignCanvasProp
     const handleMouseDown = (opt: fabric.TPointerEventInfo) => {
       const e = opt.e;
       const pointer = canvas.getScenePoint(e);
-
-      // Get client coordinates (works for both mouse and touch)
       const clientX = 'clientX' in e ? e.clientX : (e as TouchEvent).touches?.[0]?.clientX || 0;
       const clientY = 'clientY' in e ? e.clientY : (e as TouchEvent).touches?.[0]?.clientY || 0;
+
+      // Close context menu on any click
+      setContextMenu({ visible: false, x: 0, y: 0 });
+
+      // Right-click context menu
+      if ('button' in e && e.button === 2) {
+        e.preventDefault();
+        setContextMenu({ visible: true, x: clientX, y: clientY });
+        return;
+      }
 
       // Panning with space or hand tool
       if (spaceHeldRef.current || activeTool === "hand") {
@@ -234,18 +244,37 @@ export default function DesignCanvas({ canvasRef, historyRef }: DesignCanvasProp
 
       if (activeTool === "select" || activeTool === "pen") return;
 
-      // Create shapes
+      // Text tool - click to place (no drag)
+      if (activeTool === "text") {
+        const obj = createTextbox(pointer.x, pointer.y, fillColor, fontFamily, fontSize, fontWeight);
+        canvas.add(obj);
+        canvas.setActiveObject(obj);
+        canvas.renderAll();
+        saveHistory();
+        setActiveTool("select");
+        return;
+      }
+
+      // Image tool - handled by file upload
+      if (activeTool === "image") return;
+
+      // Start drag-to-draw for shapes
+      isDrawingRef.current = true;
+      drawStartRef.current = { x: pointer.x, y: pointer.y };
       let obj: fabric.FabricObject | null = null;
 
       switch (activeTool) {
         case "rectangle":
           obj = createRectangle(pointer.x, pointer.y, fillColor, strokeColor, strokeWidth, cornerRadius);
+          obj.set({ width: 1, height: 1 });
           break;
         case "ellipse":
           obj = createEllipse(pointer.x, pointer.y, fillColor, strokeColor, strokeWidth);
+          (obj as fabric.Ellipse).set({ rx: 0.5, ry: 0.5 });
           break;
         case "triangle":
           obj = createTriangle(pointer.x, pointer.y, fillColor, strokeColor, strokeWidth);
+          obj.set({ width: 1, height: 1 });
           break;
         case "line":
           obj = createLine(pointer.x, pointer.y, strokeColor, strokeWidth || 2);
@@ -255,37 +284,77 @@ export default function DesignCanvas({ canvasRef, historyRef }: DesignCanvasProp
           break;
         case "star":
           obj = createStar(pointer.x, pointer.y, fillColor, strokeColor, strokeWidth);
-          break;
-        case "text":
-          obj = createTextbox(pointer.x, pointer.y, fillColor, fontFamily, fontSize, fontWeight);
-          break;
-        case "image":
-          // Handled separately via file upload
+          obj.set({ scaleX: 0.01, scaleY: 0.01 });
           break;
       }
 
       if (obj) {
+        drawingObjRef.current = obj;
         canvas.add(obj);
-        canvas.setActiveObject(obj);
         canvas.renderAll();
-        saveHistory();
-        setActiveTool("select");
       }
     };
 
     const handleMouseMove = (opt: fabric.TPointerEventInfo) => {
-      if (!isPanningRef.current) return;
       const e = opt.e;
-      const vpt = canvas.viewportTransform;
-      if (!vpt) return;
 
-      const clientX = 'clientX' in e ? e.clientX : (e as TouchEvent).touches?.[0]?.clientX || 0;
-      const clientY = 'clientY' in e ? e.clientY : (e as TouchEvent).touches?.[0]?.clientY || 0;
+      // Panning
+      if (isPanningRef.current) {
+        const vpt = canvas.viewportTransform;
+        if (!vpt) return;
+        const clientX = 'clientX' in e ? e.clientX : (e as TouchEvent).touches?.[0]?.clientX || 0;
+        const clientY = 'clientY' in e ? e.clientY : (e as TouchEvent).touches?.[0]?.clientY || 0;
+        vpt[4] += clientX - lastPosRef.current.x;
+        vpt[5] += clientY - lastPosRef.current.y;
+        lastPosRef.current = { x: clientX, y: clientY };
+        canvas.requestRenderAll();
+        return;
+      }
 
-      vpt[4] += clientX - lastPosRef.current.x;
-      vpt[5] += clientY - lastPosRef.current.y;
-      lastPosRef.current = { x: clientX, y: clientY };
-      canvas.requestRenderAll();
+      // Drag-to-draw
+      if (isDrawingRef.current && drawingObjRef.current) {
+        const pointer = canvas.getScenePoint(e);
+        const startX = drawStartRef.current.x;
+        const startY = drawStartRef.current.y;
+        const obj = drawingObjRef.current;
+        const dx = pointer.x - startX;
+        const dy = pointer.y - startY;
+
+        switch (activeTool) {
+          case "rectangle":
+          case "triangle":
+            obj.set({
+              left: dx >= 0 ? startX : pointer.x,
+              top: dy >= 0 ? startY : pointer.y,
+              width: Math.max(Math.abs(dx), 2),
+              height: Math.max(Math.abs(dy), 2),
+            });
+            break;
+          case "ellipse":
+            (obj as fabric.Ellipse).set({
+              left: dx >= 0 ? startX : pointer.x,
+              top: dy >= 0 ? startY : pointer.y,
+              rx: Math.max(Math.abs(dx) / 2, 1),
+              ry: Math.max(Math.abs(dy) / 2, 1),
+            });
+            break;
+          case "line":
+            (obj as fabric.Line).set({ x2: pointer.x, y2: pointer.y });
+            break;
+          case "arrow": {
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            obj.set({ scaleX: Math.max(dist / 200, 0.01), scaleY: Math.max(dist / 200, 0.01) });
+            break;
+          }
+          case "star": {
+            const starDist = Math.sqrt(dx * dx + dy * dy);
+            obj.set({ scaleX: Math.max(starDist / 80, 0.01), scaleY: Math.max(starDist / 80, 0.01) });
+            break;
+          }
+        }
+        obj.setCoords();
+        canvas.renderAll();
+      }
     };
 
     const handleMouseUp = () => {
@@ -297,23 +366,44 @@ export default function DesignCanvas({ canvasRef, historyRef }: DesignCanvasProp
           canvas.hoverCursor = "grab";
         }
       }
+
+      // Finish drag-to-draw
+      if (isDrawingRef.current && drawingObjRef.current) {
+        const obj = drawingObjRef.current;
+        const w = (obj.width ?? 0) * (obj.scaleX ?? 1);
+        const h = (obj.height ?? 0) * (obj.scaleY ?? 1);
+
+        // If just a click (no drag), set default size
+        if (w < 5 && h < 5) {
+          switch (activeTool) {
+            case "rectangle": obj.set({ width: 200, height: 150 }); break;
+            case "ellipse": (obj as fabric.Ellipse).set({ rx: 100, ry: 75 }); break;
+            case "triangle": obj.set({ width: 180, height: 160 }); break;
+            case "star": obj.set({ scaleX: 1, scaleY: 1 }); break;
+          }
+        }
+        obj.setCoords();
+        canvas.setActiveObject(obj);
+        canvas.renderAll();
+        saveHistory();
+        setActiveTool("select");
+        isDrawingRef.current = false;
+        drawingObjRef.current = null;
+      }
     };
 
     // Zoom with scroll
     const handleWheel = (opt: { e: WheelEvent }) => {
       const e = opt.e;
       e.preventDefault();
-
-      const delta = e.deltaY;
       let newZoom = canvas.getZoom();
-      newZoom *= 0.999 ** delta;
+      newZoom *= 0.999 ** e.deltaY;
       newZoom = Math.min(Math.max(0.1, newZoom), 5);
-
       canvas.zoomToPoint(new fabric.Point(e.offsetX, e.offsetY), newZoom);
       setZoom(Math.round(newZoom * 100));
     };
 
-    // Path created from drawing
+    // Path created from freehand drawing
     const handlePathCreated = () => {
       const objects = canvas.getObjects();
       const lastObj = objects[objects.length - 1] as fabric.FabricObject & { id?: string; name?: string };
@@ -331,7 +421,6 @@ export default function DesignCanvas({ canvasRef, historyRef }: DesignCanvasProp
     canvas.on("mouse:up", handleMouseUp as any);
     canvas.on("mouse:wheel", handleWheel as any);
     canvas.on("path:created", handlePathCreated);
-
     return () => {
       canvas.off("mouse:down", handleMouseDown as any);
       canvas.off("mouse:move", handleMouseMove as any);
@@ -340,17 +429,18 @@ export default function DesignCanvas({ canvasRef, historyRef }: DesignCanvasProp
       canvas.off("path:created", handlePathCreated);
     };
     /* eslint-enable @typescript-eslint/no-explicit-any */
-  }, [activeTool, fillColor, strokeColor, strokeWidth, cornerRadius, fontFamily, fontSize, fontWeight, canvasRef, historyRef, saveHistory, syncLayers, setActiveTool, setZoom]);
+  }, [activeTool, fillColor, strokeColor, strokeWidth, cornerRadius, fontFamily, fontSize, fontWeight, canvasRef, historyRef, saveHistory, syncLayers, setActiveTool, setZoom, setContextMenu]);
 
   // Keyboard shortcuts
   useEffect(() => {
+    const canvas = canvasRef.current;
+
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't intercept if typing in an input
       const target = e.target as HTMLElement;
       if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) return;
-
-      const canvas = canvasRef.current;
       if (!canvas) return;
+
+      const key = e.key.toLowerCase();
 
       // Space for panning
       if (e.code === "Space" && !e.repeat) {
@@ -362,41 +452,32 @@ export default function DesignCanvas({ canvasRef, historyRef }: DesignCanvasProp
         return;
       }
 
-      // Tool shortcuts
-      if (!e.ctrlKey && !e.metaKey) {
-        switch (e.key.toLowerCase()) {
-          case "v":
-            setActiveTool("select");
-            break;
-          case "h":
-            setActiveTool("hand");
-            break;
-          case "r":
-            setActiveTool("rectangle");
-            break;
-          case "o":
-            setActiveTool("ellipse");
-            break;
-          case "l":
-            setActiveTool("line");
-            break;
-          case "a":
-            setActiveTool("arrow");
-            break;
-          case "p":
-            setActiveTool("pen");
-            break;
-          case "t":
-            setActiveTool("text");
-            break;
-          case "s":
-            setActiveTool("star");
-            break;
+      // Escape - deselect
+      if (e.key === "Escape") {
+        canvas.discardActiveObject();
+        canvas.renderAll();
+        setSelectedObjectId(null);
+        setContextMenu({ visible: false, x: 0, y: 0 });
+        return;
+      }
+
+      // Tool shortcuts (no modifier keys)
+      if (!e.ctrlKey && !e.metaKey && !e.shiftKey) {
+        switch (key) {
+          case "v": setActiveTool("select"); return;
+          case "h": setActiveTool("hand"); return;
+          case "r": setActiveTool("rectangle"); return;
+          case "o": setActiveTool("ellipse"); return;
+          case "l": setActiveTool("line"); return;
+          case "a": setActiveTool("arrow"); return;
+          case "p": setActiveTool("pen"); return;
+          case "t": setActiveTool("text"); return;
+          case "s": setActiveTool("star"); return;
         }
       }
 
-      // Delete selected
-      if (e.key === "Delete" || e.key === "Backspace") {
+      // Delete selected objects
+      if (e.key === "Delete" || (e.key === "Backspace" && !e.ctrlKey && !e.metaKey)) {
         const active = canvas.getActiveObjects();
         if (active.length > 0) {
           active.forEach((obj) => canvas.remove(obj));
@@ -405,10 +486,26 @@ export default function DesignCanvas({ canvasRef, historyRef }: DesignCanvasProp
           saveHistory();
           setSelectedObjectId(null);
         }
+        return;
       }
 
-      // Ctrl+Z Undo
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && !e.shiftKey) {
+      // --- Ctrl/Cmd shortcuts ---
+      if (!(e.ctrlKey || e.metaKey)) return;
+
+      // Ctrl+A - Select All
+      if (key === "a" && !e.shiftKey) {
+        e.preventDefault();
+        const objects = canvas.getObjects();
+        if (objects.length > 0) {
+          const sel = new fabric.ActiveSelection(objects, { canvas });
+          canvas.setActiveObject(sel);
+          canvas.renderAll();
+        }
+        return;
+      }
+
+      // Ctrl+Z - Undo
+      if (key === "z" && !e.shiftKey) {
         e.preventDefault();
         historyRef.current.undo(canvas).then((didUndo) => {
           if (didUndo) {
@@ -417,10 +514,11 @@ export default function DesignCanvas({ canvasRef, historyRef }: DesignCanvasProp
             syncLayers(canvas);
           }
         });
+        return;
       }
 
-      // Ctrl+Shift+Z or Ctrl+Y Redo
-      if ((e.ctrlKey || e.metaKey) && (e.key === "y" || (e.key.toLowerCase() === "z" && e.shiftKey))) {
+      // Ctrl+Shift+Z or Ctrl+Y - Redo
+      if (key === "y" || (key === "z" && e.shiftKey)) {
         e.preventDefault();
         historyRef.current.redo(canvas).then((didRedo) => {
           if (didRedo) {
@@ -429,10 +527,73 @@ export default function DesignCanvas({ canvasRef, historyRef }: DesignCanvasProp
             syncLayers(canvas);
           }
         });
+        return;
       }
 
-      // Ctrl+D Duplicate
-      if ((e.ctrlKey || e.metaKey) && e.key === "d") {
+      // Ctrl+C - Copy
+      if (key === "c" && !e.shiftKey) {
+        e.preventDefault();
+        const activeObj = canvas.getActiveObject();
+        if (activeObj) {
+          activeObj.clone().then((cloned: fabric.FabricObject) => {
+            const json = JSON.stringify(cloned.toJSON());
+            setClipboardData(json);
+          });
+        }
+        return;
+      }
+
+      // Ctrl+X - Cut
+      if (key === "x" && !e.shiftKey) {
+        e.preventDefault();
+        const activeObj = canvas.getActiveObject();
+        if (activeObj) {
+          activeObj.clone().then((cloned: fabric.FabricObject) => {
+            const json = JSON.stringify(cloned.toJSON());
+            setClipboardData(json);
+            const activeObjs = canvas.getActiveObjects();
+            activeObjs.forEach((obj) => canvas.remove(obj));
+            canvas.discardActiveObject();
+            canvas.renderAll();
+            saveHistory();
+            setSelectedObjectId(null);
+          });
+        }
+        return;
+      }
+
+      // Ctrl+V - Paste
+      if (key === "v" && !e.shiftKey) {
+        e.preventDefault();
+        if (clipboardData) {
+          try {
+            const parsed = JSON.parse(clipboardData);
+            fabric.util.enlivenObjects([parsed]).then((enlivened) => {
+              const objects = enlivened as fabric.FabricObject[];
+              if (objects.length > 0) {
+                const obj = objects[0];
+                obj.set({
+                  left: (obj.left || 0) + 20,
+                  top: (obj.top || 0) + 20,
+                });
+                const o = obj as fabric.FabricObject & { id?: string; name?: string };
+                o.id = `obj_${Date.now()}_paste`;
+                o.name = (o.name || "Object") + " Copy";
+                canvas.add(obj);
+                canvas.setActiveObject(obj);
+                canvas.renderAll();
+                saveHistory();
+              }
+            });
+          } catch {
+            // ignore parse errors
+          }
+        }
+        return;
+      }
+
+      // Ctrl+D - Duplicate
+      if (key === "d") {
         e.preventDefault();
         const activeObj = canvas.getActiveObject();
         if (activeObj) {
@@ -450,13 +611,144 @@ export default function DesignCanvas({ canvasRef, historyRef }: DesignCanvasProp
             saveHistory();
           });
         }
+        return;
+      }
+
+      // Ctrl+G - Group
+      if (key === "g" && !e.shiftKey) {
+        e.preventDefault();
+        const activeSelection = canvas.getActiveObject();
+        if (activeSelection && activeSelection.type === "activeselection") {
+          const sel = activeSelection as fabric.ActiveSelection;
+          const objects = sel.getObjects();
+          if (objects.length > 1) {
+            canvas.discardActiveObject();
+            const group = new fabric.Group(objects);
+            objects.forEach((obj) => canvas.remove(obj));
+            const g = group as fabric.Group & { id?: string; name?: string };
+            g.id = `obj_${Date.now()}_group`;
+            g.name = `Group ${canvas.getObjects().length + 1}`;
+            canvas.add(group);
+            canvas.setActiveObject(group);
+            canvas.renderAll();
+            saveHistory();
+          }
+        }
+        return;
+      }
+
+      // Ctrl+Shift+G - Ungroup
+      if (key === "g" && e.shiftKey) {
+        e.preventDefault();
+        const activeObj = canvas.getActiveObject();
+        if (activeObj && activeObj.type === "group") {
+          const group = activeObj as fabric.Group;
+          const items = [...group.getObjects()];
+          group.removeAll();
+          canvas.remove(group);
+          const sel: fabric.FabricObject[] = [];
+          items.forEach((item) => {
+            canvas.add(item);
+            sel.push(item);
+          });
+          const activeSelection = new fabric.ActiveSelection(sel, { canvas });
+          canvas.setActiveObject(activeSelection);
+          canvas.renderAll();
+          saveHistory();
+        }
+        return;
+      }
+
+      // Ctrl+] - Bring Forward
+      if (e.key === "]" && !e.shiftKey) {
+        e.preventDefault();
+        const obj = canvas.getActiveObject();
+        if (obj) {
+          const objects = canvas.getObjects();
+          const idx = objects.indexOf(obj);
+          if (idx < objects.length - 1) {
+            canvas.moveObjectTo(obj, idx + 1);
+            canvas.renderAll();
+            syncLayers(canvas);
+          }
+        }
+        return;
+      }
+
+      // Ctrl+[ - Send Backward
+      if (e.key === "[" && !e.shiftKey) {
+        e.preventDefault();
+        const obj = canvas.getActiveObject();
+        if (obj) {
+          const objects = canvas.getObjects();
+          const idx = objects.indexOf(obj);
+          if (idx > 0) {
+            canvas.moveObjectTo(obj, idx - 1);
+            canvas.renderAll();
+            syncLayers(canvas);
+          }
+        }
+        return;
+      }
+
+      // Ctrl+Shift+] - Bring to Front
+      if (e.key === "]" && e.shiftKey) {
+        e.preventDefault();
+        const obj = canvas.getActiveObject();
+        if (obj) {
+          canvas.moveObjectTo(obj, canvas.getObjects().length - 1);
+          canvas.renderAll();
+          syncLayers(canvas);
+        }
+        return;
+      }
+
+      // Ctrl+Shift+[ - Send to Back
+      if (e.key === "[" && e.shiftKey) {
+        e.preventDefault();
+        const obj = canvas.getActiveObject();
+        if (obj) {
+          canvas.moveObjectTo(obj, 0);
+          canvas.renderAll();
+          syncLayers(canvas);
+        }
+        return;
+      }
+
+      // Ctrl+0 - Reset zoom
+      if (e.key === "0") {
+        e.preventDefault();
+        canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
+        setZoom(100);
+        return;
+      }
+
+      // Ctrl+= / Ctrl++ - Zoom in
+      if (e.key === "=" || e.key === "+") {
+        e.preventDefault();
+        let newZoom = canvas.getZoom() * 1.15;
+        newZoom = Math.min(newZoom, 5);
+        const center = canvas.getCenterPoint();
+        canvas.zoomToPoint(center, newZoom);
+        setZoom(Math.round(newZoom * 100));
+        return;
+      }
+
+      // Ctrl+- - Zoom out
+      if (e.key === "-") {
+        e.preventDefault();
+        let newZoom = canvas.getZoom() / 1.15;
+        newZoom = Math.max(newZoom, 0.1);
+        const center = canvas.getCenterPoint();
+        canvas.zoomToPoint(center, newZoom);
+        setZoom(Math.round(newZoom * 100));
+        return;
       }
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
       if (e.code === "Space") {
         spaceHeldRef.current = false;
-        const canvas = canvasRef.current;
         if (canvas && activeTool !== "hand") {
           canvas.defaultCursor = activeTool === "select" ? "default" : "crosshair";
           canvas.hoverCursor = activeTool === "select" ? "move" : "crosshair";
@@ -467,12 +759,11 @@ export default function DesignCanvas({ canvasRef, historyRef }: DesignCanvasProp
 
     window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("keyup", handleKeyUp);
-
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
     };
-  }, [activeTool, canvasRef, historyRef, saveHistory, syncLayers, setActiveTool, setSelectedObjectId, setCanUndo, setCanRedo]);
+  }, [activeTool, canvasRef, historyRef, clipboardData, saveHistory, syncLayers, setActiveTool, setSelectedObjectId, setCanUndo, setCanRedo, setZoom, setClipboardData, setContextMenu]);
 
   return (
     <div
