@@ -65,6 +65,10 @@ export default function DesignPage() {
   const [showResolved, setShowResolved] = useState(false)
   const [commentInput, setCommentInput] = useState<{ x: number; y: number; text: string } | null>(null)
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('disconnected')
+  const [showShareWarning, setShowShareWarning] = useState(false)
+  const [shareModalStep, setShareModalStep] = useState<'warning' | 'link'>('warning')
+  const [shareLink, setShareLink] = useState('')
+  const [shareLinkCopied, setShareLinkCopied] = useState(false)
   const collabRef = useRef<CollaborationManager | null>(null)
   const userRef = useRef<UserIdentity>(getUserIdentity())
   const syncingFromRemoteCountRef = useRef(0)
@@ -479,11 +483,27 @@ export default function DesignPage() {
 
   // === SHARE HANDLER ===
   const handleShare = useCallback(() => {
+    setShareModalStep('warning')
+    setShareLinkCopied(false)
+    setShowShareWarning(true)
+  }, [])
+
+  const handleShareConfirm = useCallback(() => {
     prewarmSignalingServer() // Wake up Fly.io server before WebSocket connects
     const rid = generateRoomId()
     setRoomIdInHash(rid)
     startCollaboration(rid)
+    const link = `${window.location.origin}${window.location.pathname}#room=${rid}`
+    setShareLink(link)
+    setShareModalStep('link')
   }, [startCollaboration])
+
+  const handleCopyShareLink = useCallback(() => {
+    navigator.clipboard.writeText(shareLink).then(() => {
+      setShareLinkCopied(true)
+      setTimeout(() => setShareLinkCopied(false), 2000)
+    })
+  }, [shareLink])
 
   // === LEAVE ROOM HANDLER ===
   const handleLeaveRoom = useCallback(() => {
@@ -1307,6 +1327,84 @@ export default function DesignPage() {
 
   return (
     <MobileGate>
+    {/* Share Beta Warning Modal */}
+    {showShareWarning && (
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+        <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 p-6">
+          {shareModalStep === 'warning' ? (
+            <>
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+                  <svg className="w-5 h-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                  </svg>
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900">Experimental Feature</h3>
+              </div>
+              <p className="text-sm text-gray-600 mb-2">
+                Live collaboration is <span className="font-semibold text-amber-600">extremely early beta</span> and is known to have bugs.
+              </p>
+              <p className="text-sm text-gray-600 mb-4">
+                Currently, only <span className="font-medium">basic shape movement</span> reliably syncs between users. Images, text editing, and other property changes may not work as expected. Use this for fun, but don&apos;t expect production-ready results!
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowShareWarning(false)}
+                  className="flex-1 px-4 py-2.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleShareConfirm}
+                  className="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-canvas-accent rounded-lg hover:opacity-90 transition-opacity"
+                >
+                  I understand, start sharing
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
+                  <svg className="w-5 h-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                  </svg>
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900">Room Created!</h3>
+              </div>
+              <p className="text-sm text-gray-600 mb-3">
+                Share this link with others to collaborate in real time:
+              </p>
+              <div className="flex items-center gap-2 mb-4">
+                <div className="flex-1 px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-xs text-gray-700 font-mono truncate select-all">
+                  {shareLink}
+                </div>
+                <button
+                  onClick={handleCopyShareLink}
+                  className={`px-4 py-2.5 text-sm font-medium rounded-lg transition-colors flex items-center gap-1.5 whitespace-nowrap ${
+                    shareLinkCopied
+                      ? 'bg-green-500 text-white'
+                      : 'bg-canvas-accent text-white hover:opacity-90'
+                  }`}
+                >
+                  {shareLinkCopied ? (
+                    <><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>Copied!</>
+                  ) : (
+                    <><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>Copy Link</>
+                  )}
+                </button>
+              </div>
+              <button
+                onClick={() => setShowShareWarning(false)}
+                className="w-full px-4 py-2.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+              >
+                Done
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    )}
     <div className="h-screen w-screen overflow-hidden bg-canvas-bg" ref={containerRef}>
       {/* Top Bar */}
       <TopBar
