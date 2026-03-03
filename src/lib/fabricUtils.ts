@@ -290,7 +290,7 @@ export function loadCanvasFromJSON(canvas: fabric.Canvas, file: File): Promise<v
         canvas.loadFromJSON(json).then(() => {
           canvas.renderAll();
           resolve();
-        });
+        }).catch(reject);
       } catch (err) {
         reject(err);
       }

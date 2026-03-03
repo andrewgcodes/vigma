@@ -57,8 +57,8 @@ export default function Home() {
       fontSize: (obj as fabric.Textbox).fontSize,
       fontWeight: (obj as fabric.Textbox).fontWeight as string,
       text: (obj as fabric.Textbox).text,
-      scaleX: obj.scaleX || 1,
-      scaleY: obj.scaleY || 1,
+      scaleX: obj.scaleX ?? 1,
+      scaleY: obj.scaleY ?? 1,
     };
   }, [selectedObjectId]);
 

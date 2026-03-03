@@ -44,11 +44,14 @@ export class CanvasHistory {
 
   private async restoreState(canvas: Canvas): Promise<void> {
     this.isRestoring = true;
-    const state = this.history[this.currentIndex];
-    const parsed = JSON.parse(state);
-    await canvas.loadFromJSON(parsed);
-    canvas.renderAll();
-    this.isRestoring = false;
+    try {
+      const state = this.history[this.currentIndex];
+      const parsed = JSON.parse(state);
+      await canvas.loadFromJSON(parsed);
+      canvas.renderAll();
+    } finally {
+      this.isRestoring = false;
+    }
   }
 
   get canUndo(): boolean {
