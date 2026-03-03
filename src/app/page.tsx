@@ -52,7 +52,7 @@ export default function Home() {
       width: obj.width || 0,
       height: obj.height || 0,
       angle: obj.angle || 0,
-      fill: (typeof obj.fill === "string" ? obj.fill : "#000000") || "#000000",
+      fill: typeof obj.fill === "string" ? (obj.fill || "#000000") : obj.fill,
       stroke: (obj.stroke as string) || "",
       strokeWidth: obj.strokeWidth || 0,
       strokeDashArray: obj.strokeDashArray || null,
@@ -87,7 +87,7 @@ export default function Home() {
 
   // Property change handler
   const handlePropertyChange = useCallback(
-    (property: string, value: number | string | boolean | number[]) => {
+    (property: string, value: number | string | boolean | number[], options?: { skipHistory?: boolean }) => {
       const canvas = canvasRef.current;
       if (!canvas || !selectedObjectId) return;
 
@@ -234,9 +234,11 @@ export default function Home() {
       obj.setCoords();
       canvas.renderAll();
 
-      historyRef.current.saveState(canvas);
-      setCanUndo(historyRef.current.canUndo);
-      setCanRedo(historyRef.current.canRedo);
+      if (!options?.skipHistory) {
+        historyRef.current.saveState(canvas);
+        setCanUndo(historyRef.current.canUndo);
+        setCanRedo(historyRef.current.canRedo);
+      }
     },
     [selectedObjectId, setCanUndo, setCanRedo]
   );

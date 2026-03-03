@@ -32,7 +32,7 @@ interface PropertiesPanelProps {
     width: number;
     height: number;
     angle: number;
-    fill: string;
+    fill: string | object | null;
     stroke: string;
     strokeWidth: number;
     strokeDashArray?: number[] | null;
@@ -56,7 +56,7 @@ interface PropertiesPanelProps {
     flipY?: boolean;
     globalCompositeOperation?: string;
   } | null;
-  onPropertyChange: (property: string, value: number | string | boolean | number[]) => void;
+  onPropertyChange: (property: string, value: number | string | boolean | number[], options?: { skipHistory?: boolean }) => void;
   onAlignObjects?: (alignment: string) => void;
   hasMultipleSelection?: boolean;
 }
@@ -466,10 +466,12 @@ export default function PropertiesPanel({
                 <NumberInput
                   value={obj.width * obj.scaleX}
                   onChange={(v) => {
-                    onPropertyChange("width", v);
                     if (lockAspect) {
                       const ratio = obj.height * obj.scaleY / (obj.width * obj.scaleX || 1);
+                      onPropertyChange("width", v, { skipHistory: true });
                       onPropertyChange("height", v * ratio);
+                    } else {
+                      onPropertyChange("width", v);
                     }
                   }}
                   min={1}
@@ -479,10 +481,12 @@ export default function PropertiesPanel({
                 <NumberInput
                   value={obj.height * obj.scaleY}
                   onChange={(v) => {
-                    onPropertyChange("height", v);
                     if (lockAspect) {
                       const ratio = obj.width * obj.scaleX / (obj.height * obj.scaleY || 1);
+                      onPropertyChange("height", v, { skipHistory: true });
                       onPropertyChange("width", v * ratio);
+                    } else {
+                      onPropertyChange("height", v);
                     }
                   }}
                   min={1}
