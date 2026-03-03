@@ -494,6 +494,8 @@ export default function DesignPage() {
                     engine.loadFromJSON(currentPage.canvasJSON).then(() => {
                       isReloadingSoloRef.current = false
                       refreshLayers()
+                    }).catch(() => {
+                      isReloadingSoloRef.current = false
                     })
                   } else {
                     isReloadingSoloRef.current = false
@@ -776,6 +778,8 @@ export default function DesignPage() {
               engine.loadFromJSON(currentPage.canvasJSON).then(() => {
                 isReloadingSoloRef.current = false
                 refreshLayers()
+              }).catch(() => {
+                isReloadingSoloRef.current = false
               })
             } else {
               isReloadingSoloRef.current = false
