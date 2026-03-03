@@ -9,7 +9,7 @@ import ToolButton from './ToolButton';
 import ZoomControls from './ZoomControls';
 
 interface ToolbarProps {
-  canvasRef: React.RefObject<{ zoomTo: (zoom: number) => void } | null>;
+  canvasRef: React.RefObject<{ zoomTo: (zoom: number) => void; performUndo?: () => void; performRedo?: () => void } | null>;
   onImageUpload: () => void;
 }
 
@@ -28,7 +28,7 @@ const shapeTools: { tool: ToolType; icon: typeof Square; tooltip: string }[] = [
 ];
 
 export default function Toolbar({ canvasRef, onImageUpload }: ToolbarProps) {
-  const { state, setTool, dispatch, undo, redo } = useAppContext();
+  const { state, setTool, dispatch } = useAppContext();
 
   const canUndo = state.historyIndex > 0;
   const canRedo = state.historyIndex < state.history.length - 1;
@@ -86,13 +86,13 @@ export default function Toolbar({ canvasRef, onImageUpload }: ToolbarProps) {
           icon={Undo2}
           tooltip="Undo (Ctrl+Z)"
           disabled={!canUndo}
-          onClick={undo}
+          onClick={() => canvasRef.current?.performUndo?.()}
         />
         <ToolButton
           icon={Redo2}
           tooltip="Redo (Ctrl+Shift+Z)"
           disabled={!canRedo}
-          onClick={redo}
+          onClick={() => canvasRef.current?.performRedo?.()}
         />
       </div>
 

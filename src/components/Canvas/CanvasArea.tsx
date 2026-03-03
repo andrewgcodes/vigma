@@ -56,6 +56,8 @@ export interface CanvasAreaHandle {
   bringForward: () => void;
   sendBackward: () => void;
   zoomToFit: () => void;
+  performUndo: () => void;
+  performRedo: () => void;
 }
 
 interface CanvasAreaProps {
@@ -81,6 +83,7 @@ const CanvasArea = forwardRef<CanvasAreaHandle, CanvasAreaProps>(({ onLayersChan
   const lastPosRef = useRef({ x: 0, y: 0 });
   const prevToolRef = useRef<ToolType>('select');
   const historyPauseRef = useRef(false);
+  const undoRedoRequestRef = useRef(false);
   const autoSaveTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const layersChangedRef = useRef(onLayersChange);
   const selectionChangedRef = useRef(onSelectionChange);
@@ -575,19 +578,12 @@ const CanvasArea = forwardRef<CanvasAreaHandle, CanvasAreaProps>(({ onLayersChan
     };
   }, [state.activeTool]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Handle undo/redo
-  const lastAppliedIndexRef = useRef<number>(-1);
+  // Handle undo/redo - only fires when undoRedoRequestRef is set
   useEffect(() => {
+    if (!undoRedoRequestRef.current) return;
+    undoRedoRequestRef.current = false;
     const canvas = canvasRef.current;
     if (!canvas || state.history.length === 0 || state.historyIndex < 0) return;
-    // Only apply if historyIndex actually changed due to undo/redo
-    if (lastAppliedIndexRef.current === state.historyIndex) return;
-    // Skip if this is a new history push (index is at the end)
-    if (state.historyIndex === state.history.length - 1 && lastAppliedIndexRef.current === state.historyIndex - 1) {
-      lastAppliedIndexRef.current = state.historyIndex;
-      return;
-    }
-    lastAppliedIndexRef.current = state.historyIndex;
     const currentState = state.history[state.historyIndex];
     if (!currentState) return;
 
@@ -605,7 +601,7 @@ const CanvasArea = forwardRef<CanvasAreaHandle, CanvasAreaProps>(({ onLayersChan
     } catch {
       historyPauseRef.current = false;
     }
-  }, [state.historyIndex, state.history.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [state.historyIndex]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -664,11 +660,13 @@ const CanvasArea = forwardRef<CanvasAreaHandle, CanvasAreaProps>(({ onLayersChan
       if (ctrl) {
         if (e.key === 'z' && !e.shiftKey) {
           e.preventDefault();
+          undoRedoRequestRef.current = true;
           dispatch({ type: 'UNDO' });
           return;
         }
         if ((e.key === 'z' && e.shiftKey) || e.key === 'y') {
           e.preventDefault();
+          undoRedoRequestRef.current = true;
           dispatch({ type: 'REDO' });
           return;
         }
@@ -1399,6 +1397,14 @@ const CanvasArea = forwardRef<CanvasAreaHandle, CanvasAreaProps>(({ onLayersChan
     bringForward: bringForwardAction,
     sendBackward: sendBackwardAction,
     zoomToFit: zoomToFitAction,
+    performUndo: () => {
+      undoRedoRequestRef.current = true;
+      dispatch({ type: 'UNDO' });
+    },
+    performRedo: () => {
+      undoRedoRequestRef.current = true;
+      dispatch({ type: 'REDO' });
+    },
   }));
 
   const hasObjects = canvasRef.current ? getCanvasObjects(canvasRef.current).length > 0 : false;
