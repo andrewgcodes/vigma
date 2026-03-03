@@ -1,0 +1,1117 @@
+import { Canvas, Rect, Circle, Triangle, Line, Textbox, Group, Path, Polygon, FabricObject, PencilBrush, CircleBrush, SprayBrush, Shadow, Gradient, Pattern, FabricImage, ActiveSelection, Point, util } from 'fabric'
+import { v4 as uuidv4 } from 'uuid'
+
+export class CanvasEngine {
+  canvas: Canvas
+  private clipboard: FabricObject[] | null = null
+  private history: string[] = []
+  private historyIndex = -1
+  private maxHistory = 100
+  private isLoadingHistory = false
+  private gridLines: FabricObject[] = []
+  private guidelines: FabricObject[] = []
+  private snapThreshold = 5
+  private onSelectionChange?: (ids: string[]) => void
+  private onObjectModified?: () => void
+  private onHistoryChange?: (canUndo: boolean, canRedo: boolean) => void
+  private onZoomChange?: (zoom: number) => void
+  private onViewportChange?: (zoom: number, panX: number, panY: number) => void
+
+  constructor(canvasEl: HTMLCanvasElement, options?: {
+    onSelectionChange?: (ids: string[]) => void
+    onObjectModified?: () => void
+    onHistoryChange?: (canUndo: boolean, canRedo: boolean) => void
+    onZoomChange?: (zoom: number) => void
+    onViewportChange?: (zoom: number, panX: number, panY: number) => void
+  }) {
+    this.canvas = new Canvas(canvasEl, {
+      width: window.innerWidth,
+      height: window.innerHeight,
+      backgroundColor: '#f5f5f7',
+      selection: true,
+      preserveObjectStacking: true,
+      stopContextMenu: true,
+      fireRightClick: true,
+      controlsAboveOverlay: true,
+      allowTouchScrolling: true,
+    })
+
+    this.onSelectionChange = options?.onSelectionChange
+    this.onObjectModified = options?.onObjectModified
+    this.onHistoryChange = options?.onHistoryChange
+    this.onZoomChange = options?.onZoomChange
+    this.onViewportChange = options?.onViewportChange
+
+    this.setupEventListeners()
+    this.setupCustomControls()
+    this.saveHistory()
+  }
+
+  private setupCustomControls() {
+    FabricObject.prototype.set({
+      cornerColor: '#0071e3',
+      cornerStrokeColor: '#0071e3',
+      cornerSize: 8,
+      cornerStyle: 'circle',
+      transparentCorners: false,
+      borderColor: '#0071e3',
+      borderScaleFactor: 1.5,
+      padding: 0,
+    })
+  }
+
+  private setupEventListeners() {
+    this.canvas.on('selection:created', (e) => {
+      this.handleSelectionChange()
+    })
+    this.canvas.on('selection:updated', (e) => {
+      this.handleSelectionChange()
+    })
+    this.canvas.on('selection:cleared', () => {
+      this.onSelectionChange?.([])
+    })
+    this.canvas.on('object:modified', () => {
+      this.saveHistory()
+      this.onObjectModified?.()
+    })
+    this.canvas.on('object:added', () => {
+      if (!this.isLoadingHistory) {
+        this.saveHistory()
+      }
+    })
+    this.canvas.on('object:removed', () => {
+      if (!this.isLoadingHistory) {
+        this.saveHistory()
+      }
+    })
+
+    // Zoom with scroll
+    this.canvas.on('mouse:wheel', (opt) => {
+      const delta = opt.e.deltaY
+      let zoom = this.canvas.getZoom()
+      zoom *= 0.999 ** delta
+      if (zoom > 20) zoom = 20
+      if (zoom < 0.01) zoom = 0.01
+      this.canvas.zoomToPoint(new Point(opt.e.offsetX, opt.e.offsetY), zoom)
+      opt.e.preventDefault()
+      opt.e.stopPropagation()
+      this.onZoomChange?.(zoom)
+      const vpt = this.canvas.viewportTransform
+      if (vpt) {
+        this.onViewportChange?.(zoom, vpt[4], vpt[5])
+      }
+    })
+  }
+
+  private handleSelectionChange() {
+    const active = this.canvas.getActiveObject()
+    if (!active) {
+      this.onSelectionChange?.([])
+      return
+    }
+    if (active instanceof ActiveSelection) {
+      const ids = active.getObjects().map(o => (o as any).id || '').filter(Boolean)
+      this.onSelectionChange?.(ids)
+    } else {
+      const id = (active as any).id
+      this.onSelectionChange?.(id ? [id] : [])
+    }
+  }
+
+  // HISTORY
+  saveHistory() {
+    if (this.isLoadingHistory) return
+    const json = JSON.stringify(this.canvas.toJSON(['id', 'name', 'selectable', 'evented', 'lockMovementX', 'lockMovementY', 'lockRotation', 'lockScalingX', 'lockScalingY', 'hasControls', 'visible', 'rx', 'ry']))
+    if (this.historyIndex < this.history.length - 1) {
+      this.history = this.history.slice(0, this.historyIndex + 1)
+    }
+    this.history.push(json)
+    if (this.history.length > this.maxHistory) {
+      this.history.shift()
+    }
+    this.historyIndex = this.history.length - 1
+    this.onHistoryChange?.(this.canUndo(), this.canRedo())
+  }
+
+  canUndo() { return this.historyIndex > 0 }
+  canRedo() { return this.historyIndex < this.history.length - 1 }
+
+  async undo() {
+    if (!this.canUndo()) return
+    this.historyIndex--
+    await this.loadFromHistory()
+  }
+
+  async redo() {
+    if (!this.canRedo()) return
+    this.historyIndex++
+    await this.loadFromHistory()
+  }
+
+  private async loadFromHistory() {
+    this.isLoadingHistory = true
+    const json = this.history[this.historyIndex]
+    await this.canvas.loadFromJSON(json)
+    this.canvas.renderAll()
+    this.isLoadingHistory = false
+    this.onHistoryChange?.(this.canUndo(), this.canRedo())
+  }
+
+  // SHAPES
+  addRect(options?: Partial<any>) {
+    const id = uuidv4()
+    const rect = new Rect({
+      left: 100 + Math.random() * 200,
+      top: 100 + Math.random() * 200,
+      width: 200,
+      height: 150,
+      fill: '#4A90D9',
+      stroke: '',
+      strokeWidth: 0,
+      rx: 0,
+      ry: 0,
+      ...options,
+    })
+    ;(rect as any).id = id
+    ;(rect as any).name = options?.name || 'Rectangle'
+    this.canvas.add(rect)
+    this.canvas.setActiveObject(rect)
+    this.canvas.renderAll()
+    return rect
+  }
+
+  addEllipse(options?: Partial<any>) {
+    const id = uuidv4()
+    const ellipse = new Circle({
+      left: 100 + Math.random() * 200,
+      top: 100 + Math.random() * 200,
+      radius: 75,
+      fill: '#E86C6C',
+      stroke: '',
+      strokeWidth: 0,
+      ...options,
+    })
+    ;(ellipse as any).id = id
+    ;(ellipse as any).name = options?.name || 'Ellipse'
+    this.canvas.add(ellipse)
+    this.canvas.setActiveObject(ellipse)
+    this.canvas.renderAll()
+    return ellipse
+  }
+
+  addTriangle(options?: Partial<any>) {
+    const id = uuidv4()
+    const tri = new Triangle({
+      left: 100 + Math.random() * 200,
+      top: 100 + Math.random() * 200,
+      width: 150,
+      height: 130,
+      fill: '#50C878',
+      stroke: '',
+      strokeWidth: 0,
+      ...options,
+    })
+    ;(tri as any).id = id
+    ;(tri as any).name = options?.name || 'Triangle'
+    this.canvas.add(tri)
+    this.canvas.setActiveObject(tri)
+    this.canvas.renderAll()
+    return tri
+  }
+
+  addLine(options?: Partial<any>) {
+    const id = uuidv4()
+    const line = new Line([100, 200, 350, 200], {
+      stroke: '#1d1d1f',
+      strokeWidth: 2,
+      ...options,
+    })
+    ;(line as any).id = id
+    ;(line as any).name = options?.name || 'Line'
+    this.canvas.add(line)
+    this.canvas.setActiveObject(line)
+    this.canvas.renderAll()
+    return line
+  }
+
+  addArrow(options?: Partial<any>) {
+    const id = uuidv4()
+    const headLen = 15
+    const x1 = 100, y1 = 200, x2 = 350, y2 = 200
+    const angle = Math.atan2(y2 - y1, x2 - x1)
+    const pathData = `M ${x1} ${y1} L ${x2} ${y2} M ${x2} ${y2} L ${x2 - headLen * Math.cos(angle - Math.PI / 6)} ${y2 - headLen * Math.sin(angle - Math.PI / 6)} M ${x2} ${y2} L ${x2 - headLen * Math.cos(angle + Math.PI / 6)} ${y2 - headLen * Math.sin(angle + Math.PI / 6)}`
+    const arrow = new Path(pathData, {
+      stroke: '#1d1d1f',
+      strokeWidth: 2,
+      fill: '',
+      ...options,
+    })
+    ;(arrow as any).id = id
+    ;(arrow as any).name = options?.name || 'Arrow'
+    this.canvas.add(arrow)
+    this.canvas.setActiveObject(arrow)
+    this.canvas.renderAll()
+    return arrow
+  }
+
+  addStar(options?: Partial<any>) {
+    const id = uuidv4()
+    const points = this.createStarPoints(5, 60, 30)
+    const star = new Polygon(points, {
+      left: 150 + Math.random() * 200,
+      top: 150 + Math.random() * 200,
+      fill: '#FFD700',
+      stroke: '',
+      strokeWidth: 0,
+      ...options,
+    })
+    ;(star as any).id = id
+    ;(star as any).name = options?.name || 'Star'
+    this.canvas.add(star)
+    this.canvas.setActiveObject(star)
+    this.canvas.renderAll()
+    return star
+  }
+
+  addPolygon(sides: number = 6, options?: Partial<any>) {
+    const id = uuidv4()
+    const points = this.createPolygonPoints(sides, 60)
+    const poly = new Polygon(points, {
+      left: 150 + Math.random() * 200,
+      top: 150 + Math.random() * 200,
+      fill: '#9B59B6',
+      stroke: '',
+      strokeWidth: 0,
+      ...options,
+    })
+    ;(poly as any).id = id
+    ;(poly as any).name = options?.name || `Polygon (${sides})`
+    this.canvas.add(poly)
+    this.canvas.setActiveObject(poly)
+    this.canvas.renderAll()
+    return poly
+  }
+
+  private createStarPoints(spikes: number, outerR: number, innerR: number) {
+    const points: { x: number; y: number }[] = []
+    let rot = (Math.PI / 2) * 3
+    const step = Math.PI / spikes
+    for (let i = 0; i < spikes; i++) {
+      points.push({ x: Math.cos(rot) * outerR, y: Math.sin(rot) * outerR })
+      rot += step
+      points.push({ x: Math.cos(rot) * innerR, y: Math.sin(rot) * innerR })
+      rot += step
+    }
+    return points
+  }
+
+  private createPolygonPoints(sides: number, radius: number) {
+    const points: { x: number; y: number }[] = []
+    for (let i = 0; i < sides; i++) {
+      const angle = (2 * Math.PI * i) / sides - Math.PI / 2
+      points.push({ x: Math.cos(angle) * radius, y: Math.sin(angle) * radius })
+    }
+    return points
+  }
+
+  // TEXT
+  addText(options?: Partial<any>) {
+    const id = uuidv4()
+    const text = new Textbox('Type here', {
+      left: 100 + Math.random() * 200,
+      top: 100 + Math.random() * 200,
+      width: 200,
+      fontSize: 20,
+      fontFamily: 'Inter',
+      fill: '#1d1d1f',
+      editable: true,
+      ...options,
+    })
+    ;(text as any).id = id
+    ;(text as any).name = options?.name || 'Text'
+    this.canvas.add(text)
+    this.canvas.setActiveObject(text)
+    this.canvas.renderAll()
+    return text
+  }
+
+  // IMAGE
+  async addImage(url: string, options?: Partial<any>) {
+    return new Promise<FabricObject>((resolve) => {
+      FabricImage.fromURL(url, {
+        crossOrigin: 'anonymous',
+        ...options,
+      }).then((img) => {
+        const id = uuidv4()
+        ;(img as any).id = id
+        ;(img as any).name = options?.name || 'Image'
+        // Scale to reasonable size
+        const maxDim = 400
+        const scale = Math.min(maxDim / (img.width || 400), maxDim / (img.height || 400), 1)
+        img.set({
+          left: 100 + Math.random() * 200,
+          top: 100 + Math.random() * 200,
+          scaleX: scale,
+          scaleY: scale,
+          ...options,
+        })
+        this.canvas.add(img)
+        this.canvas.setActiveObject(img)
+        this.canvas.renderAll()
+        resolve(img)
+      })
+    })
+  }
+
+  async addImageFromFile(file: File) {
+    return new Promise<FabricObject>((resolve) => {
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        const url = e.target?.result as string
+        this.addImage(url, { name: file.name }).then(resolve)
+      }
+      reader.readAsDataURL(file)
+    })
+  }
+
+  // FRAME
+  addFrame(options?: Partial<any>) {
+    const id = uuidv4()
+    const frame = new Rect({
+      left: 100,
+      top: 100,
+      width: 375,
+      height: 812,
+      fill: '#ffffff',
+      stroke: '#e5e5e7',
+      strokeWidth: 1,
+      rx: 0,
+      ry: 0,
+      shadow: new Shadow({ color: 'rgba(0,0,0,0.08)', blur: 20, offsetX: 0, offsetY: 4 }),
+      ...options,
+    })
+    ;(frame as any).id = id
+    ;(frame as any).name = options?.name || 'Frame'
+    ;(frame as any).isFrame = true
+    this.canvas.add(frame)
+    this.canvas.setActiveObject(frame)
+    this.canvas.renderAll()
+    return frame
+  }
+
+  // DRAWING MODE
+  enableDrawingMode(type: 'pencil' | 'circle' | 'spray' = 'pencil', settings?: any) {
+    this.canvas.isDrawingMode = true
+    switch (type) {
+      case 'circle':
+        this.canvas.freeDrawingBrush = new CircleBrush(this.canvas)
+        break
+      case 'spray':
+        this.canvas.freeDrawingBrush = new SprayBrush(this.canvas)
+        break
+      default:
+        this.canvas.freeDrawingBrush = new PencilBrush(this.canvas)
+        break
+    }
+    if (this.canvas.freeDrawingBrush && settings) {
+      this.canvas.freeDrawingBrush.width = settings.width || 3
+      this.canvas.freeDrawingBrush.color = settings.color || '#1d1d1f'
+      if (settings.shadowBlur) {
+        this.canvas.freeDrawingBrush.shadow = new Shadow({
+          blur: settings.shadowBlur,
+          offsetX: 0,
+          offsetY: 0,
+          color: settings.shadowColor || 'rgba(0,0,0,0.3)',
+        })
+      }
+    }
+  }
+
+  disableDrawingMode() {
+    this.canvas.isDrawingMode = false
+  }
+
+  // ERASER - remove objects under pointer
+  enableEraserMode() {
+    this.canvas.isDrawingMode = false
+    this.canvas.defaultCursor = 'crosshair'
+    this.canvas.on('mouse:down', this.eraserHandler)
+  }
+
+  disableEraserMode() {
+    this.canvas.defaultCursor = 'default'
+    this.canvas.off('mouse:down', this.eraserHandler)
+  }
+
+  private eraserHandler = (opt: any) => {
+    const pointer = this.canvas.getScenePoint(opt.e)
+    const objects = this.canvas.getObjects()
+    for (let i = objects.length - 1; i >= 0; i--) {
+      const obj = objects[i]
+      if ((obj as any).isGrid) continue
+      if (obj.containsPoint(pointer)) {
+        this.canvas.remove(obj)
+        this.canvas.renderAll()
+        break
+      }
+    }
+  }
+
+  // GROUP / UNGROUP
+  groupSelected() {
+    const active = this.canvas.getActiveObject()
+    if (!active || !(active instanceof ActiveSelection)) return null
+    const objects = active.getObjects()
+    if (objects.length < 2) return null
+
+    const group = new Group(objects, {})
+    const id = uuidv4()
+    ;(group as any).id = id
+    ;(group as any).name = 'Group'
+
+    // Remove objects and add group
+    objects.forEach(o => this.canvas.remove(o))
+    this.canvas.add(group)
+    this.canvas.setActiveObject(group)
+    this.canvas.renderAll()
+    this.saveHistory()
+    return group
+  }
+
+  ungroupSelected() {
+    const active = this.canvas.getActiveObject()
+    if (!active || !(active instanceof Group)) return
+    const items = active.getObjects()
+    active.destroy()
+    this.canvas.remove(active)
+    items.forEach(item => {
+      this.canvas.add(item)
+    })
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // CLIPBOARD
+  async copy() {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    const cloned = await active.clone()
+    this.clipboard = [cloned]
+  }
+
+  async cut() {
+    await this.copy()
+    const active = this.canvas.getActiveObject()
+    if (active) {
+      if (active instanceof ActiveSelection) {
+        active.getObjects().forEach(o => this.canvas.remove(o))
+      } else {
+        this.canvas.remove(active)
+      }
+      this.canvas.discardActiveObject()
+      this.canvas.renderAll()
+    }
+  }
+
+  async paste() {
+    if (!this.clipboard || this.clipboard.length === 0) return
+    for (const obj of this.clipboard) {
+      const cloned = await obj.clone()
+      cloned.set({
+        left: (cloned.left || 0) + 20,
+        top: (cloned.top || 0) + 20,
+      })
+      ;(cloned as any).id = uuidv4()
+      this.canvas.add(cloned)
+      this.canvas.setActiveObject(cloned)
+    }
+    this.canvas.renderAll()
+  }
+
+  async duplicate() {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    const cloned = await active.clone()
+    cloned.set({
+      left: (cloned.left || 0) + 20,
+      top: (cloned.top || 0) + 20,
+    })
+    ;(cloned as any).id = uuidv4()
+    if (cloned instanceof ActiveSelection) {
+      cloned.getObjects().forEach(o => {
+        ;(o as any).id = uuidv4()
+        this.canvas.add(o)
+      })
+    } else {
+      this.canvas.add(cloned)
+    }
+    this.canvas.setActiveObject(cloned)
+    this.canvas.renderAll()
+  }
+
+  // ALIGNMENT
+  alignObjects(alignment: 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom') {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    if (active instanceof ActiveSelection) {
+      const objects = active.getObjects()
+      const bound = active.getBoundingRect()
+      objects.forEach(obj => {
+        const objBound = obj.getBoundingRect()
+        switch (alignment) {
+          case 'left':
+            obj.set('left', bound.left)
+            break
+          case 'right':
+            obj.set('left', bound.left + bound.width - objBound.width)
+            break
+          case 'center':
+            obj.set('left', bound.left + (bound.width - objBound.width) / 2)
+            break
+          case 'top':
+            obj.set('top', bound.top)
+            break
+          case 'bottom':
+            obj.set('top', bound.top + bound.height - objBound.height)
+            break
+          case 'middle':
+            obj.set('top', bound.top + (bound.height - objBound.height) / 2)
+            break
+        }
+        obj.setCoords()
+      })
+      this.canvas.renderAll()
+      this.saveHistory()
+    }
+  }
+
+  distributeObjects(direction: 'horizontal' | 'vertical') {
+    const active = this.canvas.getActiveObject()
+    if (!active || !(active instanceof ActiveSelection)) return
+    const objects = active.getObjects()
+    if (objects.length < 3) return
+
+    if (direction === 'horizontal') {
+      objects.sort((a, b) => (a.left || 0) - (b.left || 0))
+      const first = objects[0]
+      const last = objects[objects.length - 1]
+      const totalWidth = (last.left || 0) + (last.width || 0) * (last.scaleX || 1) - (first.left || 0)
+      const objWidths = objects.reduce((sum, o) => sum + (o.width || 0) * (o.scaleX || 1), 0)
+      const spacing = (totalWidth - objWidths) / (objects.length - 1)
+      let currentX = first.left || 0
+      objects.forEach(obj => {
+        obj.set('left', currentX)
+        currentX += (obj.width || 0) * (obj.scaleX || 1) + spacing
+        obj.setCoords()
+      })
+    } else {
+      objects.sort((a, b) => (a.top || 0) - (b.top || 0))
+      const first = objects[0]
+      const last = objects[objects.length - 1]
+      const totalHeight = (last.top || 0) + (last.height || 0) * (last.scaleY || 1) - (first.top || 0)
+      const objHeights = objects.reduce((sum, o) => sum + (o.height || 0) * (o.scaleY || 1), 0)
+      const spacing = (totalHeight - objHeights) / (objects.length - 1)
+      let currentY = first.top || 0
+      objects.forEach(obj => {
+        obj.set('top', currentY)
+        currentY += (obj.height || 0) * (obj.scaleY || 1) + spacing
+        obj.setCoords()
+      })
+    }
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // FLIP
+  flipHorizontal() {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    active.set('flipX', !active.flipX)
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  flipVertical() {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    active.set('flipY', !active.flipY)
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // ORDERING
+  bringToFront() {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    this.canvas.bringObjectToFront(active)
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  sendToBack() {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    this.canvas.sendObjectToBack(active)
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  bringForward() {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    this.canvas.bringObjectForward(active)
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  sendBackward() {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    this.canvas.sendObjectBackwards(active)
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // DELETE
+  deleteSelected() {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    if (active instanceof ActiveSelection) {
+      active.getObjects().forEach(o => this.canvas.remove(o))
+    } else {
+      this.canvas.remove(active)
+    }
+    this.canvas.discardActiveObject()
+    this.canvas.renderAll()
+  }
+
+  // SELECT ALL
+  selectAll() {
+    const objects = this.canvas.getObjects().filter(o => !(o as any).isGrid && o.selectable !== false)
+    if (objects.length === 0) return
+    const selection = new ActiveSelection(objects, { canvas: this.canvas })
+    this.canvas.setActiveObject(selection)
+    this.canvas.renderAll()
+  }
+
+  // ZOOM
+  setZoom(zoom: number) {
+    const center = this.canvas.getCenterPoint()
+    this.canvas.zoomToPoint(center, zoom)
+    this.canvas.renderAll()
+    this.onZoomChange?.(zoom)
+  }
+
+  zoomIn() {
+    const zoom = Math.min(this.canvas.getZoom() * 1.2, 20)
+    this.setZoom(zoom)
+  }
+
+  zoomOut() {
+    const zoom = Math.max(this.canvas.getZoom() / 1.2, 0.01)
+    this.setZoom(zoom)
+  }
+
+  zoomToFit() {
+    const objects = this.canvas.getObjects().filter(o => !(o as any).isGrid)
+    if (objects.length === 0) {
+      this.setZoom(1)
+      return
+    }
+    const group = new Group(objects)
+    const bound = group.getBoundingRect()
+    group.destroy()
+
+    const canvasW = this.canvas.getWidth()
+    const canvasH = this.canvas.getHeight()
+    const scaleX = canvasW / bound.width
+    const scaleY = canvasH / bound.height
+    const zoom = Math.min(scaleX, scaleY) * 0.8
+
+    this.canvas.setViewportTransform([1, 0, 0, 1, 0, 0])
+    this.canvas.zoomToPoint(new Point(bound.left + bound.width / 2, bound.top + bound.height / 2), zoom)
+    this.canvas.renderAll()
+    this.onZoomChange?.(zoom)
+  }
+
+  resetZoom() {
+    this.canvas.setViewportTransform([1, 0, 0, 1, 0, 0])
+    this.canvas.renderAll()
+    this.onZoomChange?.(1)
+  }
+
+  // PAN (HAND TOOL)
+  private isPanning = false
+  private panStartPoint = { x: 0, y: 0 }
+
+  enablePanMode() {
+    this.canvas.defaultCursor = 'grab'
+    this.canvas.on('mouse:down', this.panStartHandler)
+    this.canvas.on('mouse:move', this.panMoveHandler)
+    this.canvas.on('mouse:up', this.panEndHandler)
+  }
+
+  disablePanMode() {
+    this.canvas.defaultCursor = 'default'
+    this.canvas.off('mouse:down', this.panStartHandler)
+    this.canvas.off('mouse:move', this.panMoveHandler)
+    this.canvas.off('mouse:up', this.panEndHandler)
+    this.isPanning = false
+  }
+
+  private panStartHandler = (opt: any) => {
+    this.isPanning = true
+    this.canvas.defaultCursor = 'grabbing'
+    this.panStartPoint = { x: opt.e.clientX, y: opt.e.clientY }
+    this.canvas.selection = false
+  }
+
+  private panMoveHandler = (opt: any) => {
+    if (!this.isPanning) return
+    const vpt = this.canvas.viewportTransform
+    if (!vpt) return
+    vpt[4] += opt.e.clientX - this.panStartPoint.x
+    vpt[5] += opt.e.clientY - this.panStartPoint.y
+    this.canvas.requestRenderAll()
+    this.panStartPoint = { x: opt.e.clientX, y: opt.e.clientY }
+    this.onViewportChange?.(this.canvas.getZoom(), vpt[4], vpt[5])
+  }
+
+  private panEndHandler = () => {
+    this.isPanning = false
+    this.canvas.defaultCursor = 'grab'
+    this.canvas.selection = true
+    this.canvas.setViewportTransform(this.canvas.viewportTransform!)
+  }
+
+  // GRID
+  showGrid(size: number = 20) {
+    this.clearGrid()
+    const width = this.canvas.getWidth()
+    const height = this.canvas.getHeight()
+    for (let x = 0; x <= width; x += size) {
+      const line = new Line([x, 0, x, height], {
+        stroke: '#e0e0e0',
+        strokeWidth: x % (size * 5) === 0 ? 0.5 : 0.2,
+        selectable: false,
+        evented: false,
+      })
+      ;(line as any).isGrid = true
+      this.gridLines.push(line)
+      this.canvas.add(line)
+      this.canvas.sendObjectToBack(line)
+    }
+    for (let y = 0; y <= height; y += size) {
+      const line = new Line([0, y, width, y], {
+        stroke: '#e0e0e0',
+        strokeWidth: y % (size * 5) === 0 ? 0.5 : 0.2,
+        selectable: false,
+        evented: false,
+      })
+      ;(line as any).isGrid = true
+      this.gridLines.push(line)
+      this.canvas.add(line)
+      this.canvas.sendObjectToBack(line)
+    }
+    this.canvas.renderAll()
+  }
+
+  clearGrid() {
+    this.gridLines.forEach(l => this.canvas.remove(l))
+    this.gridLines = []
+    this.canvas.renderAll()
+  }
+
+  // SNAP TO GRID
+  enableSnapToGrid(size: number = 10) {
+    this.canvas.on('object:moving', (e: any) => {
+      const obj = e.target
+      if (!obj) return
+      obj.set({
+        left: Math.round(obj.left / size) * size,
+        top: Math.round(obj.top / size) * size,
+      })
+    })
+  }
+
+  // PROPERTY SETTERS
+  setObjectFill(color: string) {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    if (active instanceof ActiveSelection) {
+      active.getObjects().forEach(o => o.set('fill', color))
+    } else {
+      active.set('fill', color)
+    }
+    this.canvas.renderAll()
+  }
+
+  setObjectGradient(config: {
+    type: 'linear' | 'radial',
+    colorStops: Record<string, string>,
+    coords?: any
+  }) {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    const gradient = new Gradient({
+      type: config.type,
+      gradientUnits: 'percentage',
+      coords: config.type === 'linear'
+        ? { x1: 0, y1: 0, x2: 1, y2: 1, ...(config.coords || {}) }
+        : { x1: 0.5, y1: 0.5, r1: 0, x2: 0.5, y2: 0.5, r2: 0.5, ...(config.coords || {}) },
+      colorStops: Object.entries(config.colorStops).map(([offset, color]) => ({
+        offset: parseFloat(offset),
+        color,
+      })),
+    })
+    active.set('fill', gradient)
+    this.canvas.renderAll()
+  }
+
+  setObjectStroke(color: string, width?: number) {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    active.set('stroke', color)
+    if (width !== undefined) active.set('strokeWidth', width)
+    this.canvas.renderAll()
+  }
+
+  setObjectStrokeDash(dashArray: number[]) {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    active.set('strokeDashArray', dashArray)
+    this.canvas.renderAll()
+  }
+
+  setObjectOpacity(opacity: number) {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    active.set('opacity', opacity)
+    this.canvas.renderAll()
+  }
+
+  setObjectShadow(config: { color: string, blur: number, offsetX: number, offsetY: number }) {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    active.set('shadow', new Shadow(config))
+    this.canvas.renderAll()
+  }
+
+  removeShadow() {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    active.set('shadow', null)
+    this.canvas.renderAll()
+  }
+
+  setCornerRadius(rx: number, ry?: number) {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    if (active instanceof Rect) {
+      active.set('rx', rx)
+      active.set('ry', ry ?? rx)
+      this.canvas.renderAll()
+    }
+  }
+
+  setObjectPosition(left: number, top: number) {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    active.set({ left, top })
+    active.setCoords()
+    this.canvas.renderAll()
+  }
+
+  setObjectSize(width: number, height: number) {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    active.set({
+      scaleX: width / (active.width || 1),
+      scaleY: height / (active.height || 1),
+    })
+    active.setCoords()
+    this.canvas.renderAll()
+  }
+
+  setObjectRotation(angle: number) {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    active.set('angle', angle)
+    active.setCoords()
+    this.canvas.renderAll()
+  }
+
+  // TEXT PROPERTIES
+  setTextProperty(prop: string, value: any) {
+    const active = this.canvas.getActiveObject()
+    if (!active || !(active instanceof Textbox)) return
+    active.set(prop as any, value)
+    this.canvas.renderAll()
+  }
+
+  // LOCK / UNLOCK
+  lockObject(lock: boolean) {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    active.set({
+      lockMovementX: lock,
+      lockMovementY: lock,
+      lockRotation: lock,
+      lockScalingX: lock,
+      lockScalingY: lock,
+      hasControls: !lock,
+      selectable: !lock,
+      evented: !lock,
+    })
+    this.canvas.renderAll()
+  }
+
+  // VISIBILITY
+  toggleVisibility(objectId: string) {
+    const obj = this.canvas.getObjects().find(o => (o as any).id === objectId)
+    if (!obj) return
+    obj.set('visible', !obj.visible)
+    this.canvas.renderAll()
+  }
+
+  // GET OBJECTS LIST (for layers)
+  getObjectsList(): Array<{ id: string, name: string, type: string, visible: boolean, locked: boolean }> {
+    return this.canvas.getObjects()
+      .filter(o => !(o as any).isGrid)
+      .map(o => ({
+        id: (o as any).id || '',
+        name: (o as any).name || o.type || 'Object',
+        type: o.type || 'object',
+        visible: o.visible !== false,
+        locked: o.lockMovementX === true,
+      }))
+      .reverse()
+  }
+
+  // GET ACTIVE OBJECT PROPERTIES
+  getActiveObjectProps(): Record<string, any> | null {
+    const active = this.canvas.getActiveObject()
+    if (!active) return null
+    const props: Record<string, any> = {
+      id: (active as any).id,
+      name: (active as any).name,
+      type: active.type,
+      left: Math.round(active.left || 0),
+      top: Math.round(active.top || 0),
+      width: Math.round((active.width || 0) * (active.scaleX || 1)),
+      height: Math.round((active.height || 0) * (active.scaleY || 1)),
+      angle: Math.round(active.angle || 0),
+      opacity: active.opacity,
+      fill: active.fill,
+      stroke: active.stroke,
+      strokeWidth: active.strokeWidth,
+      flipX: active.flipX,
+      flipY: active.flipY,
+      shadow: active.shadow,
+      visible: active.visible,
+      locked: active.lockMovementX,
+    }
+    if (active instanceof Rect) {
+      props.rx = (active as any).rx || 0
+      props.ry = (active as any).ry || 0
+    }
+    if (active instanceof Textbox) {
+      props.fontFamily = active.fontFamily
+      props.fontSize = active.fontSize
+      props.fontWeight = active.fontWeight
+      props.fontStyle = active.fontStyle
+      props.underline = active.underline
+      props.linethrough = active.linethrough
+      props.overline = active.overline
+      props.textAlign = active.textAlign
+      props.lineHeight = active.lineHeight
+      props.charSpacing = active.charSpacing
+      props.text = active.text
+    }
+    return props
+  }
+
+  // SELECT OBJECT BY ID
+  selectObjectById(id: string) {
+    const obj = this.canvas.getObjects().find(o => (o as any).id === id)
+    if (obj) {
+      this.canvas.setActiveObject(obj)
+      this.canvas.renderAll()
+    }
+  }
+
+  // RENAME OBJECT
+  renameObject(id: string, name: string) {
+    const obj = this.canvas.getObjects().find(o => (o as any).id === id)
+    if (obj) {
+      ;(obj as any).name = name
+    }
+  }
+
+  // REORDER OBJECTS
+  moveObjectToIndex(id: string, index: number) {
+    const obj = this.canvas.getObjects().find(o => (o as any).id === id)
+    if (obj) {
+      this.canvas.remove(obj)
+      const objects = this.canvas.getObjects()
+      const targetIndex = objects.length - index
+      this.canvas.insertAt(targetIndex, obj)
+      this.canvas.renderAll()
+    }
+  }
+
+  // EXPORT
+  exportToPNG(scale: number = 2, selectedOnly: boolean = false): string {
+    if (selectedOnly) {
+      const active = this.canvas.getActiveObject()
+      if (active) {
+        return active.toDataURL({ format: 'png', multiplier: scale } as any)
+      }
+    }
+    return this.canvas.toDataURL({ format: 'png', multiplier: scale })
+  }
+
+  exportToSVG(): string {
+    return this.canvas.toSVG()
+  }
+
+  exportToJPG(quality: number = 0.92, scale: number = 2): string {
+    return this.canvas.toDataURL({ format: 'jpeg', quality, multiplier: scale })
+  }
+
+  exportToJSON(): string {
+    return JSON.stringify(this.canvas.toJSON(['id', 'name', 'selectable', 'evented', 'lockMovementX', 'lockMovementY', 'lockRotation', 'lockScalingX', 'lockScalingY', 'hasControls', 'visible', 'rx', 'ry']))
+  }
+
+  async loadFromJSON(json: string) {
+    await this.canvas.loadFromJSON(json)
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // CLEAR CANVAS
+  clearCanvas() {
+    this.canvas.clear()
+    this.canvas.backgroundColor = '#f5f5f7'
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // RESIZE
+  resize(width: number, height: number) {
+    this.canvas.setDimensions({ width, height })
+    this.canvas.renderAll()
+  }
+
+  // EYEDROPPER
+  getColorAtPoint(x: number, y: number): string {
+    const ctx = this.canvas.getContext()
+    const pixel = ctx.getImageData(x, y, 1, 1).data
+    return `rgb(${pixel[0]}, ${pixel[1]}, ${pixel[2]})`
+  }
+
+  // DISPOSE
+  dispose() {
+    this.canvas.dispose()
+  }
+}
