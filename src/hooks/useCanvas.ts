@@ -32,6 +32,7 @@ export function useCanvas() {
   const clipboardRef = useRef<fabric.FabricObject[]>([]);
   const isPanning = useRef(false);
   const lastPanPoint = useRef({ x: 0, y: 0 });
+  const prevToolRef = useRef<string>('select');
 
   const {
     activeTool,
@@ -660,16 +661,20 @@ export function useCanvas() {
         saveHistory();
       }
 
-      // Space for hand tool
+      // Space for hand tool (save previous tool to restore on release)
       if (e.key === ' ' && !isCtrl) {
         e.preventDefault();
+        const currentTool = useStore.getState().activeTool;
+        if (currentTool !== 'hand') {
+          prevToolRef.current = currentTool;
+        }
         setActiveTool('hand');
       }
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
       if (e.key === ' ') {
-        setActiveTool('select');
+        setActiveTool(prevToolRef.current as typeof activeTool);
       }
     };
 
