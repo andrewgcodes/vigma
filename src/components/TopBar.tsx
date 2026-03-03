@@ -32,7 +32,7 @@ interface TopBarProps {
   onToggleRightPanel: () => void
   onClearCanvas: () => void
   onSaveProject: () => void
-  saveStatus?: 'saved' | 'saving' | 'just-saved'
+  saveStatus?: 'saved' | 'saving' | 'unsaved' | 'just-saved'
   leftPanelOpen: boolean
   rightPanelOpen: boolean
   // Collaboration
@@ -129,12 +129,16 @@ export default function TopBar({
               ? 'text-green-600 bg-green-50'
               : saveStatus === 'saving'
               ? 'text-amber-600 bg-amber-50'
+              : saveStatus === 'unsaved'
+              ? 'text-orange-500 bg-orange-50'
               : 'text-canvas-text-tertiary'
           }`}>
             {saveStatus === 'just-saved' ? (
               <><Check size={11} className="text-green-500" /><span>Saved</span></>
             ) : saveStatus === 'saving' ? (
               <><Loader2 size={11} className="animate-spin" /><span>Saving...</span></>
+            ) : saveStatus === 'unsaved' ? (
+              <><Cloud size={11} /><span>Unsaved</span></>
             ) : (
               <><Cloud size={11} /><span>Saved</span></>
             )}

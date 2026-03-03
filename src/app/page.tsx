@@ -53,7 +53,7 @@ export default function DesignPage() {
   const [zoom, setZoom] = useState(1)
   const [contextMenu, setContextMenu] = useState({ visible: false, x: 0, y: 0, hasSelection: false, multipleSelected: false, isLocked: false })
   const [isDrawingShape, setIsDrawingShape] = useState(false)
-  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'just-saved'>('saved')
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved' | 'just-saved'>('saved')
   const saveStatusTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const drawStartRef = useRef<{ x: number; y: number } | null>(null)
   const previewObjRef = useRef<any>(null)
@@ -1075,6 +1075,34 @@ export default function DesignPage() {
     }
   }, [snapToGrid, gridSize])
 
+  // Mark canvas as dirty when user modifies objects
+  useEffect(() => {
+    const engine = engineRef.current
+    if (!engine) return
+
+    const markUnsaved = () => {
+      setSaveStatus(prev => {
+        // Don't overwrite 'just-saved' flash (it auto-clears via timeout)
+        if (prev === 'just-saved') return prev
+        return 'unsaved'
+      })
+    }
+
+    engine.canvas.on('object:modified', markUnsaved)
+    engine.canvas.on('object:added', markUnsaved)
+    engine.canvas.on('object:removed', markUnsaved)
+    engine.canvas.on('path:created', markUnsaved)
+    engine.canvas.on('text:changed', markUnsaved)
+
+    return () => {
+      engine.canvas.off('object:modified', markUnsaved)
+      engine.canvas.off('object:added', markUnsaved)
+      engine.canvas.off('object:removed', markUnsaved)
+      engine.canvas.off('path:created', markUnsaved)
+      engine.canvas.off('text:changed', markUnsaved)
+    }
+  }, [zoom]) // re-attach after engine init (zoom changes after engine mounts)
+
   // Helper: persist current canvas state into the Zustand store for the active page,
   // then write ALL pages to localStorage. Always reads from the store directly to
   // avoid stale-closure bugs.
@@ -1113,7 +1141,18 @@ export default function DesignPage() {
   // Auto-save every 1 second (aggressive save to prevent data loss)
   useEffect(() => {
     const interval = setInterval(() => {
-      persistAllPages()
+      setSaveStatus(prev => {
+        // Only show the saving→saved transition if there are unsaved changes
+        if (prev === 'unsaved') {
+          persistAllPages()
+          // Brief 'saving' flash, then 'saved'
+          setTimeout(() => setSaveStatus('saved'), 400)
+          return 'saving'
+        }
+        // Still persist silently even when already 'saved' (safety net)
+        persistAllPages()
+        return prev
+      })
     }, 1000)
     return () => clearInterval(interval)
   }, [persistAllPages])
