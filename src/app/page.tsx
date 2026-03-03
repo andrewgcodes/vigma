@@ -132,6 +132,8 @@ export default function DesignPage() {
         engine.canvas.forEachObject(o => { o.selectable = false; o.evented = false })
         break
       case 'pen':
+        engine.enableDrawingMode('pen', { ...brushSettings, width: 2 })
+        break
       case 'pencil':
         engine.enableDrawingMode('pencil', brushSettings)
         break
@@ -220,7 +222,7 @@ export default function DesignPage() {
           engine.addLine({ x1: startX, y1: startY, x2: pointer.x, y2: pointer.y })
           break
         case 'arrow':
-          engine.addArrow()
+          engine.addArrow({ x1: startX, y1: startY, x2: pointer.x, y2: pointer.y })
           break
         case 'polygon':
           engine.addPolygon(6, { left, top, fill: fill.color })
@@ -454,6 +456,19 @@ export default function DesignPage() {
     if (!engine) return
     const json = engine.exportToJSON()
     localStorage.setItem('vigma-project', json)
+  }, [])
+
+  // Auto-save every 30 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const engine = engineRef.current
+      if (!engine) return
+      try {
+        const json = engine.exportToJSON()
+        localStorage.setItem('vigma-project', json)
+      } catch (e) {}
+    }, 30000)
+    return () => clearInterval(interval)
   }, [])
 
   // EXPORT

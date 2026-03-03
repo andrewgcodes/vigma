@@ -122,7 +122,7 @@ export class CanvasEngine {
   // HISTORY
   saveHistory() {
     if (this.isLoadingHistory) return
-    const json = JSON.stringify(this.canvas.toJSON(['id', 'name', 'selectable', 'evented', 'lockMovementX', 'lockMovementY', 'lockRotation', 'lockScalingX', 'lockScalingY', 'hasControls', 'visible', 'rx', 'ry']))
+    const json = JSON.stringify(this.canvas.toJSON(['id', 'name', 'selectable', 'evented', 'lockMovementX', 'lockMovementY', 'lockRotation', 'lockScalingX', 'lockScalingY', 'hasControls', 'visible', 'rx', 'ry', 'isFrame']))
     if (this.historyIndex < this.history.length - 1) {
       this.history = this.history.slice(0, this.historyIndex + 1)
     }
@@ -222,13 +222,18 @@ export class CanvasEngine {
 
   addLine(options?: Partial<any>) {
     const id = uuidv4()
-    const line = new Line([100, 200, 350, 200], {
+    const lx1 = options?.x1 ?? 100
+    const ly1 = options?.y1 ?? 200
+    const lx2 = options?.x2 ?? 350
+    const ly2 = options?.y2 ?? 200
+    const { x1: _x1, y1: _y1, x2: _x2, y2: _y2, ...restOptions } = options || {}
+    const line = new Line([lx1, ly1, lx2, ly2], {
       stroke: '#1d1d1f',
       strokeWidth: 2,
-      ...options,
+      ...restOptions,
     })
     ;(line as any).id = id
-    ;(line as any).name = options?.name || 'Line'
+    ;(line as any).name = restOptions?.name || 'Line'
     this.canvas.add(line)
     this.canvas.setActiveObject(line)
     this.canvas.renderAll()
@@ -238,17 +243,21 @@ export class CanvasEngine {
   addArrow(options?: Partial<any>) {
     const id = uuidv4()
     const headLen = 15
-    const x1 = 100, y1 = 200, x2 = 350, y2 = 200
+    const x1 = options?.x1 ?? 100
+    const y1 = options?.y1 ?? 200
+    const x2 = options?.x2 ?? (x1 + 250)
+    const y2 = options?.y2 ?? y1
     const angle = Math.atan2(y2 - y1, x2 - x1)
     const pathData = `M ${x1} ${y1} L ${x2} ${y2} M ${x2} ${y2} L ${x2 - headLen * Math.cos(angle - Math.PI / 6)} ${y2 - headLen * Math.sin(angle - Math.PI / 6)} M ${x2} ${y2} L ${x2 - headLen * Math.cos(angle + Math.PI / 6)} ${y2 - headLen * Math.sin(angle + Math.PI / 6)}`
+    const { x1: _x1, y1: _y1, x2: _x2, y2: _y2, ...restOptions } = options || {}
     const arrow = new Path(pathData, {
       stroke: '#1d1d1f',
       strokeWidth: 2,
       fill: '',
-      ...options,
+      ...restOptions,
     })
     ;(arrow as any).id = id
-    ;(arrow as any).name = options?.name || 'Arrow'
+    ;(arrow as any).name = restOptions?.name || 'Arrow'
     this.canvas.add(arrow)
     this.canvas.setActiveObject(arrow)
     this.canvas.renderAll()
@@ -401,7 +410,7 @@ export class CanvasEngine {
   }
 
   // DRAWING MODE
-  enableDrawingMode(type: 'pencil' | 'circle' | 'spray' = 'pencil', settings?: any) {
+  enableDrawingMode(type: 'pencil' | 'circle' | 'spray' | 'pen' = 'pencil', settings?: any) {
     this.canvas.isDrawingMode = true
     switch (type) {
       case 'circle':
@@ -409,6 +418,9 @@ export class CanvasEngine {
         break
       case 'spray':
         this.canvas.freeDrawingBrush = new SprayBrush(this.canvas)
+        break
+      case 'pen':
+        this.canvas.freeDrawingBrush = new PencilBrush(this.canvas)
         break
       default:
         this.canvas.freeDrawingBrush = new PencilBrush(this.canvas)
@@ -1090,7 +1102,7 @@ export class CanvasEngine {
   }
 
   exportToJSON(): string {
-    return JSON.stringify(this.canvas.toJSON(['id', 'name', 'selectable', 'evented', 'lockMovementX', 'lockMovementY', 'lockRotation', 'lockScalingX', 'lockScalingY', 'hasControls', 'visible', 'rx', 'ry']))
+    return JSON.stringify(this.canvas.toJSON(['id', 'name', 'selectable', 'evented', 'lockMovementX', 'lockMovementY', 'lockRotation', 'lockScalingX', 'lockScalingY', 'hasControls', 'visible', 'rx', 'ry', 'isFrame']))
   }
 
   async loadFromJSON(json: string) {

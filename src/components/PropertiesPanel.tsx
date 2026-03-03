@@ -74,6 +74,38 @@ export default function PropertiesPanel({
   const [gradientColor1, setGradientColor1] = useState('#4A90D9')
   const [gradientColor2, setGradientColor2] = useState('#50C878')
 
+  // Sync shadow state with selected object
+  useEffect(() => {
+    if (objectProps?.shadow) {
+      setShadowEnabled(true)
+      const s = objectProps.shadow
+      if (s && typeof s === 'object') {
+        setShadowConfig({
+          color: s.color || 'rgba(0,0,0,0.25)',
+          blur: s.blur ?? 10,
+          offsetX: s.offsetX ?? 0,
+          offsetY: s.offsetY ?? 4,
+        })
+      }
+    } else {
+      setShadowEnabled(false)
+    }
+  }, [objectProps?.shadow, objectProps?.id])
+
+  // Sync fill type with selected object
+  useEffect(() => {
+    if (objectProps?.fill && typeof objectProps.fill === 'object' && objectProps.fill.type) {
+      setFillType('gradient')
+      const stops = objectProps.fill.colorStops
+      if (stops && stops.length >= 2) {
+        setGradientColor1(stops[0].color || '#4A90D9')
+        setGradientColor2(stops[stops.length - 1].color || '#50C878')
+      }
+    } else {
+      setFillType('solid')
+    }
+  }, [objectProps?.fill, objectProps?.id])
+
   if (!objectProps) {
     return (
       <div className="flex flex-col h-full">
