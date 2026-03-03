@@ -1362,7 +1362,10 @@ export default function DesignPage() {
     const payload = JSON.stringify(pagesData)
 
     // Write to IndexedDB (large-data-safe, handles images of any size).
-    // persistSet also does a best-effort localStorage mirror for tiny payloads.
+    // persistSet writes to localStorage synchronously first (critical for
+    // beforeunload — the async IndexedDB write may not complete during page
+    // unload), then writes to IndexedDB for large payloads that exceed
+    // localStorage's ~5MB quota.
     persistSet('vigma-pages', payload).catch((err) => {
       console.warn('Failed to persist pages to IndexedDB', err)
     })

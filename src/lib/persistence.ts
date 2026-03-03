@@ -47,7 +47,19 @@ function openDB(): Promise<IDBDatabase> {
  * Also writes to localStorage as a best-effort fallback (for tiny payloads).
  */
 export async function persistSet(key: string, value: string): Promise<void> {
-  // Always try IndexedDB first (large-data-safe)
+  // Synchronous localStorage write first — critical for beforeunload.
+  // When persistSet is fire-and-forget (e.g. from the auto-save interval or
+  // beforeunload handler), the async IndexedDB write below may not complete
+  // before the page is torn down. The synchronous localStorage write ensures
+  // small-to-medium projects are saved immediately.
+  try {
+    localStorage.setItem(key, value)
+  } catch {
+    // QuotaExceededError is expected for large images — silently ignore.
+    // IndexedDB below will handle the large payload.
+  }
+
+  // Then write to IndexedDB (large-data-safe, no practical quota limit)
   const db = await openDB()
   await new Promise<void>((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readwrite')
@@ -55,14 +67,6 @@ export async function persistSet(key: string, value: string): Promise<void> {
     tx.oncomplete = () => resolve()
     tx.onerror = () => reject(tx.error)
   })
-
-  // Best-effort mirror to localStorage (may fail for large payloads — that's OK)
-  try {
-    localStorage.setItem(key, value)
-  } catch {
-    // QuotaExceededError is expected for large images — silently ignore.
-    // IndexedDB already has the authoritative copy.
-  }
 }
 
 /**
