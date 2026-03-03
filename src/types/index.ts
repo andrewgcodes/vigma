@@ -6,6 +6,7 @@ export type ToolType =
   | "line"
   | "arrow"
   | "star"
+  | "polygon"
   | "text"
   | "pen"
   | "image"
@@ -28,6 +29,7 @@ export interface CanvasObjectProps {
   fill: string;
   stroke: string;
   strokeWidth: number;
+  strokeDashArray?: number[] | null;
   opacity: number;
   rx?: number;
   ry?: number;
@@ -38,6 +40,8 @@ export interface CanvasObjectProps {
   textAlign?: string;
   underline?: boolean;
   linethrough?: boolean;
+  charSpacing?: number;
+  lineHeight?: number;
   text?: string;
   scaleX: number;
   scaleY: number;
@@ -49,6 +53,7 @@ export interface CanvasObjectProps {
   } | null;
   flipX?: boolean;
   flipY?: boolean;
+  globalCompositeOperation?: string;
 }
 
 export interface ContextMenuState {

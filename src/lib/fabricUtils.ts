@@ -7,14 +7,15 @@ function nextId(): string {
   return `obj_${Date.now()}_${objectCounter}`;
 }
 
-function getObjectName(type: string): string {
+function getObjectName(type: string, subType?: string): string {
+  if (subType) return `${subType} ${objectCounter}`;
   const names: Record<string, string> = {
     rect: "Rectangle",
     circle: "Ellipse",
     triangle: "Triangle",
     line: "Line",
     polyline: "Arrow",
-    polygon: "Star",
+    polygon: "Polygon",
     textbox: "Text",
     path: "Path",
     image: "Image",
@@ -147,6 +148,39 @@ export function createArrow(
   return arrow;
 }
 
+export function createPolygon(
+  left: number,
+  top: number,
+  fill: string,
+  stroke: string,
+  strokeWidth: number,
+  sides: number = 6
+): fabric.Polygon {
+  const id = nextId();
+  const radius = 80;
+  const points: { x: number; y: number }[] = [];
+
+  for (let i = 0; i < sides; i++) {
+    const angle = (2 * Math.PI / sides) * i - Math.PI / 2;
+    points.push({
+      x: Math.cos(angle) * radius,
+      y: Math.sin(angle) * radius,
+    });
+  }
+
+  const polygon = new fabric.Polygon(points, {
+    left,
+    top,
+    fill,
+    stroke: strokeWidth > 0 ? stroke : "transparent",
+    strokeWidth,
+    strokeUniform: true,
+  });
+  (polygon as fabric.Polygon & { id: string; name: string }).id = id;
+  (polygon as fabric.Polygon & { id: string; name: string }).name = getObjectName("polygon", "Polygon");
+  return polygon;
+}
+
 export function createStar(
   left: number,
   top: number,
@@ -178,7 +212,7 @@ export function createStar(
     strokeUniform: true,
   });
   (star as fabric.Polygon & { id: string; name: string }).id = id;
-  (star as fabric.Polygon & { id: string; name: string }).name = getObjectName("polygon");
+  (star as fabric.Polygon & { id: string; name: string }).name = getObjectName("polygon", "Star");
   return star;
 }
 
@@ -243,11 +277,11 @@ export function addImageToCanvas(
   });
 }
 
-export function exportCanvasAsPNG(canvas: fabric.Canvas, fileName = "design.png") {
+export function exportCanvasAsPNG(canvas: fabric.Canvas, fileName = "design.png", multiplier = 2) {
   const dataURL = canvas.toDataURL({
     format: "png",
     quality: 1,
-    multiplier: 2,
+    multiplier,
   });
   const a = document.createElement("a");
   a.href = dataURL;
@@ -281,6 +315,34 @@ export function exportCanvasAsJSON(canvas: fabric.Canvas, fileName = "design.jso
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+export function importSVGToCanvas(canvas: fabric.Canvas, file: File): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error);
+    reader.onload = async (e) => {
+      try {
+        const svgString = e.target?.result as string;
+        const result = await fabric.loadSVGFromString(svgString);
+        const objects = result.objects.filter((o): o is fabric.FabricObject => o !== null);
+        if (objects.length > 0) {
+          const group = fabric.util.groupSVGElements(objects);
+          group.set({ left: 100, top: 100 });
+          const id = nextId();
+          (group as fabric.FabricObject & { id: string; name: string }).id = id;
+          (group as fabric.FabricObject & { id: string; name: string }).name = getObjectName("group", "SVG Import");
+          canvas.add(group);
+          canvas.setActiveObject(group);
+          canvas.renderAll();
+        }
+        resolve();
+      } catch (err) {
+        reject(err);
+      }
+    };
+    reader.readAsText(file);
+  });
 }
 
 export function loadCanvasFromJSON(canvas: fabric.Canvas, file: File): Promise<void> {

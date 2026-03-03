@@ -15,6 +15,7 @@ import {
   exportCanvasAsSVG,
   exportCanvasAsJSON,
   loadCanvasFromJSON,
+  importSVGToCanvas,
 } from "@/lib/fabricUtils";
 
 export default function Home() {
@@ -54,6 +55,7 @@ export default function Home() {
       fill: (typeof obj.fill === "string" ? obj.fill : "#000000") || "#000000",
       stroke: (obj.stroke as string) || "",
       strokeWidth: obj.strokeWidth || 0,
+      strokeDashArray: obj.strokeDashArray || null,
       opacity: obj.opacity ?? 1,
       rx: (obj as fabric.Rect).rx,
       ry: (obj as fabric.Rect).ry,
@@ -64,6 +66,8 @@ export default function Home() {
       textAlign: (obj as fabric.Textbox).textAlign,
       underline: (obj as fabric.Textbox).underline,
       linethrough: (obj as fabric.Textbox).linethrough,
+      charSpacing: (obj as fabric.Textbox).charSpacing,
+      lineHeight: (obj as fabric.Textbox).lineHeight,
       text: (obj as fabric.Textbox).text,
       scaleX: obj.scaleX ?? 1,
       scaleY: obj.scaleY ?? 1,
@@ -75,6 +79,7 @@ export default function Home() {
       } : null,
       flipX: obj.flipX,
       flipY: obj.flipY,
+      globalCompositeOperation: obj.globalCompositeOperation,
     };
   }, [selectedObjectId]);
 
@@ -82,7 +87,7 @@ export default function Home() {
 
   // Property change handler
   const handlePropertyChange = useCallback(
-    (property: string, value: number | string | boolean) => {
+    (property: string, value: number | string | boolean | number[]) => {
       const canvas = canvasRef.current;
       if (!canvas || !selectedObjectId) return;
 
@@ -120,6 +125,11 @@ export default function Home() {
         case "strokeWidth":
           obj.set("strokeWidth", value as number);
           break;
+        case "strokeDashArray": {
+          const arr = value as number[];
+          obj.set("strokeDashArray", arr.length > 0 ? arr : undefined);
+          break;
+        }
         case "opacity":
           obj.set("opacity", value as number);
           break;
@@ -147,6 +157,15 @@ export default function Home() {
           break;
         case "linethrough":
           (obj as fabric.Textbox).set("linethrough", value as boolean);
+          break;
+        case "charSpacing":
+          (obj as fabric.Textbox).set("charSpacing", value as number);
+          break;
+        case "lineHeight":
+          (obj as fabric.Textbox).set("lineHeight", value as number);
+          break;
+        case "globalCompositeOperation":
+          obj.set("globalCompositeOperation", value as GlobalCompositeOperation);
           break;
         case "flipX":
           obj.set("flipX", value as boolean);
@@ -180,6 +199,34 @@ export default function Home() {
         case "shadowOffsetY": {
           const s = obj.shadow as fabric.Shadow;
           if (s) s.offsetY = value as number;
+          break;
+        }
+        case "gradient": {
+          const gradientType = value as string;
+          const currentFill = typeof obj.fill === "string" ? obj.fill : "#007aff";
+          if (gradientType === "linear") {
+            const gradient = new fabric.Gradient({
+              type: "linear",
+              coords: { x1: 0, y1: 0, x2: obj.width || 200, y2: obj.height || 150 },
+              colorStops: [
+                { offset: 0, color: currentFill },
+                { offset: 1, color: "#ff2d55" },
+              ],
+            });
+            obj.set("fill", gradient);
+          } else if (gradientType === "radial") {
+            const w = obj.width || 200;
+            const h = obj.height || 150;
+            const gradient = new fabric.Gradient({
+              type: "radial",
+              coords: { x1: w / 2, y1: h / 2, x2: w / 2, y2: h / 2, r1: 0, r2: Math.max(w, h) / 2 },
+              colorStops: [
+                { offset: 0, color: currentFill },
+                { offset: 1, color: "#5856d6" },
+              ],
+            });
+            obj.set("fill", gradient);
+          }
           break;
         }
       }
@@ -576,8 +623,8 @@ export default function Home() {
   };
 
   // Export handlers
-  const handleExportPNG = useCallback(() => {
-    if (canvasRef.current) exportCanvasAsPNG(canvasRef.current);
+  const handleExportPNG = useCallback((scale?: number) => {
+    if (canvasRef.current) exportCanvasAsPNG(canvasRef.current, "design.png", scale || 2);
   }, []);
 
   const handleExportSVG = useCallback(() => {
@@ -592,6 +639,19 @@ export default function Home() {
     async (file: File) => {
       if (canvasRef.current) {
         await loadCanvasFromJSON(canvasRef.current, file);
+        syncLayers(canvasRef.current);
+        historyRef.current.saveState(canvasRef.current);
+        setCanUndo(historyRef.current.canUndo);
+        setCanRedo(historyRef.current.canRedo);
+      }
+    },
+    [setCanUndo, setCanRedo]
+  );
+
+  const handleImportSVG = useCallback(
+    async (file: File) => {
+      if (canvasRef.current) {
+        await importSVGToCanvas(canvasRef.current, file);
         syncLayers(canvasRef.current);
         historyRef.current.saveState(canvasRef.current);
         setCanUndo(historyRef.current.canUndo);
@@ -667,6 +727,7 @@ export default function Home() {
         onExportSVG={handleExportSVG}
         onExportJSON={handleExportJSON}
         onImportJSON={handleImportJSON}
+        onImportSVG={handleImportSVG}
         onUploadImage={handleUploadImage}
         onUndo={handleUndo}
         onRedo={handleRedo}

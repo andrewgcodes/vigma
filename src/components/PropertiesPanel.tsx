@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import {
   Settings2,
   AlignLeft,
@@ -19,6 +19,8 @@ import {
   AlignVerticalJustifyStart,
   AlignVerticalJustifyCenter,
   AlignVerticalJustifyEnd,
+  Lock,
+  Unlock,
 } from "lucide-react";
 import { useStore } from "@/store/useStore";
 
@@ -33,6 +35,7 @@ interface PropertiesPanelProps {
     fill: string;
     stroke: string;
     strokeWidth: number;
+    strokeDashArray?: number[] | null;
     opacity: number;
     rx?: number;
     ry?: number;
@@ -43,14 +46,17 @@ interface PropertiesPanelProps {
     textAlign?: string;
     underline?: boolean;
     linethrough?: boolean;
+    charSpacing?: number;
+    lineHeight?: number;
     text?: string;
     scaleX: number;
     scaleY: number;
     shadow?: { color: string; blur: number; offsetX: number; offsetY: number } | null;
     flipX?: boolean;
     flipY?: boolean;
+    globalCompositeOperation?: string;
   } | null;
-  onPropertyChange: (property: string, value: number | string | boolean) => void;
+  onPropertyChange: (property: string, value: number | string | boolean | number[]) => void;
   onAlignObjects?: (alignment: string) => void;
   hasMultipleSelection?: boolean;
 }
@@ -87,12 +93,14 @@ function NumberInput({
   min,
   max,
   step,
+  width,
 }: {
   value: number;
   onChange: (v: number) => void;
   min?: number;
   max?: number;
   step?: number;
+  width?: number;
 }) {
   return (
     <input
@@ -103,7 +111,7 @@ function NumberInput({
       max={max}
       step={step || 1}
       style={{
-        width: 64,
+        width: width || 64,
         height: 28,
         border: "1px solid #e5e5e7",
         borderRadius: 6,
@@ -142,6 +150,7 @@ function ColorInput({
         type="color"
         value={value || "#000000"}
         onChange={(e) => onChange(e.target.value)}
+        title={label}
         style={{
           width: 24,
           height: 24,
@@ -210,6 +219,31 @@ const FONT_FAMILIES = [
   "Garamond",
 ];
 
+const BLEND_MODES = [
+  { value: "source-over", label: "Normal" },
+  { value: "multiply", label: "Multiply" },
+  { value: "screen", label: "Screen" },
+  { value: "overlay", label: "Overlay" },
+  { value: "darken", label: "Darken" },
+  { value: "lighten", label: "Lighten" },
+  { value: "color-dodge", label: "Color Dodge" },
+  { value: "color-burn", label: "Color Burn" },
+  { value: "hard-light", label: "Hard Light" },
+  { value: "soft-light", label: "Soft Light" },
+  { value: "difference", label: "Difference" },
+  { value: "exclusion", label: "Exclusion" },
+  { value: "hue", label: "Hue" },
+  { value: "saturation", label: "Saturation" },
+  { value: "color", label: "Color" },
+  { value: "luminosity", label: "Luminosity" },
+];
+
+const PRESET_COLORS = [
+  "#1d1d1f", "#ffffff", "#ff3b30", "#ff9500", "#ffcc00",
+  "#34c759", "#00c7be", "#30b0c7", "#007aff", "#5856d6",
+  "#af52de", "#ff2d55", "#8e8e93", "#636366", "#48484a",
+];
+
 function SmallButton({
   icon,
   active,
@@ -250,6 +284,44 @@ function SmallButton({
   );
 }
 
+function SelectInput({
+  value,
+  onChange,
+  options,
+  width,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: { value: string; label: string }[];
+  width?: number;
+}) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      style={{
+        width: width || 120,
+        height: 28,
+        border: "1px solid #e5e5e7",
+        borderRadius: 6,
+        padding: "0 6px",
+        fontSize: 11,
+        color: "#1d1d1f",
+        fontFamily: "Inter, sans-serif",
+        background: "white",
+        outline: "none",
+        cursor: "pointer",
+      }}
+    >
+      {options.map((o) => (
+        <option key={o.value} value={o.value}>
+          {o.label}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 export default function PropertiesPanel({
   selectedObject,
   onPropertyChange,
@@ -259,6 +331,9 @@ export default function PropertiesPanel({
   const obj = selectedObject;
   const isText = obj?.type === "textbox" || obj?.type === "i-text";
   const isRect = obj?.type === "rect";
+  const [lockAspect, setLockAspect] = useState(false);
+  const [showIndividualCorners, setShowIndividualCorners] = useState(false);
+  const { fillColor, setFillColor, strokeColor, setStrokeColor } = useStore();
 
   return (
     <div
@@ -314,18 +389,56 @@ export default function PropertiesPanel({
         }}
       >
         {!obj ? (
-          <div
-            style={{
-              padding: "40px 0",
-              textAlign: "center",
-              color: "#a1a1a6",
-              fontSize: 12,
-            }}
-          >
-            Select an object to
-            <br />
-            edit its properties.
-          </div>
+          <>
+            {/* Default colors when nothing selected */}
+            <SectionHeader title="Default Fill" />
+            <PropertyRow label="Color">
+              <ColorInput
+                value={fillColor}
+                onChange={(v) => setFillColor(v)}
+                label="Fill"
+              />
+            </PropertyRow>
+            {/* Color presets */}
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 4, padding: "6px 0" }}>
+              {PRESET_COLORS.map((c) => (
+                <button
+                  key={c}
+                  onClick={() => setFillColor(c)}
+                  style={{
+                    width: 20,
+                    height: 20,
+                    borderRadius: 4,
+                    background: c,
+                    border: fillColor === c ? "2px solid #0071e3" : "1px solid #e5e5e7",
+                    cursor: "pointer",
+                    padding: 0,
+                  }}
+                  title={c}
+                />
+              ))}
+            </div>
+            <SectionHeader title="Default Stroke" />
+            <PropertyRow label="Color">
+              <ColorInput
+                value={strokeColor}
+                onChange={(v) => setStrokeColor(v)}
+                label="Stroke"
+              />
+            </PropertyRow>
+            <div
+              style={{
+                padding: "40px 0",
+                textAlign: "center",
+                color: "#a1a1a6",
+                fontSize: 12,
+              }}
+            >
+              Select an object to
+              <br />
+              edit its properties.
+            </div>
+          </>
         ) : (
           <>
             {/* Position */}
@@ -353,17 +466,41 @@ export default function PropertiesPanel({
               <PropertyRow label="W">
                 <NumberInput
                   value={obj.width * obj.scaleX}
-                  onChange={(v) => onPropertyChange("width", v)}
+                  onChange={(v) => {
+                    onPropertyChange("width", v);
+                    if (lockAspect) {
+                      const ratio = obj.height * obj.scaleY / (obj.width * obj.scaleX || 1);
+                      onPropertyChange("height", v * ratio);
+                    }
+                  }}
                   min={1}
                 />
               </PropertyRow>
               <PropertyRow label="H">
                 <NumberInput
                   value={obj.height * obj.scaleY}
-                  onChange={(v) => onPropertyChange("height", v)}
+                  onChange={(v) => {
+                    onPropertyChange("height", v);
+                    if (lockAspect) {
+                      const ratio = obj.width * obj.scaleX / (obj.height * obj.scaleY || 1);
+                      onPropertyChange("width", v * ratio);
+                    }
+                  }}
                   min={1}
                 />
               </PropertyRow>
+            </div>
+            {/* Lock aspect ratio */}
+            <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 0" }}>
+              <SmallButton
+                icon={lockAspect ? <Lock size={11} /> : <Unlock size={11} />}
+                active={lockAspect}
+                onClick={() => setLockAspect(!lockAspect)}
+                title="Lock aspect ratio"
+              />
+              <span style={{ fontSize: 10, color: "#a1a1a6" }}>
+                {lockAspect ? "Aspect locked" : "Aspect unlocked"}
+              </span>
             </div>
 
             {/* Rotation */}
@@ -388,6 +525,78 @@ export default function PropertiesPanel({
                 label="Fill"
               />
             </PropertyRow>
+            {/* Color presets */}
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 4, padding: "6px 0" }}>
+              {PRESET_COLORS.map((c) => (
+                <button
+                  key={c}
+                  onClick={() => onPropertyChange("fill", c)}
+                  style={{
+                    width: 18,
+                    height: 18,
+                    borderRadius: 3,
+                    background: c,
+                    border: (typeof obj.fill === "string" && obj.fill === c) ? "2px solid #0071e3" : "1px solid #e5e5e7",
+                    cursor: "pointer",
+                    padding: 0,
+                  }}
+                  title={c}
+                />
+              ))}
+            </div>
+
+            {/* Gradient */}
+            <PropertyRow label="Gradient">
+              <div style={{ display: "flex", gap: 4 }}>
+                <button
+                  onClick={() => onPropertyChange("gradient", "linear")}
+                  style={{
+                    height: 24,
+                    padding: "0 8px",
+                    borderRadius: 4,
+                    border: "1px solid #e5e5e7",
+                    background: "linear-gradient(90deg, #007aff, #ff2d55)",
+                    cursor: "pointer",
+                    fontSize: 10,
+                    color: "white",
+                    fontWeight: 600,
+                  }}
+                >
+                  Linear
+                </button>
+                <button
+                  onClick={() => onPropertyChange("gradient", "radial")}
+                  style={{
+                    height: 24,
+                    padding: "0 8px",
+                    borderRadius: 4,
+                    border: "1px solid #e5e5e7",
+                    background: "radial-gradient(circle, #007aff, #5856d6)",
+                    cursor: "pointer",
+                    fontSize: 10,
+                    color: "white",
+                    fontWeight: 600,
+                  }}
+                >
+                  Radial
+                </button>
+                <button
+                  onClick={() => onPropertyChange("fill", typeof obj.fill === "string" ? obj.fill : "#4A90D9")}
+                  style={{
+                    height: 24,
+                    padding: "0 8px",
+                    borderRadius: 4,
+                    border: "1px solid #e5e5e7",
+                    background: "white",
+                    cursor: "pointer",
+                    fontSize: 10,
+                    color: "#6e6e73",
+                  }}
+                >
+                  Solid
+                </button>
+              </div>
+            </PropertyRow>
 
             {/* Stroke */}
             <SectionHeader title="Stroke" />
@@ -406,8 +615,39 @@ export default function PropertiesPanel({
                 max={50}
               />
             </PropertyRow>
+            {/* Border style */}
+            <PropertyRow label="Style">
+              <SelectInput
+                value={
+                  obj.strokeDashArray && obj.strokeDashArray.length > 0
+                    ? obj.strokeDashArray[0] === obj.strokeDashArray[1]
+                      ? "dashed"
+                      : "dotted"
+                    : "solid"
+                }
+                onChange={(v) => {
+                  switch (v) {
+                    case "solid":
+                      onPropertyChange("strokeDashArray", []);
+                      break;
+                    case "dashed":
+                      onPropertyChange("strokeDashArray", [10, 10]);
+                      break;
+                    case "dotted":
+                      onPropertyChange("strokeDashArray", [3, 6]);
+                      break;
+                  }
+                }}
+                options={[
+                  { value: "solid", label: "Solid" },
+                  { value: "dashed", label: "Dashed" },
+                  { value: "dotted", label: "Dotted" },
+                ]}
+                width={90}
+              />
+            </PropertyRow>
 
-            {/* Opacity */}
+            {/* Appearance */}
             <SectionHeader title="Appearance" />
             <PropertyRow label="Opacity">
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -426,18 +666,81 @@ export default function PropertiesPanel({
                 </span>
               </div>
             </PropertyRow>
+            {/* Blend mode */}
+            <PropertyRow label="Blend">
+              <SelectInput
+                value={obj.globalCompositeOperation || "source-over"}
+                onChange={(v) => onPropertyChange("globalCompositeOperation", v)}
+                options={BLEND_MODES}
+                width={110}
+              />
+            </PropertyRow>
 
             {/* Corner Radius (rectangles only) */}
             {isRect && (
               <>
-                <PropertyRow label="Radius">
-                  <NumberInput
-                    value={obj.rx || 0}
-                    onChange={(v) => onPropertyChange("cornerRadius", v)}
-                    min={0}
-                    max={100}
-                  />
-                </PropertyRow>
+                <SectionHeader title="Corners" />
+                {!showIndividualCorners ? (
+                  <>
+                    <PropertyRow label="Radius">
+                      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                        <NumberInput
+                          value={obj.rx || 0}
+                          onChange={(v) => onPropertyChange("cornerRadius", v)}
+                          min={0}
+                          max={200}
+                        />
+                        <button
+                          onClick={() => setShowIndividualCorners(true)}
+                          style={{
+                            fontSize: 9,
+                            color: "#0071e3",
+                            background: "none",
+                            border: "none",
+                            cursor: "pointer",
+                            padding: 0,
+                          }}
+                          title="Individual corners"
+                        >
+                          Each
+                        </button>
+                      </div>
+                    </PropertyRow>
+                  </>
+                ) : (
+                  <>
+                    <div style={{ fontSize: 10, color: "#a1a1a6", paddingBottom: 4 }}>
+                      Individual corners
+                      <button
+                        onClick={() => setShowIndividualCorners(false)}
+                        style={{
+                          fontSize: 9,
+                          color: "#0071e3",
+                          background: "none",
+                          border: "none",
+                          cursor: "pointer",
+                          marginLeft: 8,
+                        }}
+                      >
+                        Uniform
+                      </button>
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
+                      <PropertyRow label="TL">
+                        <NumberInput value={obj.rx || 0} onChange={(v) => onPropertyChange("cornerRadius", v)} min={0} width={48} />
+                      </PropertyRow>
+                      <PropertyRow label="TR">
+                        <NumberInput value={obj.rx || 0} onChange={(v) => onPropertyChange("cornerRadius", v)} min={0} width={48} />
+                      </PropertyRow>
+                      <PropertyRow label="BL">
+                        <NumberInput value={obj.rx || 0} onChange={(v) => onPropertyChange("cornerRadius", v)} min={0} width={48} />
+                      </PropertyRow>
+                      <PropertyRow label="BR">
+                        <NumberInput value={obj.rx || 0} onChange={(v) => onPropertyChange("cornerRadius", v)} min={0} width={48} />
+                      </PropertyRow>
+                    </div>
+                  </>
+                )}
               </>
             )}
 
@@ -477,36 +780,22 @@ export default function PropertiesPanel({
                     value={obj.fontSize || 24}
                     onChange={(v) => onPropertyChange("fontSize", v)}
                     min={1}
-                    max={200}
+                    max={400}
                   />
                 </PropertyRow>
                 <PropertyRow label="Weight">
-                  <select
+                  <SelectInput
                     value={obj.fontWeight || "normal"}
-                    onChange={(e) =>
-                      onPropertyChange("fontWeight", e.target.value)
-                    }
-                    style={{
-                      width: 120,
-                      height: 28,
-                      border: "1px solid #e5e5e7",
-                      borderRadius: 6,
-                      padding: "0 6px",
-                      fontSize: 11,
-                      color: "#1d1d1f",
-                      fontFamily: "Inter, sans-serif",
-                      background: "white",
-                      outline: "none",
-                      cursor: "pointer",
-                    }}
-                  >
-                    <option value="normal">Regular</option>
-                    <option value="bold">Bold</option>
-                    <option value="300">Light</option>
-                    <option value="500">Medium</option>
-                    <option value="600">Semibold</option>
-                    <option value="800">Extra Bold</option>
-                  </select>
+                    onChange={(v) => onPropertyChange("fontWeight", v)}
+                    options={[
+                      { value: "normal", label: "Regular" },
+                      { value: "300", label: "Light" },
+                      { value: "500", label: "Medium" },
+                      { value: "600", label: "Semibold" },
+                      { value: "bold", label: "Bold" },
+                      { value: "800", label: "Extra Bold" },
+                    ]}
+                  />
                 </PropertyRow>
                 {/* Text style buttons */}
                 <div style={{ display: "flex", gap: 4, padding: "6px 0" }}>
@@ -563,6 +852,26 @@ export default function PropertiesPanel({
                       title="Justify"
                     />
                   </div>
+                </PropertyRow>
+                {/* Letter spacing */}
+                <PropertyRow label="Spacing">
+                  <NumberInput
+                    value={obj.charSpacing || 0}
+                    onChange={(v) => onPropertyChange("charSpacing", v)}
+                    min={-200}
+                    max={1000}
+                    step={10}
+                  />
+                </PropertyRow>
+                {/* Line height */}
+                <PropertyRow label="Line H">
+                  <NumberInput
+                    value={obj.lineHeight || 1.16}
+                    onChange={(v) => onPropertyChange("lineHeight", v)}
+                    min={0.5}
+                    max={5}
+                    step={0.1}
+                  />
                 </PropertyRow>
               </>
             )}

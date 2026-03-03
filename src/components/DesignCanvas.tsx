@@ -11,7 +11,9 @@ import {
   createLine,
   createArrow,
   createStar,
+  createPolygon,
   createTextbox,
+  addImageToCanvas,
 } from "@/lib/fabricUtils";
 import type { LayerInfo } from "@/types";
 
@@ -34,6 +36,9 @@ export default function DesignCanvas({ canvasRef, historyRef }: DesignCanvasProp
   const isDrawingRef = useRef(false);
   const drawStartRef = useRef({ x: 0, y: 0 });
   const drawingObjRef = useRef<fabric.FabricObject | null>(null);
+
+  // Snap guides refs
+  const snapGuidesRef = useRef<fabric.FabricObject[]>([]);
 
   const {
     activeTool,
@@ -80,6 +85,84 @@ export default function DesignCanvas({ canvasRef, historyRef }: DesignCanvasProp
     }
   }, [canvasRef, historyRef, setCanUndo, setCanRedo]);
 
+  // Clear snap guides
+  const clearSnapGuides = useCallback((canvas: fabric.Canvas) => {
+    snapGuidesRef.current.forEach((guide) => canvas.remove(guide));
+    snapGuidesRef.current = [];
+  }, []);
+
+  // Show snap guides when moving objects
+  const showSnapGuides = useCallback((canvas: fabric.Canvas, movingObj: fabric.FabricObject) => {
+    clearSnapGuides(canvas);
+    const SNAP_THRESHOLD = 5;
+    const guides: fabric.FabricObject[] = [];
+    const movingBounds = movingObj.getBoundingRect();
+    const movingCenterX = movingBounds.left + movingBounds.width / 2;
+    const movingCenterY = movingBounds.top + movingBounds.height / 2;
+
+    canvas.getObjects().forEach((obj) => {
+      if (obj === movingObj || (obj as fabric.FabricObject & { _isSnapGuide?: boolean })._isSnapGuide) return;
+      const bounds = obj.getBoundingRect();
+      const centerX = bounds.left + bounds.width / 2;
+      const centerY = bounds.top + bounds.height / 2;
+
+      // Vertical center alignment
+      if (Math.abs(movingCenterX - centerX) < SNAP_THRESHOLD) {
+        const line = new fabric.Line([centerX, 0, centerX, canvas.height || 2000], {
+          stroke: "#ff3b6b",
+          strokeWidth: 1,
+          selectable: false,
+          evented: false,
+          strokeDashArray: [4, 4],
+        });
+        (line as fabric.FabricObject & { _isSnapGuide?: boolean })._isSnapGuide = true;
+        guides.push(line);
+      }
+
+      // Horizontal center alignment
+      if (Math.abs(movingCenterY - centerY) < SNAP_THRESHOLD) {
+        const line = new fabric.Line([0, centerY, canvas.width || 2000, centerY], {
+          stroke: "#ff3b6b",
+          strokeWidth: 1,
+          selectable: false,
+          evented: false,
+          strokeDashArray: [4, 4],
+        });
+        (line as fabric.FabricObject & { _isSnapGuide?: boolean })._isSnapGuide = true;
+        guides.push(line);
+      }
+
+      // Left edge alignment
+      if (Math.abs(movingBounds.left - bounds.left) < SNAP_THRESHOLD) {
+        const line = new fabric.Line([bounds.left, 0, bounds.left, canvas.height || 2000], {
+          stroke: "#0071e3",
+          strokeWidth: 1,
+          selectable: false,
+          evented: false,
+          strokeDashArray: [4, 4],
+        });
+        (line as fabric.FabricObject & { _isSnapGuide?: boolean })._isSnapGuide = true;
+        guides.push(line);
+      }
+
+      // Top edge alignment
+      if (Math.abs(movingBounds.top - bounds.top) < SNAP_THRESHOLD) {
+        const line = new fabric.Line([0, bounds.top, canvas.width || 2000, bounds.top], {
+          stroke: "#0071e3",
+          strokeWidth: 1,
+          selectable: false,
+          evented: false,
+          strokeDashArray: [4, 4],
+        });
+        (line as fabric.FabricObject & { _isSnapGuide?: boolean })._isSnapGuide = true;
+        guides.push(line);
+      }
+    });
+
+    guides.forEach((guide) => canvas.add(guide));
+    snapGuidesRef.current = guides;
+  }, [clearSnapGuides]);
+
   // Initialize canvas
   useEffect(() => {
     if (!canvasElRef.current || canvasRef.current) return;
@@ -92,6 +175,7 @@ export default function DesignCanvas({ canvasRef, historyRef }: DesignCanvasProp
       preserveObjectStacking: true,
       stopContextMenu: true,
       fireRightClick: true,
+      uniformScaling: false,
     });
 
     // Custom selection style
@@ -139,6 +223,7 @@ export default function DesignCanvas({ canvasRef, historyRef }: DesignCanvasProp
     });
 
     canvas.on("object:modified", () => {
+      clearSnapGuides(canvas);
       saveHistory();
       syncLayers(canvas);
     });
@@ -151,8 +236,82 @@ export default function DesignCanvas({ canvasRef, historyRef }: DesignCanvasProp
       syncLayers(canvas);
     });
 
+    // Snap guides on object moving
+    canvas.on("object:moving", (e) => {
+      if (e.target) {
+        showSnapGuides(canvas, e.target);
+      }
+    });
+
+    // Hover highlight
+    canvas.on("mouse:over", (e) => {
+      if (e.target && e.target !== canvas.getActiveObject()) {
+        e.target.set("borderColor", "#0071e3");
+        e.target.set("borderScaleFactor", 2);
+        canvas.renderAll();
+      }
+    });
+
+    canvas.on("mouse:out", (e) => {
+      if (e.target) {
+        e.target.set("borderColor", "#0071e3");
+        e.target.set("borderScaleFactor", 1);
+        canvas.renderAll();
+      }
+    });
+
+    // Drag & drop image support
+    const canvasEl = canvas.getSelectionElement();
+    const handleDragOver = (e: DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+    };
+
+    const handleDrop = (e: DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const files = e.dataTransfer?.files;
+      if (files) {
+        Array.from(files).forEach((file) => {
+          if (file.type.startsWith("image/")) {
+            addImageToCanvas(canvas, file).then(() => {
+              saveHistory();
+            });
+          }
+        });
+      }
+    };
+
+    canvasEl.addEventListener("dragover", handleDragOver);
+    canvasEl.addEventListener("drop", handleDrop);
+
+    // Paste image from clipboard
+    const handlePaste = (e: ClipboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) return;
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.startsWith("image/")) {
+          e.preventDefault();
+          const file = items[i].getAsFile();
+          if (file) {
+            addImageToCanvas(canvas, file).then(() => {
+              saveHistory();
+            });
+          }
+          return;
+        }
+      }
+    };
+
+    window.addEventListener("paste", handlePaste);
+
     return () => {
       window.removeEventListener("resize", handleResize);
+      canvasEl.removeEventListener("dragover", handleDragOver);
+      canvasEl.removeEventListener("drop", handleDrop);
+      window.removeEventListener("paste", handlePaste);
       canvas.dispose();
       canvasRef.current = null;
     };
@@ -191,7 +350,8 @@ export default function DesignCanvas({ canvasRef, historyRef }: DesignCanvasProp
 
     // Make objects unselectable when not in select mode
     canvas.getObjects().forEach((obj) => {
-      const o = obj as fabric.FabricObject & { _wasSelectable?: boolean; locked?: boolean };
+      const o = obj as fabric.FabricObject & { _wasSelectable?: boolean; locked?: boolean; _isSnapGuide?: boolean };
+      if (o._isSnapGuide) return;
       if (activeTool !== "select" && activeTool !== "pen") {
         o._wasSelectable = obj.selectable;
         obj.selectable = false;
@@ -286,6 +446,10 @@ export default function DesignCanvas({ canvasRef, historyRef }: DesignCanvasProp
           obj = createStar(pointer.x, pointer.y, fillColor, strokeColor, strokeWidth);
           obj.set({ scaleX: 0.01, scaleY: 0.01 });
           break;
+        case "polygon":
+          obj = createPolygon(pointer.x, pointer.y, fillColor, strokeColor, strokeWidth);
+          obj.set({ scaleX: 0.01, scaleY: 0.01 });
+          break;
       }
 
       if (obj) {
@@ -346,7 +510,8 @@ export default function DesignCanvas({ canvasRef, historyRef }: DesignCanvasProp
             obj.set({ scaleX: Math.max(dist / 200, 0.01), scaleY: Math.max(dist / 200, 0.01) });
             break;
           }
-          case "star": {
+          case "star":
+          case "polygon": {
             const starDist = Math.sqrt(dx * dx + dy * dy);
             obj.set({ scaleX: Math.max(starDist / 80, 0.01), scaleY: Math.max(starDist / 80, 0.01) });
             break;
@@ -380,6 +545,7 @@ export default function DesignCanvas({ canvasRef, historyRef }: DesignCanvasProp
             case "ellipse": (obj as fabric.Ellipse).set({ rx: 100, ry: 75 }); break;
             case "triangle": obj.set({ width: 180, height: 160 }); break;
             case "star": obj.set({ scaleX: 1, scaleY: 1 }); break;
+            case "polygon": obj.set({ scaleX: 1, scaleY: 1 }); break;
           }
         }
         obj.setCoords();
@@ -461,6 +627,25 @@ export default function DesignCanvas({ canvasRef, historyRef }: DesignCanvasProp
         return;
       }
 
+      // Arrow keys - nudge objects (1px, Shift+10px)
+      if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)) {
+        const activeObj = canvas.getActiveObject();
+        if (activeObj) {
+          e.preventDefault();
+          const nudge = e.shiftKey ? 10 : 1;
+          switch (e.key) {
+            case "ArrowUp": activeObj.set("top", (activeObj.top || 0) - nudge); break;
+            case "ArrowDown": activeObj.set("top", (activeObj.top || 0) + nudge); break;
+            case "ArrowLeft": activeObj.set("left", (activeObj.left || 0) - nudge); break;
+            case "ArrowRight": activeObj.set("left", (activeObj.left || 0) + nudge); break;
+          }
+          activeObj.setCoords();
+          canvas.renderAll();
+          saveHistory();
+        }
+        return;
+      }
+
       // Tool shortcuts (no modifier keys)
       if (!e.ctrlKey && !e.metaKey && !e.shiftKey) {
         switch (key) {
@@ -473,6 +658,7 @@ export default function DesignCanvas({ canvasRef, historyRef }: DesignCanvasProp
           case "p": setActiveTool("pen"); return;
           case "t": setActiveTool("text"); return;
           case "s": setActiveTool("star"); return;
+          case "n": setActiveTool("polygon"); return;
         }
       }
 
@@ -495,7 +681,7 @@ export default function DesignCanvas({ canvasRef, historyRef }: DesignCanvasProp
       // Ctrl+A - Select All
       if (key === "a" && !e.shiftKey) {
         e.preventDefault();
-        const objects = canvas.getObjects();
+        const objects = canvas.getObjects().filter((o) => !(o as fabric.FabricObject & { _isSnapGuide?: boolean })._isSnapGuide);
         if (objects.length > 0) {
           const sel = new fabric.ActiveSelection(objects, { canvas });
           canvas.setActiveObject(sel);
@@ -659,7 +845,7 @@ export default function DesignCanvas({ canvasRef, historyRef }: DesignCanvasProp
         return;
       }
 
-      // Ctrl+] - Bring Forward
+      // Ctrl+] - Bring Forward (unshifted bracket)
       if (e.key === "]" && !e.shiftKey) {
         e.preventDefault();
         const obj = canvas.getActiveObject();
@@ -675,7 +861,7 @@ export default function DesignCanvas({ canvasRef, historyRef }: DesignCanvasProp
         return;
       }
 
-      // Ctrl+[ - Send Backward
+      // Ctrl+[ - Send Backward (unshifted bracket)
       if (e.key === "[" && !e.shiftKey) {
         e.preventDefault();
         const obj = canvas.getActiveObject();
@@ -691,8 +877,8 @@ export default function DesignCanvas({ canvasRef, historyRef }: DesignCanvasProp
         return;
       }
 
-      // Ctrl+Shift+] - Bring to Front
-      if (e.key === "]" && e.shiftKey) {
+      // Ctrl+Shift+] / Ctrl+} - Bring to Front
+      if (e.key === "}" || (e.key === "]" && e.shiftKey)) {
         e.preventDefault();
         const obj = canvas.getActiveObject();
         if (obj) {
@@ -703,8 +889,8 @@ export default function DesignCanvas({ canvasRef, historyRef }: DesignCanvasProp
         return;
       }
 
-      // Ctrl+Shift+[ - Send to Back
-      if (e.key === "[" && e.shiftKey) {
+      // Ctrl+Shift+[ / Ctrl+{ - Send to Back
+      if (e.key === "{" || (e.key === "[" && e.shiftKey)) {
         e.preventDefault();
         const obj = canvas.getActiveObject();
         if (obj) {
@@ -780,12 +966,7 @@ export default function DesignCanvas({ canvasRef, historyRef }: DesignCanvasProp
 }
 
 function drawGrid(canvas: fabric.Canvas) {
-  // We draw a subtle dot grid as background
   const gridSize = 20;
-  const width = canvas.width || window.innerWidth;
-  const height = canvas.height || window.innerHeight;
-
-  // Create a pattern using a small canvas
   const patternCanvas = document.createElement("canvas");
   patternCanvas.width = gridSize;
   patternCanvas.height = gridSize;
