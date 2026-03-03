@@ -25,6 +25,9 @@ interface DesignCanvasProps {
   historyRef: React.MutableRefObject<CanvasHistory>;
 }
 
+// Register custom properties so Fabric.js serializes/deserializes them
+(fabric.FabricObject as unknown as { customProperties: string[] }).customProperties = ['id', 'name'];
+
 export default function DesignCanvas({ canvasRef, historyRef }: DesignCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasElRef = useRef<HTMLCanvasElement>(null);
