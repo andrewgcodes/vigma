@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
   Copy, Clipboard, Scissors, Trash2, Lock, Unlock,
   ArrowUpToLine, ArrowDownToLine, ArrowUp, ArrowDown,
@@ -62,8 +62,8 @@ export default function ContextMenu({
     return () => document.removeEventListener('mousedown', handler)
   }, [visible, onClose])
 
-  // Measure actual menu height and adjust position after render
-  useEffect(() => {
+  // Measure actual menu height and adjust position before paint (useLayoutEffect avoids flash)
+  useLayoutEffect(() => {
     if (!visible || !menuRef.current) return
     const menuRect = menuRef.current.getBoundingClientRect()
     const adjustedX = Math.min(x, window.innerWidth - menuRect.width - 8)
