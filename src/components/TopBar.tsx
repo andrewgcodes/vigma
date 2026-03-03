@@ -5,8 +5,9 @@ import {
   Undo2, Redo2, ZoomIn, ZoomOut, Maximize2,
   Download, Upload, Menu, Grid3X3, Ruler, Magnet,
   LayoutDashboard, PanelLeft, PanelRight, RotateCcw,
-  Save, FileJson, FileImage, FileCode, Info
+  Save, FileJson, FileImage, FileCode, Info, Share2, Users, Copy, Check
 } from 'lucide-react'
+import type { RemoteUser } from '@/lib/collaboration'
 
 interface TopBarProps {
   zoom: number
@@ -33,6 +34,12 @@ interface TopBarProps {
   onSaveProject: () => void
   leftPanelOpen: boolean
   rightPanelOpen: boolean
+  // Collaboration
+  isCollaborating?: boolean
+  roomId?: string | null
+  remoteUsers?: RemoteUser[]
+  onShare?: () => void
+  onLeaveRoom?: () => void
 }
 
 export default function TopBar({
@@ -60,12 +67,28 @@ export default function TopBar({
   onSaveProject,
   leftPanelOpen,
   rightPanelOpen,
+  isCollaborating,
+  roomId,
+  remoteUsers = [],
+  onShare,
+  onLeaveRoom,
 }: TopBarProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const jsonInputRef = useRef<HTMLInputElement>(null)
   const [showExportMenu, setShowExportMenu] = React.useState(false)
   const [showViewMenu, setShowViewMenu] = React.useState(false)
   const [showInfoTooltip, setShowInfoTooltip] = React.useState(false)
+  const [copied, setCopied] = React.useState(false)
+
+  const handleCopyLink = () => {
+    if (roomId) {
+      const url = `${window.location.origin}${window.location.pathname}#room=${roomId}`
+      navigator.clipboard.writeText(url).then(() => {
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
+      })
+    }
+  }
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -206,6 +229,50 @@ export default function TopBar({
         </div>
 
         <div className="w-px h-5 bg-canvas-border mx-1" />
+
+        {/* Collaboration section */}
+        {isCollaborating && roomId ? (
+          <div className="flex items-center gap-1.5 mr-1">
+            {/* Online users avatars */}
+            <div className="flex items-center -space-x-1.5">
+              {remoteUsers.slice(0, 5).map((user) => (
+                <div
+                  key={user.id}
+                  className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[9px] font-bold border-2 border-white shadow-sm"
+                  style={{ backgroundColor: user.color }}
+                  title={user.name}
+                >
+                  {user.name.charAt(0)}
+                </div>
+              ))}
+              {remoteUsers.length > 5 && (
+                <div className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-medium bg-gray-200 text-gray-600 border-2 border-white">
+                  +{remoteUsers.length - 5}
+                </div>
+              )}
+            </div>
+            <span className="text-[10px] text-canvas-text-tertiary">
+              {remoteUsers.length + 1} online
+            </span>
+            <button
+              onClick={handleCopyLink}
+              className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium bg-green-50 text-green-700 rounded-lg hover:bg-green-100 transition-colors"
+              title="Copy room link"
+            >
+              {copied ? <Check size={12} /> : <Copy size={12} />}
+              {copied ? 'Copied!' : 'Copy Link'}
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={onShare}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-violet-500 text-white rounded-lg hover:bg-violet-600 transition-colors mr-1"
+            title="Start a collaboration room"
+          >
+            <Share2 size={14} />
+            Share
+          </button>
+        )}
 
         <BarButton
           icon={<PanelRight size={15} />}
