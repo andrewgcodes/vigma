@@ -76,7 +76,11 @@ export default function CanvasArea() {
         const parsed = JSON.parse(saved);
         canvas.loadFromJSON(parsed).then(() => {
           canvas.requestRenderAll();
-          updateLayers();
+          // Small delay to ensure all objects are fully deserialized
+          setTimeout(() => {
+            updateLayers();
+            saveHistory();
+          }, 200);
           setShowWelcome(false);
           dispatch({ type: 'SHOW_TOAST', message: 'Previous design restored' });
         });

@@ -33,15 +33,32 @@ export function setObjectName(obj: FabricObject, name: string): void {
 
 export function getLayersFromCanvas(canvas: Canvas): LayerInfo[] {
   const objects = canvas.getObjects().filter(
-    (obj) => (obj as unknown as Record<string, unknown>).customName !== undefined
+    (obj) => {
+      const record = obj as unknown as Record<string, unknown>;
+      // Exclude the artboard background
+      if (record.name === 'artboard') return false;
+      // Exclude non-selectable, non-evented objects (like artboard)
+      if (obj.selectable === false && obj.evented === false) return false;
+      return true;
+    }
   );
-  return objects.map((obj) => ({
-    id: getObjectId(obj),
-    name: getObjectName(obj),
-    type: obj.type || 'object',
-    visible: obj.visible !== false,
-    locked: !obj.selectable,
-  })).reverse();
+  return objects.map((obj) => {
+    const record = obj as unknown as Record<string, unknown>;
+    // Ensure objects have IDs and names (especially after JSON restore)
+    if (!record.objectId) {
+      assignObjectId(obj);
+    }
+    if (!record.customName) {
+      assignDefaultName(obj);
+    }
+    return {
+      id: getObjectId(obj),
+      name: getObjectName(obj),
+      type: obj.type || 'object',
+      visible: obj.visible !== false,
+      locked: !obj.selectable,
+    };
+  }).reverse();
 }
 
 export function findObjectById(canvas: Canvas, id: string): FabricObject | undefined {
