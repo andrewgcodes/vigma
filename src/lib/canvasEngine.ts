@@ -1228,6 +1228,12 @@ export class CanvasEngine {
 
   async loadFromJSON(json: string) {
     await this.canvas.loadFromJSON(json)
+    // Clean up any grid lines that were accidentally serialized by older versions
+    const staleGridLines = this.canvas.getObjects().filter(o =>
+      (o as any).isGrid ||
+      (o.type === 'line' && !o.selectable && !o.evented && o.stroke === '#e0e0e0')
+    )
+    staleGridLines.forEach(o => this.canvas.remove(o))
     this.canvas.renderAll()
     this.saveHistory()
   }
