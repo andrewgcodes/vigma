@@ -974,19 +974,46 @@ export class CanvasEngine {
   setIndividualCornerRadius(corners: { tl: number, tr: number, br: number, bl: number }) {
     const active = this.canvas.getActiveObject()
     if (!active || !(active instanceof Rect)) return
-    // Build a rounded rect path from individual corners
     const w = active.width || 100
     const h = active.height || 100
     const { tl, tr, br, bl } = corners
     // Store individual corners as custom property
     ;(active as any)._cornerRadii = corners
-    // Use the maximum as the uniform radius for Fabric's built-in rendering
-    // For truly individual corners, we'd need a custom path, but rx/ry gives us uniform
-    // Instead, set rx/ry to the average for visual approximation with Fabric's Rect
-    const avg = Math.max(tl, tr, br, bl)
-    active.set('rx', avg)
-    active.set('ry', avg)
+    // Reset uniform rx/ry to 0 — we handle rounding via clipPath
+    active.set('rx', 0)
+    active.set('ry', 0)
+    // Build an SVG path with individual corner radii and apply as clipPath
+    const pathData = this.buildRoundedRectPath(w, h, tl, tr, br, bl)
+    const clipPath = new Path(pathData, {
+      left: -w / 2,
+      top: -h / 2,
+      originX: 'left',
+      originY: 'top',
+    })
+    active.set('clipPath', clipPath)
     this.canvas.renderAll()
+  }
+
+  // Build an SVG path string for a rect with individual corner radii
+  private buildRoundedRectPath(w: number, h: number, tl: number, tr: number, br: number, bl: number): string {
+    // Clamp radii to half of the smallest dimension
+    const maxR = Math.min(w, h) / 2
+    tl = Math.min(tl, maxR)
+    tr = Math.min(tr, maxR)
+    br = Math.min(br, maxR)
+    bl = Math.min(bl, maxR)
+    return [
+      `M ${tl} 0`,
+      `L ${w - tr} 0`,
+      `Q ${w} 0 ${w} ${tr}`,
+      `L ${w} ${h - br}`,
+      `Q ${w} ${h} ${w - br} ${h}`,
+      `L ${bl} ${h}`,
+      `Q 0 ${h} 0 ${h - bl}`,
+      `L 0 ${tl}`,
+      `Q 0 0 ${tl} 0`,
+      'Z',
+    ].join(' ')
   }
 
   setObjectOpacity(opacity: number) {
@@ -1059,6 +1086,7 @@ export class CanvasEngine {
       active.set('rx', rx)
       active.set('ry', ry ?? rx)
       ;(active as any)._cornerRadii = null // Clear individual corners when setting uniform
+      active.set('clipPath', undefined) // Remove per-corner clipPath
       this.canvas.renderAll()
     }
   }
