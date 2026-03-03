@@ -470,11 +470,17 @@ export default function DesignPage() {
 
       const { remoteOnlyIds, overlappingIds } = collab.reconcileCanvasState(localObjects)
 
+      // Filter out IDs already being processed by a concurrent handleRemoteObjectChange
+      // (e.g., observer-driven batch that started during waitForSync but hasn't finished
+      // enlivening yet). Without this filter, we'd start a duplicate enlivenObjects.
+      const safeRemoteOnlyIds = remoteOnlyIds.filter(id => (remoteObjectIdsRef.current.get(id) ?? 0) === 0)
+      const safeOverlappingIds = overlappingIds.filter(id => (remoteObjectIdsRef.current.get(id) ?? 0) === 0)
+
       // Add remote-only objects and update overlapping ones on the canvas
-      if (remoteOnlyIds.length > 0 || overlappingIds.length > 0) {
+      if (safeRemoteOnlyIds.length > 0 || safeOverlappingIds.length > 0) {
         handleRemoteObjectChange({
-          added: remoteOnlyIds,
-          updated: overlappingIds,
+          added: safeRemoteOnlyIds,
+          updated: safeOverlappingIds,
           deleted: [],
         })
       }
