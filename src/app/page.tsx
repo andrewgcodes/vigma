@@ -52,7 +52,7 @@ export default function Home() {
       width: obj.width || 0,
       height: obj.height || 0,
       angle: obj.angle || 0,
-      fill: typeof obj.fill === "string" ? (obj.fill || "#000000") : obj.fill,
+      fill: typeof obj.fill === "string" ? (obj.fill || "#000000") : (obj.fill === null ? "#000000" : obj.fill),
       stroke: (obj.stroke as string) || "",
       strokeWidth: obj.strokeWidth || 0,
       strokeDashArray: obj.strokeDashArray || null,
