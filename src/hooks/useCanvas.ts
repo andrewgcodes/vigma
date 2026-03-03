@@ -603,7 +603,8 @@ export function useCanvas() {
       hasControls: isLocked,
     });
     canvas.renderAll();
-  }, []);
+    saveHistory();
+  }, [saveHistory]);
 
   return {
     canvasRef,
