@@ -17,6 +17,7 @@ import { CollaborationManager, generateRoomId, getRoomIdFromHash, setRoomIdInHas
 import type { Comment, CommentReply, RemoteUser } from '@/lib/collaboration'
 import { getUserIdentity } from '@/lib/userIdentity'
 import type { UserIdentity } from '@/lib/userIdentity'
+import { idbSet, idbGet, PAGES_KEY, PROJECT_KEY } from '@/lib/storage'
 import { v4 as uuidv4 } from 'uuid'
 import type { ToolType } from '@/types/design'
 import WelcomeModal from '@/components/WelcomeModal'
@@ -151,78 +152,100 @@ export default function DesignPage() {
     }
     window.addEventListener('resize', handleResize)
 
-      // Load saved project from localStorage (supports multi-page persistence)
+      // Load saved project from IndexedDB (supports multi-page persistence).
+      // Falls back to localStorage for projects saved before the IndexedDB
+      // migration, then migrates the data into IndexedDB so future saves work.
       // Skip loading if we're about to join a collaboration room — the room
-      // will provide all objects via Yjs. Loading stale localStorage data here
-      // would cause old room objects to bleed into the new room.
+      // will provide all objects via Yjs.
+      const restorePages = async (parsed: any) => {
+        if (parsed.pages && Array.isArray(parsed.pages) && parsed.pages.length > 0) {
+          const store = useDesignStore.getState()
+          // Remove default pages not present in saved data
+          for (const p of store.pages) {
+            if (!parsed.pages.find((sp: any) => sp.id === p.id)) {
+              store.removePage(p.id)
+            }
+          }
+          // Add/update saved pages
+          for (const savedPage of parsed.pages) {
+            const existing = store.pages.find(p => p.id === savedPage.id)
+            if (existing) {
+              store.updatePage(savedPage.id, { name: savedPage.name, canvasJSON: savedPage.canvasJSON })
+            } else {
+              store.addPage(savedPage)
+            }
+          }
+          // Remove any remaining default pages that weren't in the saved data
+          const savedIds = new Set(parsed.pages.map((p: any) => p.id))
+          for (const p of useDesignStore.getState().pages) {
+            if (!savedIds.has(p.id)) {
+              if (useDesignStore.getState().pages.length > 1) {
+                store.removePage(p.id)
+              }
+            }
+          }
+          // Set the current page
+          const targetPageId = parsed.currentPageId || parsed.pages[0].id
+          store.setCurrentPageId(targetPageId)
+          // Load the current page's canvas
+          const currentPage = parsed.pages.find((p: any) => p.id === targetPageId)
+          if (currentPage && currentPage.canvasJSON) {
+            await engine.loadFromJSON(currentPage.canvasJSON)
+          }
+          // Restore viewport (zoom/pan) from saved state
+          if (parsed.viewport) {
+            const { zoom: savedZoom, panX, panY } = parsed.viewport
+            if (savedZoom && savedZoom > 0) {
+              engine.canvas.setViewportTransform([savedZoom, 0, 0, savedZoom, panX || 0, panY || 0])
+              engine.canvas.renderAll()
+              setZoom(savedZoom)
+              setViewport({ zoom: savedZoom, panX: panX || 0, panY: panY || 0 })
+            }
+          }
+          refreshLayers()
+          return true
+        }
+        return false
+      }
+
       const loadSaved = async () => {
-        if (getRoomIdFromHash()) return // joining a room — skip localStorage load
+        if (getRoomIdFromHash()) return // joining a room — skip load
         try {
+          // 1. Try IndexedDB first (primary store since it handles large images)
+          const idbData = await idbGet<any>(PAGES_KEY)
+          if (idbData) {
+            const restored = await restorePages(idbData)
+            if (restored) return
+          }
+
+          // 2. Fallback: try localStorage (pre-migration data)
           const savedPages = localStorage.getItem('vigma-pages')
           if (savedPages) {
             const parsed = JSON.parse(savedPages)
-            if (parsed.pages && Array.isArray(parsed.pages) && parsed.pages.length > 0) {
-              // Restore all pages into the store
-              // Clear existing pages and load saved ones
-              const store = useDesignStore.getState()
-              // Remove default pages
-              for (const p of store.pages) {
-                if (!parsed.pages.find((sp: any) => sp.id === p.id)) {
-                  store.removePage(p.id)
-                }
-              }
-              // Add/update saved pages
-              for (const savedPage of parsed.pages) {
-                const existing = store.pages.find(p => p.id === savedPage.id)
-                if (existing) {
-                  store.updatePage(savedPage.id, { name: savedPage.name, canvasJSON: savedPage.canvasJSON })
-                } else {
-                  store.addPage(savedPage)
-                }
-              }
-              // Remove any default pages that weren't in the saved data
-              const savedIds = new Set(parsed.pages.map((p: any) => p.id))
-              for (const p of useDesignStore.getState().pages) {
-                if (!savedIds.has(p.id)) {
-                  // Only remove if there will still be pages left
-                  if (useDesignStore.getState().pages.length > 1) {
-                    store.removePage(p.id)
-                  }
-                }
-              }
-              // Set the current page
-              const targetPageId = parsed.currentPageId || parsed.pages[0].id
-              store.setCurrentPageId(targetPageId)
-              // Load the current page's canvas
-              const currentPage = parsed.pages.find((p: any) => p.id === targetPageId)
-              if (currentPage && currentPage.canvasJSON) {
-                await engine.loadFromJSON(currentPage.canvasJSON)
-              }
-              // Restore viewport (zoom/pan) from saved state
-              if (parsed.viewport) {
-                const { zoom: savedZoom, panX, panY } = parsed.viewport
-                if (savedZoom && savedZoom > 0) {
-                  engine.canvas.setViewportTransform([savedZoom, 0, 0, savedZoom, panX || 0, panY || 0])
-                  engine.canvas.renderAll()
-                  setZoom(savedZoom)
-                  setViewport({ zoom: savedZoom, panX: panX || 0, panY: panY || 0 })
-                }
-              }
-              refreshLayers()
+            const restored = await restorePages(parsed)
+            if (restored) {
+              // Migrate to IndexedDB so future saves don't hit quota
+              idbSet(PAGES_KEY, parsed)
               return
             }
           }
-          // Fallback: try loading legacy single-page format
+
+          // 3. Legacy single-page format (localStorage or IndexedDB)
+          const idbLegacy = await idbGet<string>(PROJECT_KEY)
+          if (idbLegacy) {
+            await engine.loadFromJSON(idbLegacy)
+            refreshLayers()
+            return
+          }
           const saved = localStorage.getItem('vigma-project')
           if (saved) {
             await engine.loadFromJSON(saved)
             refreshLayers()
+            // Migrate
+            idbSet(PROJECT_KEY, saved)
           }
         } catch (e) {
-          // If saved data is corrupt or incompatible, clear it
-          console.warn('Failed to load saved project, clearing localStorage', e)
-          localStorage.removeItem('vigma-pages')
-          localStorage.removeItem('vigma-project')
+          console.warn('Failed to load saved project', e)
         }
       }
       loadSaved()
@@ -448,30 +471,31 @@ export default function DesignPage() {
         if (engineRef.current) {
           isReloadingSoloRef.current = true
           engineRef.current.clearCanvas()
-          // Reload solo project from localStorage
-          const savedPages = localStorage.getItem('vigma-pages')
-          if (savedPages) {
-            try {
-              const parsed = JSON.parse(savedPages)
-              if (parsed.pages?.length > 0) {
-                const currentPage = parsed.pages.find((p: any) => p.id === parsed.currentPageId) || parsed.pages[0]
-                if (currentPage?.canvasJSON) {
-                  engineRef.current.loadFromJSON(currentPage.canvasJSON).then(() => {
-                    isReloadingSoloRef.current = false
-                    refreshLayers()
-                  })
-                } else {
+          // Reload solo project from IndexedDB (or localStorage fallback)
+          idbGet<any>(PAGES_KEY).then(parsed => {
+            if (!parsed) {
+              // Fallback to localStorage for pre-migration data
+              try {
+                const raw = localStorage.getItem('vigma-pages')
+                if (raw) parsed = JSON.parse(raw)
+              } catch (_e) { /* ignore */ }
+            }
+            if (parsed?.pages?.length > 0) {
+              const currentPage = parsed.pages.find((p: any) => p.id === parsed.currentPageId) || parsed.pages[0]
+              if (currentPage?.canvasJSON && engineRef.current) {
+                engineRef.current.loadFromJSON(currentPage.canvasJSON).then(() => {
                   isReloadingSoloRef.current = false
-                }
+                  refreshLayers()
+                })
               } else {
                 isReloadingSoloRef.current = false
               }
-            } catch (e) {
+            } else {
               isReloadingSoloRef.current = false
             }
-          } else {
+          }).catch(() => {
             isReloadingSoloRef.current = false
-          }
+          })
         }
       }
     }
@@ -723,19 +747,24 @@ export default function DesignPage() {
     clearRoomFromHash()
 
     // Clear the canvas of room objects and reload the user's solo project
-    // from localStorage. Without this, room objects stay on canvas and get
-    // auto-saved to localStorage, bleeding into future sessions.
+    // from IndexedDB. Without this, room objects stay on canvas and get
+    // auto-saved, bleeding into future sessions.
     const engine = engineRef.current
     if (engine) {
       isReloadingSoloRef.current = true
       engine.clearCanvas()
-      try {
-        const savedPages = localStorage.getItem('vigma-pages')
-        if (savedPages) {
-          const parsed = JSON.parse(savedPages)
-          const currentPage = parsed.pages?.find((p: any) => p.id === parsed.currentPageId) || parsed.pages?.[0]
-          if (currentPage?.canvasJSON) {
-            engine.loadFromJSON(currentPage.canvasJSON).then(() => {
+      idbGet<any>(PAGES_KEY).then(parsed => {
+        if (!parsed) {
+          // Fallback to localStorage for pre-migration data
+          try {
+            const raw = localStorage.getItem('vigma-pages')
+            if (raw) parsed = JSON.parse(raw)
+          } catch (_e) { /* ignore */ }
+        }
+        if (parsed?.pages?.length > 0) {
+          const currentPage = parsed.pages.find((p: any) => p.id === parsed.currentPageId) || parsed.pages[0]
+          if (currentPage?.canvasJSON && engineRef.current) {
+            engineRef.current.loadFromJSON(currentPage.canvasJSON).then(() => {
               isReloadingSoloRef.current = false
               refreshLayers()
             })
@@ -745,10 +774,10 @@ export default function DesignPage() {
         } else {
           isReloadingSoloRef.current = false
         }
-      } catch (e) {
+      }).catch(() => {
         isReloadingSoloRef.current = false
-        console.warn('Failed to reload solo project after leaving room', e)
-      }
+        console.warn('Failed to reload solo project after leaving room')
+      })
     }
   }, [refreshLayers])
 
@@ -1287,15 +1316,16 @@ export default function DesignPage() {
   }, [zoom]) // re-attach after engine init (zoom changes after engine mounts)
 
   // Helper: persist current canvas state into the Zustand store for the active page,
-  // then write ALL pages to localStorage. Always reads from the store directly to
-  // avoid stale-closure bugs.
-  // IMPORTANT: Skip localStorage save during collaboration — the room's objects
-  // are persisted via Yjs IndexedDB (per-room). Writing them to the global
-  // localStorage would cause stale room data to bleed into other rooms/solo mode.
+  // then write ALL pages to IndexedDB (which has no practical size limit, unlike
+  // localStorage's ~5 MB quota that base64-encoded images easily exceed).
+  // Always reads from the store directly to avoid stale-closure bugs.
+  // IMPORTANT: Skip save during collaboration — the room's objects are persisted
+  // via Yjs IndexedDB (per-room). Writing them to the global store would cause
+  // stale room data to bleed into other rooms/solo mode.
   const persistAllPages = useCallback(() => {
     const engine = engineRef.current
     if (!engine) return
-    // Don't save to localStorage while in a collaboration room
+    // Don't save while in a collaboration room
     if (collabRef.current) return
     // Don't save while transitioning from room back to solo mode
     // (canvas is temporarily empty between clearCanvas and loadFromJSON)
@@ -1309,15 +1339,15 @@ export default function DesignPage() {
       const currentViewport = vpt
         ? { zoom: engine.canvas.getZoom(), panX: vpt[4], panY: vpt[5] }
         : { zoom: 1, panX: 0, panY: 0 }
-      // Write all pages + currentPageId + viewport to localStorage
+      // Build the payload to persist
       const pagesData = {
         pages: useDesignStore.getState().pages,
         currentPageId: store.currentPageId,
         viewport: currentViewport,
       }
-      localStorage.setItem('vigma-pages', JSON.stringify(pagesData))
-      // Legacy single-page key for backward compat
-      localStorage.setItem('vigma-project', engine.exportToJSON())
+      // Write to IndexedDB (async, fire-and-forget for the interval/beforeunload path)
+      idbSet(PAGES_KEY, pagesData)
+      idbSet(PROJECT_KEY, engine.exportToJSON())
     } catch (e) {
       console.warn('Failed to persist pages', e)
     }
