@@ -332,7 +332,6 @@ export default function PropertiesPanel({
   const isText = obj?.type === "textbox" || obj?.type === "i-text";
   const isRect = obj?.type === "rect";
   const [lockAspect, setLockAspect] = useState(false);
-  const [showIndividualCorners, setShowIndividualCorners] = useState(false);
   const { fillColor, setFillColor, strokeColor, setStrokeColor } = useStore();
 
   return (
@@ -520,11 +519,14 @@ export default function PropertiesPanel({
             <SectionHeader title="Fill" />
             <PropertyRow label="Color">
               <ColorInput
-                value={typeof obj.fill === "string" ? obj.fill : "#000000"}
+                value={typeof obj.fill === "string" ? obj.fill : "#4A90D9"}
                 onChange={(v) => onPropertyChange("fill", v)}
                 label="Fill"
               />
             </PropertyRow>
+            {typeof obj.fill !== "string" && (
+              <div style={{ fontSize: 10, color: "#0071e3", padding: "2px 0" }}>Gradient applied</div>
+            )}
             {/* Color presets */}
             <div style={{ display: "flex", flexWrap: "wrap", gap: 4, padding: "6px 0" }}>
               {PRESET_COLORS.map((c) => (
@@ -602,7 +604,7 @@ export default function PropertiesPanel({
             <SectionHeader title="Stroke" />
             <PropertyRow label="Color">
               <ColorInput
-                value={obj.stroke || "#000000"}
+                value={obj.stroke === "transparent" ? "#000000" : (obj.stroke || "#000000")}
                 onChange={(v) => onPropertyChange("stroke", v)}
                 label="Stroke"
               />
@@ -680,67 +682,14 @@ export default function PropertiesPanel({
             {isRect && (
               <>
                 <SectionHeader title="Corners" />
-                {!showIndividualCorners ? (
-                  <>
-                    <PropertyRow label="Radius">
-                      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                        <NumberInput
-                          value={obj.rx || 0}
-                          onChange={(v) => onPropertyChange("cornerRadius", v)}
-                          min={0}
-                          max={200}
-                        />
-                        <button
-                          onClick={() => setShowIndividualCorners(true)}
-                          style={{
-                            fontSize: 9,
-                            color: "#0071e3",
-                            background: "none",
-                            border: "none",
-                            cursor: "pointer",
-                            padding: 0,
-                          }}
-                          title="Individual corners"
-                        >
-                          Each
-                        </button>
-                      </div>
-                    </PropertyRow>
-                  </>
-                ) : (
-                  <>
-                    <div style={{ fontSize: 10, color: "#a1a1a6", paddingBottom: 4 }}>
-                      Individual corners
-                      <button
-                        onClick={() => setShowIndividualCorners(false)}
-                        style={{
-                          fontSize: 9,
-                          color: "#0071e3",
-                          background: "none",
-                          border: "none",
-                          cursor: "pointer",
-                          marginLeft: 8,
-                        }}
-                      >
-                        Uniform
-                      </button>
-                    </div>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
-                      <PropertyRow label="TL">
-                        <NumberInput value={obj.rx || 0} onChange={(v) => onPropertyChange("cornerRadius", v)} min={0} width={48} />
-                      </PropertyRow>
-                      <PropertyRow label="TR">
-                        <NumberInput value={obj.rx || 0} onChange={(v) => onPropertyChange("cornerRadius", v)} min={0} width={48} />
-                      </PropertyRow>
-                      <PropertyRow label="BL">
-                        <NumberInput value={obj.rx || 0} onChange={(v) => onPropertyChange("cornerRadius", v)} min={0} width={48} />
-                      </PropertyRow>
-                      <PropertyRow label="BR">
-                        <NumberInput value={obj.rx || 0} onChange={(v) => onPropertyChange("cornerRadius", v)} min={0} width={48} />
-                      </PropertyRow>
-                    </div>
-                  </>
-                )}
+                <PropertyRow label="Radius">
+                  <NumberInput
+                    value={obj.rx || 0}
+                    onChange={(v) => onPropertyChange("cornerRadius", v)}
+                    min={0}
+                    max={200}
+                  />
+                </PropertyRow>
               </>
             )}
 
