@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { X, Share2, MessageSquare, Send, Sparkles } from 'lucide-react'
+import { X, Share2, MessageSquare, Send } from 'lucide-react'
 
 const WELCOME_DISMISSED_KEY = 'vigma-welcome-dismissed'
 
@@ -23,7 +23,7 @@ function WelcomeModal({ onClose }: WelcomeModalProps) {
           </button>
           <div className="flex items-center gap-3 mb-1">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
-              <Sparkles size={20} className="text-white" />
+              <span className="text-white text-xl font-bold">V</span>
             </div>
             <div>
               <h2 className="text-lg font-semibold text-gray-900">Welcome to Vigma</h2>
