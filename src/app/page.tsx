@@ -439,7 +439,9 @@ export default function DesignPage() {
             try {
               const parsed = JSON.parse(savedPages)
               if (parsed.pages?.[0]?.canvasJSON) {
-                engineRef.current.loadFromJSON(parsed.pages[0].canvasJSON)
+                engineRef.current.loadFromJSON(parsed.pages[0].canvasJSON).then(() => {
+                  refreshLayers()
+                })
               }
             } catch (e) { /* ignore corrupt data */ }
           }
