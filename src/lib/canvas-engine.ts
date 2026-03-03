@@ -735,10 +735,12 @@ export class CanvasEngine {
     const canvasIndex = Math.max(gridCount, Math.min(objects.length - 1, reversedIndex + gridCount));
 
     // Remove and re-insert at target position
+    this.historyPaused = true;
     this.canvas.remove(obj);
     const allObjs = this.canvas.getObjects();
     const insertAt = Math.min(canvasIndex, allObjs.length);
     this.canvas.insertAt(insertAt, obj);
+    this.historyPaused = false;
     this.canvas.requestRenderAll();
     this.saveHistory();
     this.onObjectsChange?.();
@@ -750,11 +752,14 @@ export class CanvasEngine {
     const activeObjects = this.canvas.getActiveObjects();
     if (activeObjects.length === 0) return;
 
+    this.historyPaused = true;
     activeObjects.forEach((obj) => {
       this.canvas!.remove(obj);
     });
+    this.historyPaused = false;
     this.canvas.discardActiveObject();
     this.canvas.requestRenderAll();
+    this.saveHistory();
   }
 
   duplicateSelected() {
