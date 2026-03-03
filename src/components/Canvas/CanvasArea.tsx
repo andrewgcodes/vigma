@@ -75,6 +75,16 @@ export default function CanvasArea() {
       if (saved) {
         const parsed = JSON.parse(saved);
         canvas.loadFromJSON(parsed).then(() => {
+          // Re-mark artboard as non-selectable after JSON restore
+          canvas.getObjects().forEach((obj) => {
+            const record = obj as unknown as Record<string, unknown>;
+            if (record.name === 'artboard' || (obj.width === ARTBOARD_WIDTH && obj.height === ARTBOARD_HEIGHT && obj.fill === '#ffffff' && !record.objectId)) {
+              obj.selectable = false;
+              obj.evented = false;
+              obj.hoverCursor = 'default';
+              record.name = 'artboard';
+            }
+          });
           canvas.requestRenderAll();
           // Small delay to ensure all objects are fully deserialized
           setTimeout(() => {
