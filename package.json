@@ -14,6 +14,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@vercel/analytics": "^1.6.1",
     "fabric": "^6.9.1",
     "jspdf": "^4.2.0",
     "lucide-react": "^0.576.0",

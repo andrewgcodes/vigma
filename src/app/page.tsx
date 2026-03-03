@@ -64,7 +64,7 @@ export default function DesignPage() {
   const [commentInput, setCommentInput] = useState<{ x: number; y: number; text: string } | null>(null)
   const collabRef = useRef<CollaborationManager | null>(null)
   const userRef = useRef<UserIdentity>(getUserIdentity())
-  const syncingFromRemoteRef = useRef(false)
+  const syncingFromRemoteCountRef = useRef(0)
 
   // Panel resize handlers
   const handleResizeStart = useCallback((side: 'left' | 'right', e: React.MouseEvent) => {
@@ -170,7 +170,7 @@ export default function DesignPage() {
   // Sync a single canvas object to Yjs
   const syncObjectToCollab = useCallback((obj: any) => {
     const collab = collabRef.current
-    if (!collab || syncingFromRemoteRef.current) return
+    if (!collab || syncingFromRemoteCountRef.current > 0) return
     if (!obj || !obj.id) return
     try {
       const json = JSON.stringify(obj.toJSON(['id', 'name', 'isFrame', 'lockMovementX', 'lockMovementY', 'lockRotation', 'lockScalingX', 'lockScalingY', 'hasControls', 'selectable', 'evented']))
@@ -184,7 +184,7 @@ export default function DesignPage() {
   const syncAllObjectsToCollab = useCallback(() => {
     const collab = collabRef.current
     const engine = engineRef.current
-    if (!collab || !engine || syncingFromRemoteRef.current) return
+    if (!collab || !engine || syncingFromRemoteCountRef.current > 0) return
     const objects = engine.canvas.getObjects().filter((o: any) => !o.isPreview && !o.isGrid)
     const items = objects.map((obj: any) => ({
       id: obj.id || uuidv4(),
@@ -199,7 +199,7 @@ export default function DesignPage() {
     const collab = collabRef.current
     if (!engine || !collab) return
 
-    syncingFromRemoteRef.current = true
+    syncingFromRemoteCountRef.current++
 
     // Handle deletions
     for (const id of changes.deleted) {
@@ -224,12 +224,10 @@ export default function DesignPage() {
           existing.setCoords()
         } else {
           // Add new object - use fabric.util.enlivenObjects
-          // Keep syncingFromRemoteRef true until async enliven completes
           const fabric = require('fabric')
           const promise = fabric.util.enlivenObjects([objData]).then((objs: any[]) => {
             if (objs[0]) {
               objs[0].id = id
-              syncingFromRemoteRef.current = true
               engine.canvas.add(objs[0])
               engine.canvas.renderAll()
               refreshLayers()
@@ -245,13 +243,15 @@ export default function DesignPage() {
     engine.canvas.renderAll()
     refreshLayers()
 
-    // Only reset the remote flag after all async enlivens complete
+    // Only decrement the counter after all async enlivens complete
     if (enlivenPromises.length > 0) {
-      Promise.all(enlivenPromises).then(() => {
-        syncingFromRemoteRef.current = false
+      Promise.all(enlivenPromises).catch((e) => {
+        console.warn('Failed to enliven remote objects', e)
+      }).finally(() => {
+        syncingFromRemoteCountRef.current--
       })
     } else {
-      syncingFromRemoteRef.current = false
+      syncingFromRemoteCountRef.current--
     }
   }, [])
 
@@ -315,7 +315,7 @@ export default function DesignPage() {
     if (!engine || !isCollaborating) return
 
     const onModified = (opt: any) => {
-      if (syncingFromRemoteRef.current) return
+      if (syncingFromRemoteCountRef.current > 0) return
       const target = opt.target
       if (!target) return
       if ((target as any).type === 'activeselection') {
@@ -330,7 +330,7 @@ export default function DesignPage() {
     }
 
     const onAdded = (opt: any) => {
-      if (syncingFromRemoteRef.current) return
+      if (syncingFromRemoteCountRef.current > 0) return
       const target = opt.target
       if (!target || (target as any).isPreview || (target as any).isGrid) return
       if (!target.id) target.id = uuidv4()
@@ -338,14 +338,14 @@ export default function DesignPage() {
     }
 
     const onRemoved = (opt: any) => {
-      if (syncingFromRemoteRef.current) return
+      if (syncingFromRemoteCountRef.current > 0) return
       const target = opt.target
       if (!target || !target.id || (target as any).isPreview || (target as any).isGrid) return
       collabRef.current?.removeObjectFromYjs(target.id)
     }
 
     const onPathCreated = (opt: any) => {
-      if (syncingFromRemoteRef.current) return
+      if (syncingFromRemoteCountRef.current > 0) return
       const path = opt.path
       if (!path) return
       if (!path.id) path.id = uuidv4()
@@ -1227,7 +1227,7 @@ export default function DesignPage() {
           <div className="flex border-b border-canvas-border">
             <TabButton active={leftPanelTab === 'layers'} onClick={() => setLeftPanelTab('layers')}>Layers</TabButton>
             <TabButton active={leftPanelTab === 'pages'} onClick={() => setLeftPanelTab('pages')}>Pages</TabButton>
-            <TabButton active={leftPanelTab === 'comments'} onClick={() => setLeftPanelTab('comments')}>Comments{comments.length > 0 ? ` (${comments.filter(c => !c.resolved).length})` : ''}</TabButton>
+            <TabButton active={leftPanelTab === 'comments'} onClick={() => setLeftPanelTab('comments')}><span className="flex items-center gap-0.5 whitespace-nowrap">Chat{comments.filter(c => !c.resolved).length > 0 && <span className="text-xxs bg-canvas-accent text-white rounded-full w-4 h-4 flex items-center justify-center">{comments.filter(c => !c.resolved).length}</span>}</span></TabButton>
           </div>
 
           {/* Tab content */}

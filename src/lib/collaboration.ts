@@ -1,7 +1,7 @@
 // Collaboration layer: Yjs + y-webrtc for real-time multiplayer sync
 // Architecture:
 // - Y.Map('objects') keyed by object ID -> serialized Fabric.js object JSON
-// - Y.Array('comments') for comment threads
+// - Y.Map('comments') keyed by comment ID for concurrent-safe mutations
 // - Awareness for live cursors and presence
 // - y-webrtc for P2P sync (no server needed)
 
@@ -42,7 +42,7 @@ export class CollaborationManager {
   provider: WebrtcProvider | null = null
   persistence: IndexeddbPersistence | null = null
   objectsMap: Y.Map<string> // key: object ID, value: serialized JSON
-  commentsArray: Y.Array<any>
+  commentsMap: Y.Map<any> // key: comment ID, value: comment data
   roomId: string
   user: UserIdentity
   private isApplyingRemote = false
@@ -57,7 +57,7 @@ export class CollaborationManager {
     this.user = user
     this.doc = new Y.Doc()
     this.objectsMap = this.doc.getMap('objects')
-    this.commentsArray = this.doc.getArray('comments')
+    this.commentsMap = this.doc.getMap('commentsV2')
   }
 
   connect(options?: {
@@ -131,7 +131,7 @@ export class CollaborationManager {
     })
 
     // Listen for remote comment changes
-    this.commentsArray.observeDeep(() => {
+    this.commentsMap.observeDeep(() => {
       if (this.isSyncingLocal) return
       this.onRemoteCommentsChange?.()
     })
@@ -294,78 +294,65 @@ export class CollaborationManager {
   /** Add a new comment */
   addComment(comment: Comment) {
     this.isSyncingLocal = true
-    this.commentsArray.push([comment])
+    this.commentsMap.set(comment.id, comment)
     this.isSyncingLocal = false
   }
 
   /** Add a reply to a comment */
   addReply(commentId: string, reply: CommentReply) {
-    const comments = this.getComments()
-    const idx = comments.findIndex(c => c.id === commentId)
-    if (idx === -1) return
+    const commentData = this.commentsMap.get(commentId)
+    if (!commentData) return
 
     this.isSyncingLocal = true
-    this.doc.transact(() => {
-      const commentData = this.commentsArray.get(idx)
-      const updatedComment = {
-        ...commentData,
-        replies: [...(commentData.replies || []), reply],
-      }
-      this.commentsArray.delete(idx, 1)
-      this.commentsArray.insert(idx, [updatedComment])
+    this.commentsMap.set(commentId, {
+      ...commentData,
+      replies: [...(commentData.replies || []), reply],
     })
     this.isSyncingLocal = false
   }
 
   /** Delete a comment */
   deleteComment(commentId: string) {
-    const comments = this.getComments()
-    const idx = comments.findIndex(c => c.id === commentId)
-    if (idx === -1) return
-
     this.isSyncingLocal = true
-    this.commentsArray.delete(idx, 1)
+    this.commentsMap.delete(commentId)
     this.isSyncingLocal = false
   }
 
   /** Delete a reply */
   deleteReply(commentId: string, replyId: string) {
-    const comments = this.getComments()
-    const idx = comments.findIndex(c => c.id === commentId)
-    if (idx === -1) return
-
-    const comment = comments[idx]
-    const updatedReplies = comment.replies.filter((r: CommentReply) => r.id !== replyId)
+    const commentData = this.commentsMap.get(commentId)
+    if (!commentData) return
 
     this.isSyncingLocal = true
-    this.doc.transact(() => {
-      const commentData = this.commentsArray.get(idx)
-      const updatedComment = { ...commentData, replies: updatedReplies }
-      this.commentsArray.delete(idx, 1)
-      this.commentsArray.insert(idx, [updatedComment])
+    this.commentsMap.set(commentId, {
+      ...commentData,
+      replies: (commentData.replies || []).filter((r: CommentReply) => r.id !== replyId),
     })
     this.isSyncingLocal = false
   }
 
   /** Toggle resolved state */
   toggleResolve(commentId: string) {
-    const comments = this.getComments()
-    const idx = comments.findIndex(c => c.id === commentId)
-    if (idx === -1) return
+    const commentData = this.commentsMap.get(commentId)
+    if (!commentData) return
 
     this.isSyncingLocal = true
-    this.doc.transact(() => {
-      const commentData = this.commentsArray.get(idx)
-      const updatedComment = { ...commentData, resolved: !commentData.resolved }
-      this.commentsArray.delete(idx, 1)
-      this.commentsArray.insert(idx, [updatedComment])
+    this.commentsMap.set(commentId, {
+      ...commentData,
+      resolved: !commentData.resolved,
     })
     this.isSyncingLocal = false
   }
 
   /** Get all comments */
   getComments(): Comment[] {
-    return this.commentsArray.toArray() as Comment[]
+    const comments: Comment[] = []
+    this.commentsMap.forEach((value) => {
+      comments.push(value as Comment)
+    })
+    // Sort by timestamp so order is consistent
+    comments.sort((a, b) => a.timestamp - b.timestamp)
+    return comments
   }
 
   /** Get connection status */
