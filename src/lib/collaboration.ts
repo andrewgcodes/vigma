@@ -13,7 +13,7 @@ import type { UserIdentity } from './userIdentity'
 
 // Custom signaling server (WebSocket) used by y-webrtc
 // Override with NEXT_PUBLIC_VIGMA_SIGNALING_SERVER at build time (Vercel env var)
-const DEFAULT_SIGNALING_SERVER = 'wss://app-vpmeshmy.fly.dev'
+const DEFAULT_SIGNALING_SERVER = 'wss://vigma-signaling.fly.dev'
 const SIGNALING_SERVER = process.env.NEXT_PUBLIC_VIGMA_SIGNALING_SERVER || DEFAULT_SIGNALING_SERVER
 
 function wsToHttp(url: string): string {

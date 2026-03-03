@@ -307,9 +307,11 @@ export default function DesignPage() {
 
     setRoomId(rid)
     setIsCollaborating(true)
-    setConnectionStatus('connecting')
+    // Don't set 'connecting' here — collab.connect() already fires
+    // onConnectionStatusChange('connected') synchronously, and React 18
+    // batches setState calls so the last one wins.
 
-    // Wait for IndexedDB persistence to finish loading (or timeout after 3s)
+    // Wait for IndexedDB persistence to finish loading (or timeout after 500ms)
     // This ensures we don't push empty state before persisted data loads
     await collab.waitForSync(500)
 
