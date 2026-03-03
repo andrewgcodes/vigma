@@ -238,6 +238,57 @@ export class CanvasEngine {
     this.canvas?.setViewportTransform(this.canvas.viewportTransform!);
   };
 
+  // Eyedropper tool
+  enableEyedropper() {
+    if (!this.canvas) return;
+    this.canvas.defaultCursor = 'crosshair';
+    this.canvas.hoverCursor = 'crosshair';
+    this.canvas.selection = false;
+    this.canvas.forEachObject((obj) => {
+      obj.selectable = false;
+      obj.evented = false;
+    });
+  }
+
+  disableEyedropper() {
+    if (!this.canvas) return;
+    this.canvas.defaultCursor = 'default';
+    this.canvas.hoverCursor = 'move';
+    this.canvas.selection = true;
+    this.canvas.forEachObject((obj) => {
+      if ((obj as fabric.FabricObject & { customType?: string }).customType !== 'grid') {
+        const isLocked = obj.lockMovementX;
+        obj.selectable = !isLocked;
+        obj.evented = !isLocked;
+      }
+    });
+  }
+
+  pickColorAtPoint(e: MouseEvent): string | null {
+    if (!this.canvas) return null;
+    const canvasEl = this.canvas.getElement();
+    const ctx = canvasEl.getContext('2d');
+    if (!ctx) return null;
+
+    // Get the pixel position on the canvas element
+    const rect = canvasEl.getBoundingClientRect();
+    const x = Math.round((e.clientX - rect.left) * (canvasEl.width / rect.width));
+    const y = Math.round((e.clientY - rect.top) * (canvasEl.height / rect.height));
+
+    const pixel = ctx.getImageData(x, y, 1, 1).data;
+    const r = pixel[0];
+    const g = pixel[1];
+    const b = pixel[2];
+    const a = pixel[3];
+
+    // If fully transparent, return null (clicked on empty canvas)
+    if (a === 0) return null;
+
+    // Convert to hex
+    const toHex = (v: number) => v.toString(16).padStart(2, '0');
+    return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+  }
+
   // Drawing tools
   enableDrawing(options: { color: string; width: number }) {
     if (!this.canvas) return;

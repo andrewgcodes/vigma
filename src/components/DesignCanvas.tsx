@@ -85,6 +85,9 @@ export default function DesignCanvas() {
 
     if (!canvasEngine.canvas) return;
 
+    // Also disable eyedropper when switching away
+    canvasEngine.disableEyedropper();
+
     switch (activeTool) {
       case 'hand':
         canvasEngine.enableHandTool();
@@ -95,6 +98,9 @@ export default function DesignCanvas() {
       case 'select':
         canvasEngine.canvas.defaultCursor = 'default';
         canvasEngine.canvas.selection = true;
+        break;
+      case 'eyedropper':
+        canvasEngine.enableEyedropper();
         break;
       default:
         canvasEngine.canvas.defaultCursor = 'crosshair';
@@ -125,6 +131,16 @@ export default function DesignCanvas() {
 
       const tool = useCanvasStore.getState().activeTool;
       const state = useCanvasStore.getState();
+
+      // Eyedropper tool: pick color from canvas pixel
+      if (tool === 'eyedropper') {
+        const color = canvasEngine.pickColorAtPoint(e);
+        if (color) {
+          useCanvasStore.getState().setFillColor(color);
+        }
+        useCanvasStore.getState().setActiveTool('select');
+        return;
+      }
 
       // Shape tools: start drag-to-create
       const dragTools = ['rectangle', 'ellipse', 'triangle', 'line', 'frame'];
