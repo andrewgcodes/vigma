@@ -100,7 +100,7 @@ export default function TopBar({
             <Info size={13} className="text-canvas-text-tertiary hover:text-canvas-text-secondary cursor-pointer transition-colors" />
             {showInfoTooltip && (
               <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-3 py-1.5 bg-gray-900 text-white text-xs rounded-lg whitespace-nowrap shadow-lg z-50">
-                Made with <span className="text-red-400">❤️</span> by <a href="https://devin.ai" target="_blank" rel="noopener noreferrer" className="text-blue-300 hover:text-blue-200 underline">Devin</a>
+                Made with <span className="text-red-400">❤️</span> by Devin
                 <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-gray-900 rotate-45" />
               </div>
             )}
