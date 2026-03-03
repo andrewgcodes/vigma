@@ -1345,9 +1345,19 @@ export default function DesignPage() {
         currentPageId: store.currentPageId,
         viewport: currentViewport,
       }
-      // Write to IndexedDB (async, fire-and-forget for the interval/beforeunload path)
+      // Write to IndexedDB (async, primary store — handles large images)
       idbSet(PAGES_KEY, pagesData)
       idbSet(PROJECT_KEY, engine.exportToJSON())
+      // Also attempt a synchronous localStorage write as a safety net for
+      // beforeunload (IndexedDB transactions are async and may be aborted
+      // during page teardown).  If the payload exceeds the ~5 MB quota the
+      // write silently fails — that's fine because the periodic 1-second
+      // auto-save will have already written to IndexedDB successfully.
+      try {
+        localStorage.setItem('vigma-pages', JSON.stringify(pagesData))
+      } catch (_e) {
+        // QuotaExceededError — expected for large images, ignore
+      }
     } catch (e) {
       console.warn('Failed to persist pages', e)
     }
