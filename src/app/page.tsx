@@ -167,6 +167,9 @@ export default function DesignPage() {
               await engine.loadFromJSON(json)
               return true
             } catch (loadErr) {
+              // SyntaxError means genuinely corrupt JSON — re-throw so the
+              // outer catch can clear localStorage. No point retrying.
+              if (loadErr instanceof SyntaxError) throw loadErr
               console.warn(`loadFromJSON attempt ${attempt + 1} failed:`, loadErr)
               if (attempt < retries) {
                 // Wait briefly for the canvas to finish initializing
