@@ -31,6 +31,10 @@ client_topics: Dict[int, Set[str]] = {}
 # id(ws) -> WebSocket reference
 clients: Dict[int, WebSocket] = {}
 
+# === Yjs document sync relay ===
+# Room name -> set of connected WebSockets for binary Yjs sync
+sync_rooms: Dict[str, Set[WebSocket]] = {}
+
 
 async def send_message(ws: WebSocket, message: dict) -> None:
     """Send a JSON message to a WebSocket client."""
@@ -106,6 +110,47 @@ async def root():
         "topics": len(topics),
         "clients": len(clients),
     }
+
+
+@app.websocket("/sync/{room_name}")
+async def sync_endpoint(ws: WebSocket, room_name: str):
+    """Binary WebSocket relay for Yjs document sync.
+
+    Clients in the same room exchange Yjs sync protocol messages
+    (sync step 1, sync step 2, updates, awareness) through this
+    endpoint.  The server simply forwards every binary frame to
+    all *other* clients in the room — it never inspects the
+    payload.
+    """
+    await ws.accept()
+    if room_name not in sync_rooms:
+        sync_rooms[room_name] = set()
+    sync_rooms[room_name].add(ws)
+
+    try:
+        while True:
+            data = await ws.receive_bytes()
+            # Relay to every other client in the room
+            peers = sync_rooms.get(room_name, set())
+            tasks = []
+            for peer in list(peers):
+                if peer is not ws:
+                    try:
+                        if peer.client_state == WebSocketState.CONNECTED:
+                            tasks.append(peer.send_bytes(data))
+                    except Exception:
+                        pass
+            if tasks:
+                await asyncio.gather(*tasks)
+    except WebSocketDisconnect:
+        pass
+    except Exception:
+        pass
+    finally:
+        if room_name in sync_rooms:
+            sync_rooms[room_name].discard(ws)
+            if len(sync_rooms[room_name]) == 0:
+                del sync_rooms[room_name]
 
 
 @app.websocket("/")

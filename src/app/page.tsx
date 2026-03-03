@@ -525,15 +525,44 @@ export default function DesignPage() {
     // vs creating a new room (where we want to push our local canvas objects).
     const engine = engineRef.current
     if (engine) {
-      const remoteObjectCount = collab.getAllObjects().size
+      let remoteObjectCount = collab.getAllObjects().size
+
+      // If no objects yet (common when joining — WebRTC/WS sync may still be
+      // in progress), wait up to 3 s for the Yjs doc to receive objects from
+      // any sync source (WebSocket relay, WebRTC, or IndexedDB).
+      if (remoteObjectCount === 0) {
+        const hasObjects = await collab.waitForObjects(3000)
+        if (collabRef.current !== collab) return // guard again after await
+        if (hasObjects) {
+          remoteObjectCount = collab.getAllObjects().size
+        }
+      }
 
       if (remoteObjectCount > 0) {
         // JOINING an existing room — clear any stale local objects first,
         // then pull all remote objects onto the canvas.
         // This prevents old localStorage/previous-room data from bleeding in.
+
+        // Mark every canvas object ID in remoteObjectIdsRef BEFORE removing
+        // them so the onRemoved event handler (set up by the collaboration
+        // useEffect) does NOT call removeObjectFromYjs and corrupt the
+        // shared Yjs doc.
         const canvasObjects = engine.canvas.getObjects().filter((o: any) => !o.isPreview && !o.isGrid)
+        const clearingIds: string[] = canvasObjects.map((o: any) => o.id).filter(Boolean)
+        for (const id of clearingIds) {
+          remoteObjectIdsRef.current.set(id, (remoteObjectIdsRef.current.get(id) ?? 0) + 1)
+        }
         for (const obj of canvasObjects) {
           engine.canvas.remove(obj)
+        }
+        // Release the guard
+        for (const id of clearingIds) {
+          const count = (remoteObjectIdsRef.current.get(id) ?? 1) - 1
+          if (count <= 0) {
+            remoteObjectIdsRef.current.delete(id)
+          } else {
+            remoteObjectIdsRef.current.set(id, count)
+          }
         }
         engine.canvas.renderAll()
 

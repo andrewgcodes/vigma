@@ -9,6 +9,14 @@ import * as Y from 'yjs'
 // @ts-ignore - y-webrtc doesn't have types
 import { WebrtcProvider } from 'y-webrtc'
 import { IndexeddbPersistence } from 'y-indexeddb'
+// @ts-ignore - y-protocols doesn't ship full types
+import * as syncProtocol from 'y-protocols/sync'
+// @ts-ignore
+import * as awarenessProtocol from 'y-protocols/awareness'
+// @ts-ignore
+import * as encoding from 'lib0/encoding'
+// @ts-ignore
+import * as decoding from 'lib0/decoding'
 import type { UserIdentity } from './userIdentity'
 
 // Custom signaling server (WebSocket) used by y-webrtc
@@ -57,6 +65,10 @@ export interface RemoteUser {
   selectedIds: string[]
 }
 
+// Yjs sync protocol message types (same as y-websocket)
+const MSG_SYNC = 0
+const MSG_AWARENESS = 1
+
 export class CollaborationManager {
   doc: Y.Doc
   provider: WebrtcProvider | null = null
@@ -73,6 +85,10 @@ export class CollaborationManager {
   private onConnectionStatusChange?: (status: 'connecting' | 'connected' | 'disconnected') => void
   private connected = false
   private _persistenceSynced = false
+  /** Direct WebSocket relay for Yjs sync — reliable fallback when WebRTC fails */
+  private syncWs: WebSocket | null = null
+  private syncWsReconnectTimer: ReturnType<typeof setTimeout> | null = null
+  private _wsSynced = false
 
   constructor(roomId: string, user: UserIdentity) {
     this.roomId = roomId
@@ -137,6 +153,13 @@ export class CollaborationManager {
       this.emitUsersChange()
     })
 
+    // === WebSocket relay sync (reliable fallback) ===
+    // Opens a direct WebSocket to the signaling server's /sync endpoint.
+    // Messages are binary Yjs sync protocol frames relayed to all other
+    // clients in the same room.  This works even when WebRTC or
+    // BroadcastChannel fail (NAT, browser bugs, etc.).
+    this.setupSyncWs()
+
     // Listen for remote object changes
     this.objectsMap.observe((event) => {
       if (this.isSyncingLocal) return
@@ -178,6 +201,16 @@ export class CollaborationManager {
   }
 
   disconnect() {
+    // Tear down WebSocket relay
+    if (this.syncWsReconnectTimer) {
+      clearTimeout(this.syncWsReconnectTimer)
+      this.syncWsReconnectTimer = null
+    }
+    if (this.syncWs) {
+      this.syncWs.onclose = null  // prevent reconnect
+      this.syncWs.close()
+      this.syncWs = null
+    }
     if (this.provider) {
       this.provider.destroy()
       this.provider = null
@@ -188,6 +221,123 @@ export class CollaborationManager {
     }
     this.doc.destroy()
     this.connected = false
+  }
+
+  // === WebSocket relay sync ===
+
+  private setupSyncWs() {
+    if (!this.connected) return
+
+    const wsUrl = SIGNALING_SERVER + `/sync/vigma-${this.roomId}`
+    const ws = new WebSocket(wsUrl)
+    ws.binaryType = 'arraybuffer'
+    this.syncWs = ws
+
+    ws.onopen = () => {
+      // Send Yjs sync step 1 (our state vector → peers reply with data we're missing)
+      const encoder = encoding.createEncoder()
+      encoding.writeVarUint(encoder, MSG_SYNC)
+      syncProtocol.writeSyncStep1(encoder, this.doc)
+      ws.send(encoding.toUint8Array(encoder))
+
+      // Send our full state so new joiners can catch up
+      const encoder2 = encoding.createEncoder()
+      encoding.writeVarUint(encoder2, MSG_SYNC)
+      syncProtocol.writeSyncStep2(encoder2, this.doc)
+      ws.send(encoding.toUint8Array(encoder2))
+
+      // Broadcast our awareness state
+      if (this.provider) {
+        const encoderAwareness = encoding.createEncoder()
+        encoding.writeVarUint(encoderAwareness, MSG_AWARENESS)
+        encoding.writeVarUint8Array(
+          encoderAwareness,
+          awarenessProtocol.encodeAwarenessUpdate(
+            this.provider.awareness,
+            [this.doc.clientID],
+          ),
+        )
+        ws.send(encoding.toUint8Array(encoderAwareness))
+      }
+    }
+
+    ws.onmessage = (event: MessageEvent) => {
+      const data = new Uint8Array(event.data as ArrayBuffer)
+      const decoder = decoding.createDecoder(data)
+      const messageType = decoding.readVarUint(decoder)
+
+      switch (messageType) {
+        case MSG_SYNC: {
+          const encoder = encoding.createEncoder()
+          encoding.writeVarUint(encoder, MSG_SYNC)
+          // readSyncMessage applies updates and may write a reply
+          syncProtocol.readSyncMessage(decoder, encoder, this.doc, this)
+          if (encoding.length(encoder) > 1) {
+            ws.send(encoding.toUint8Array(encoder))
+          }
+          if (!this._wsSynced) {
+            this._wsSynced = true
+          }
+          break
+        }
+        case MSG_AWARENESS: {
+          if (this.provider) {
+            awarenessProtocol.applyAwarenessUpdate(
+              this.provider.awareness,
+              decoding.readVarUint8Array(decoder),
+              this,
+            )
+          }
+          break
+        }
+      }
+    }
+
+    ws.onclose = () => {
+      this.syncWs = null
+      // Reconnect after a short delay (if still connected)
+      if (this.connected) {
+        this.syncWsReconnectTimer = setTimeout(() => this.setupSyncWs(), 2000)
+      }
+    }
+
+    ws.onerror = () => {
+      // onclose will fire after onerror, triggering reconnect
+    }
+
+    // Forward local doc updates to the relay
+    this.doc.on('update', (update: Uint8Array, origin: unknown) => {
+      // Don't echo back updates that originated from this WebSocket relay
+      if (origin === this) return
+      if (this.syncWs && this.syncWs.readyState === WebSocket.OPEN) {
+        const encoder = encoding.createEncoder()
+        encoding.writeVarUint(encoder, MSG_SYNC)
+        syncProtocol.writeUpdate(encoder, update)
+        this.syncWs.send(encoding.toUint8Array(encoder))
+      }
+    })
+
+    // Forward awareness changes to the relay
+    if (this.provider) {
+      this.provider.awareness.on(
+        'update',
+        ({ added, updated, removed }: { added: number[]; updated: number[]; removed: number[] }) => {
+          const changedClients = added.concat(updated).concat(removed)
+          if (this.syncWs && this.syncWs.readyState === WebSocket.OPEN) {
+            const encoder = encoding.createEncoder()
+            encoding.writeVarUint(encoder, MSG_AWARENESS)
+            encoding.writeVarUint8Array(
+              encoder,
+              awarenessProtocol.encodeAwarenessUpdate(
+                this.provider!.awareness,
+                changedClients,
+              ),
+            )
+            this.syncWs.send(encoding.toUint8Array(encoder))
+          }
+        },
+      )
+    }
   }
 
   // === CANVAS OBJECT SYNC ===
@@ -467,6 +617,32 @@ export class CollaborationManager {
         clearTimeout(timeout)
         resolve()
       }
+    })
+  }
+
+  /** Wait for objects to appear in the Yjs doc (from any sync source).
+   *  Resolves as soon as objectsMap has entries, or after timeoutMs. */
+  waitForObjects(timeoutMs = 3000): Promise<boolean> {
+    return new Promise((resolve) => {
+      if (this.objectsMap.size > 0) {
+        resolve(true)
+        return
+      }
+      const timeout = setTimeout(() => {
+        cleanup()
+        resolve(this.objectsMap.size > 0)
+      }, timeoutMs)
+      const handler = () => {
+        if (this.objectsMap.size > 0) {
+          cleanup()
+          resolve(true)
+        }
+      }
+      const cleanup = () => {
+        clearTimeout(timeout)
+        this.objectsMap.unobserve(handler)
+      }
+      this.objectsMap.observe(handler)
     })
   }
 }
