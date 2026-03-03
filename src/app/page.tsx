@@ -211,6 +211,7 @@ export default function DesignPage() {
 
     // Handle additions and updates
     const toProcess = [...changes.added, ...changes.updated]
+    const enlivenPromises: Promise<void>[] = []
     for (const id of toProcess) {
       const jsonStr = collab.getObject(id)
       if (!jsonStr) continue
@@ -223,15 +224,18 @@ export default function DesignPage() {
           existing.setCoords()
         } else {
           // Add new object - use fabric.util.enlivenObjects
+          // Keep syncingFromRemoteRef true until async enliven completes
           const fabric = require('fabric')
-          fabric.util.enlivenObjects([objData]).then((objs: any[]) => {
+          const promise = fabric.util.enlivenObjects([objData]).then((objs: any[]) => {
             if (objs[0]) {
               objs[0].id = id
+              syncingFromRemoteRef.current = true
               engine.canvas.add(objs[0])
               engine.canvas.renderAll()
               refreshLayers()
             }
           })
+          enlivenPromises.push(promise)
         }
       } catch (e) {
         console.warn('Failed to process remote object', id, e)
@@ -240,7 +244,15 @@ export default function DesignPage() {
 
     engine.canvas.renderAll()
     refreshLayers()
-    syncingFromRemoteRef.current = false
+
+    // Only reset the remote flag after all async enlivens complete
+    if (enlivenPromises.length > 0) {
+      Promise.all(enlivenPromises).then(() => {
+        syncingFromRemoteRef.current = false
+      })
+    } else {
+      syncingFromRemoteRef.current = false
+    }
   }, [])
 
   // Initialize collaboration from URL hash
@@ -1215,7 +1227,7 @@ export default function DesignPage() {
           <div className="flex border-b border-canvas-border">
             <TabButton active={leftPanelTab === 'layers'} onClick={() => setLeftPanelTab('layers')}>Layers</TabButton>
             <TabButton active={leftPanelTab === 'pages'} onClick={() => setLeftPanelTab('pages')}>Pages</TabButton>
-            <TabButton active={(leftPanelTab as string) === 'comments'} onClick={() => setLeftPanelTab('comments' as any)}>Comments{comments.length > 0 ? ` (${comments.filter(c => !c.resolved).length})` : ''}</TabButton>
+            <TabButton active={leftPanelTab === 'comments'} onClick={() => setLeftPanelTab('comments')}>Comments{comments.length > 0 ? ` (${comments.filter(c => !c.resolved).length})` : ''}</TabButton>
           </div>
 
           {/* Tab content */}
@@ -1264,7 +1276,7 @@ export default function DesignPage() {
                 onRenamePage={handleRenamePage}
               />
             )}
-            {(leftPanelTab as string) === 'comments' && (
+            {leftPanelTab === 'comments' && (
               <CommentsPanel
                 comments={comments}
                 user={userRef.current}
