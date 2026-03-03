@@ -198,6 +198,16 @@ export default function DesignPage() {
               if (currentPage && currentPage.canvasJSON) {
                 await engine.loadFromJSON(currentPage.canvasJSON)
               }
+              // Restore viewport (zoom/pan) from saved state
+              if (parsed.viewport) {
+                const { zoom: savedZoom, panX, panY } = parsed.viewport
+                if (savedZoom && savedZoom > 0) {
+                  engine.canvas.setViewportTransform([savedZoom, 0, 0, savedZoom, panX || 0, panY || 0])
+                  engine.canvas.renderAll()
+                  setZoom(savedZoom)
+                  setViewport({ zoom: savedZoom, panX: panX || 0, panY: panY || 0 })
+                }
+              }
               refreshLayers()
               return
             }
@@ -1175,6 +1185,8 @@ export default function DesignPage() {
         engine.deleteSelected()
         refreshLayers()
         refreshObjectProps()
+        // Force immediate save so deletions persist even if user refreshes right away
+        persistAllPages()
         e.preventDefault()
       }
 
@@ -1256,11 +1268,7 @@ export default function DesignPage() {
     if (!engine) return
 
     const markUnsaved = () => {
-      setSaveStatus(prev => {
-        // Don't overwrite 'just-saved' flash (it auto-clears via timeout)
-        if (prev === 'just-saved') return prev
-        return 'unsaved'
-      })
+      setSaveStatus('unsaved')
     }
 
     engine.canvas.on('object:modified', markUnsaved)
@@ -1296,10 +1304,16 @@ export default function DesignPage() {
       const store = useDesignStore.getState()
       // Snapshot the live canvas into the current page's canvasJSON
       store.updatePage(store.currentPageId, { canvasJSON: engine.exportToJSON() })
-      // Write all pages + currentPageId to localStorage
+      // Capture current viewport state for persistence
+      const vpt = engine.canvas.viewportTransform
+      const currentViewport = vpt
+        ? { zoom: engine.canvas.getZoom(), panX: vpt[4], panY: vpt[5] }
+        : { zoom: 1, panX: 0, panY: 0 }
+      // Write all pages + currentPageId + viewport to localStorage
       const pagesData = {
         pages: useDesignStore.getState().pages,
         currentPageId: store.currentPageId,
+        viewport: currentViewport,
       }
       localStorage.setItem('vigma-pages', JSON.stringify(pagesData))
       // Legacy single-page key for backward compat
@@ -1322,18 +1336,17 @@ export default function DesignPage() {
   }, [persistAllPages])
 
   // Auto-save every 1 second (aggressive save to prevent data loss)
+  // IMPORTANT: persistAllPages() is called directly — NOT inside a React state
+  // updater — so that it always runs synchronously regardless of React batching.
   useEffect(() => {
     const interval = setInterval(() => {
+      persistAllPages()
       setSaveStatus(prev => {
-        // Only show the saving→saved transition if there are unsaved changes
         if (prev === 'unsaved') {
-          persistAllPages()
           // Brief 'saving' flash, then 'saved'
           setTimeout(() => setSaveStatus('saved'), 400)
           return 'saving'
         }
-        // Still persist silently even when already 'saved' (safety net)
-        persistAllPages()
         return prev
       })
     }, 1000)
@@ -1866,7 +1879,7 @@ export default function DesignPage() {
             onCornerRadiusChange={handleCornerRadiusChange}
             onShadowChange={handleShadowChange}
             onShadowRemove={handleShadowRemove}
-            onDelete={() => { engineRef.current?.deleteSelected(); refreshLayers(); refreshObjectProps() }}
+            onDelete={() => { engineRef.current?.deleteSelected(); refreshLayers(); refreshObjectProps(); persistAllPages() }}
             onDuplicate={() => { engineRef.current?.duplicate().then(() => refreshLayers()) }}
             onFlipH={() => { engineRef.current?.flipHorizontal(); refreshObjectProps() }}
             onFlipV={() => { engineRef.current?.flipVertical(); refreshObjectProps() }}
@@ -2027,7 +2040,7 @@ export default function DesignPage() {
         onCut={() => { engineRef.current?.cut().then(() => refreshLayers()) }}
         onPaste={() => { engineRef.current?.paste().then(() => refreshLayers()) }}
         onDuplicate={() => { engineRef.current?.duplicate().then(() => refreshLayers()) }}
-        onDelete={() => { engineRef.current?.deleteSelected(); refreshLayers(); refreshObjectProps() }}
+        onDelete={() => { engineRef.current?.deleteSelected(); refreshLayers(); refreshObjectProps(); persistAllPages() }}
         onSelectAll={() => engineRef.current?.selectAll()}
         onBringToFront={() => { engineRef.current?.bringToFront(); refreshLayers() }}
         onSendToBack={() => { engineRef.current?.sendToBack(); refreshLayers() }}
