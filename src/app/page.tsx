@@ -253,28 +253,31 @@ export default function Home() {
     const objects = sel.getObjects();
     if (objects.length < 2) return;
 
+    // getBoundingRect() returns screen-space coordinates affected by zoom/pan.
+    // Divide deltas by zoom to convert to logical-space before applying to obj.left/top.
+    const currentZoom = canvas.getZoom();
     const bounds = sel.getBoundingRect();
 
     objects.forEach((obj) => {
       const objBounds = obj.getBoundingRect();
       switch (alignment) {
         case "left":
-          obj.set("left", (obj.left || 0) + (bounds.left - objBounds.left));
+          obj.set("left", (obj.left || 0) + (bounds.left - objBounds.left) / currentZoom);
           break;
         case "right":
-          obj.set("left", (obj.left || 0) + (bounds.left + bounds.width - objBounds.left - objBounds.width));
+          obj.set("left", (obj.left || 0) + (bounds.left + bounds.width - objBounds.left - objBounds.width) / currentZoom);
           break;
         case "centerH":
-          obj.set("left", (obj.left || 0) + (bounds.left + bounds.width / 2 - objBounds.left - objBounds.width / 2));
+          obj.set("left", (obj.left || 0) + (bounds.left + bounds.width / 2 - objBounds.left - objBounds.width / 2) / currentZoom);
           break;
         case "top":
-          obj.set("top", (obj.top || 0) + (bounds.top - objBounds.top));
+          obj.set("top", (obj.top || 0) + (bounds.top - objBounds.top) / currentZoom);
           break;
         case "bottom":
-          obj.set("top", (obj.top || 0) + (bounds.top + bounds.height - objBounds.top - objBounds.height));
+          obj.set("top", (obj.top || 0) + (bounds.top + bounds.height - objBounds.top - objBounds.height) / currentZoom);
           break;
         case "centerV":
-          obj.set("top", (obj.top || 0) + (bounds.top + bounds.height / 2 - objBounds.top - objBounds.height / 2));
+          obj.set("top", (obj.top || 0) + (bounds.top + bounds.height / 2 - objBounds.top - objBounds.height / 2) / currentZoom);
           break;
       }
       obj.setCoords();
