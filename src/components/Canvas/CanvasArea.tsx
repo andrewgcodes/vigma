@@ -244,7 +244,7 @@ export default function CanvasArea() {
           top: pointer.y,
           fontFamily: 'Inter',
           fontSize: 24,
-          fill: '#ffffff',
+          fill: '#333333',
           width: 200,
           editable: true,
         });
