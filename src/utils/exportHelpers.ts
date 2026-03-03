@@ -1,11 +1,19 @@
 import { Canvas } from 'fabric';
 
 export function exportToPNG(canvas: Canvas, multiplier: number, includeBackground: boolean) {
+  const origBg = canvas.backgroundColor;
+  if (!includeBackground) {
+    canvas.backgroundColor = 'transparent';
+    canvas.renderAll();
+  }
   const dataURL = canvas.toDataURL({
     format: 'png',
     multiplier,
-    ...(!includeBackground ? {} : {}),
   });
+  if (!includeBackground) {
+    canvas.backgroundColor = origBg;
+    canvas.renderAll();
+  }
   const link = document.createElement('a');
   link.download = 'vigma-design.png';
   link.href = dataURL;

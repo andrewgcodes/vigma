@@ -328,7 +328,7 @@ const CanvasArea = forwardRef<CanvasAreaHandle, CanvasAreaProps>(({ onLayersChan
           top: pointer.y,
           fontSize: 24,
           fontFamily: 'Inter',
-          fill: '#ffffff',
+          fill: '#333333',
           width: 200,
           editable: true,
         });
@@ -576,9 +576,18 @@ const CanvasArea = forwardRef<CanvasAreaHandle, CanvasAreaProps>(({ onLayersChan
   }, [state.activeTool]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Handle undo/redo
+  const lastAppliedIndexRef = useRef<number>(-1);
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || state.history.length === 0 || state.historyIndex < 0) return;
+    // Only apply if historyIndex actually changed due to undo/redo
+    if (lastAppliedIndexRef.current === state.historyIndex) return;
+    // Skip if this is a new history push (index is at the end)
+    if (state.historyIndex === state.history.length - 1 && lastAppliedIndexRef.current === state.historyIndex - 1) {
+      lastAppliedIndexRef.current = state.historyIndex;
+      return;
+    }
+    lastAppliedIndexRef.current = state.historyIndex;
     const currentState = state.history[state.historyIndex];
     if (!currentState) return;
 
@@ -596,7 +605,7 @@ const CanvasArea = forwardRef<CanvasAreaHandle, CanvasAreaProps>(({ onLayersChan
     } catch {
       historyPauseRef.current = false;
     }
-  }, [state.historyIndex]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [state.historyIndex, state.history.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -869,12 +878,13 @@ const CanvasArea = forwardRef<CanvasAreaHandle, CanvasAreaProps>(({ onLayersChan
       }
     };
 
-    canvas.on('mouse:down', (opt: { e: MouseEvent | TouchEvent }) => {
+    const contextMenuHandler = (opt: { e: MouseEvent | TouchEvent }) => {
       const e = opt.e as MouseEvent;
       if (e.button === 2) {
         handleContextMenu(opt);
       }
-    });
+    };
+    canvas.on('mouse:down', contextMenuHandler as (opt: unknown) => void);
 
     // Disable browser context menu on canvas
     const canvasEl = canvas.getSelectionElement();
@@ -882,6 +892,7 @@ const CanvasArea = forwardRef<CanvasAreaHandle, CanvasAreaProps>(({ onLayersChan
     canvasEl.addEventListener('contextmenu', preventContext);
 
     return () => {
+      canvas.off('mouse:down', contextMenuHandler as (opt: unknown) => void);
       canvasEl.removeEventListener('contextmenu', preventContext);
     };
   }, [state.clipboard]); // eslint-disable-line react-hooks/exhaustive-deps
