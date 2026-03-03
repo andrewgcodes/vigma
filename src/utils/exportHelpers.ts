@@ -20,8 +20,17 @@ export function exportToPNG(canvas: Canvas, multiplier: number, includeBackgroun
   link.click();
 }
 
-export function exportToSVG(canvas: Canvas) {
+export function exportToSVG(canvas: Canvas, includeBackground: boolean) {
+  const origBg = canvas.backgroundColor;
+  if (!includeBackground) {
+    canvas.backgroundColor = 'transparent';
+    canvas.renderAll();
+  }
   const svg = canvas.toSVG();
+  if (!includeBackground) {
+    canvas.backgroundColor = origBg;
+    canvas.renderAll();
+  }
   const blob = new Blob([svg], { type: 'image/svg+xml' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');

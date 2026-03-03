@@ -312,6 +312,9 @@ const CanvasArea = forwardRef<CanvasAreaHandle, CanvasAreaProps>(({ onLayersChan
       const tool = state.activeTool;
       const pointer = canvas.getScenePoint(e);
 
+      // Ignore right-clicks for drawing/tool actions
+      if (e.button === 2) return;
+
       // Handle panning
       if (tool === 'hand' || spaceHeldRef.current) {
         isPanningRef.current = true;
@@ -594,10 +597,9 @@ const CanvasArea = forwardRef<CanvasAreaHandle, CanvasAreaProps>(({ onLayersChan
       const parsed = JSON.parse(targetState);
       canvas.loadFromJSON(parsed).then(() => {
         canvas.requestRenderAll();
-        // Keep historyPause true briefly to prevent object:modified from firing
         setTimeout(() => {
           historyPauseRef.current = false;
-        }, 50);
+        }, 100);
         notifyLayersChanged();
         notifySelectionChanged();
       }).catch(() => {
@@ -654,16 +656,37 @@ const CanvasArea = forwardRef<CanvasAreaHandle, CanvasAreaProps>(({ onLayersChan
         }
       }
 
-      // Delete
-      if (e.key === 'Delete' || e.key === 'Backspace') {
-        e.preventDefault();
-        deleteSelectedObjects();
-        return;
-      }
-
       // Ctrl shortcuts
       if (ctrl) {
-        if (e.key === 'z' && !e.shiftKey) {
+        // Ctrl+Shift+Delete: clear canvas (must be before bare Delete check)
+        if ((e.key === 'Delete' || e.key === 'Backspace') && e.shiftKey) {
+          e.preventDefault();
+          if (confirm('Are you sure you want to clear the canvas? This cannot be undone.')) {
+            canvas.clear();
+            canvas.backgroundColor = '#1a1a1a';
+            const artboard = new Rect({
+              left: (canvas.width! - ARTBOARD_WIDTH) / 2,
+              top: (canvas.height! - ARTBOARD_HEIGHT) / 2,
+              width: ARTBOARD_WIDTH,
+              height: ARTBOARD_HEIGHT,
+              fill: '#ffffff',
+              selectable: false,
+              evented: false,
+            });
+            (artboard as FabricObject & { name?: string }).name = 'artboard';
+            artboard.customId = 'artboard';
+            artboard.customType = 'artboard';
+            canvas.add(artboard);
+            canvas.requestRenderAll();
+            localStorage.removeItem('vigma-autosave');
+            saveHistory();
+            notifyLayersChanged();
+            notifySelectionChanged();
+            showToast('Canvas cleared');
+          }
+          return;
+        }
+        if (e.key.toLowerCase() === 'z' && !e.shiftKey) {
           e.preventDefault();
           const idx = historyIndexRef.current;
           if (idx > 0) {
@@ -672,7 +695,7 @@ const CanvasArea = forwardRef<CanvasAreaHandle, CanvasAreaProps>(({ onLayersChan
           }
           return;
         }
-        if ((e.key === 'z' && e.shiftKey) || e.key === 'y') {
+        if ((e.key.toLowerCase() === 'z' && e.shiftKey) || e.key === 'y') {
           e.preventDefault();
           const idx = historyIndexRef.current;
           const hist = historyRef.current;
@@ -702,12 +725,12 @@ const CanvasArea = forwardRef<CanvasAreaHandle, CanvasAreaProps>(({ onLayersChan
           selectAllObjects();
           return;
         }
-        if (e.key === 'g' && !e.shiftKey) {
+        if (e.key.toLowerCase() === 'g' && !e.shiftKey) {
           e.preventDefault();
           groupSelectedObjects();
           return;
         }
-        if (e.key === 'g' && e.shiftKey) {
+        if (e.key.toLowerCase() === 'g' && e.shiftKey) {
           e.preventDefault();
           ungroupSelectedObjects();
           return;
@@ -717,7 +740,7 @@ const CanvasArea = forwardRef<CanvasAreaHandle, CanvasAreaProps>(({ onLayersChan
           dispatch({ type: 'TOGGLE_GRID' });
           return;
         }
-        if (e.key === 'e' && e.shiftKey) {
+        if (e.key.toLowerCase() === 'e' && e.shiftKey) {
           e.preventDefault();
           dispatch({ type: 'SHOW_EXPORT_MODAL' });
           return;
@@ -752,34 +775,13 @@ const CanvasArea = forwardRef<CanvasAreaHandle, CanvasAreaProps>(({ onLayersChan
           zoomToLevel(Math.max(0.1, canvas.getZoom() - 0.1));
           return;
         }
-        if (e.key === 'Delete' && e.shiftKey) {
-          e.preventDefault();
-          if (confirm('Are you sure you want to clear the canvas? This cannot be undone.')) {
-            canvas.clear();
-            canvas.backgroundColor = '#1a1a1a';
-            // Re-add artboard
-            const artboard = new Rect({
-              left: (canvas.width! - ARTBOARD_WIDTH) / 2,
-              top: (canvas.height! - ARTBOARD_HEIGHT) / 2,
-              width: ARTBOARD_WIDTH,
-              height: ARTBOARD_HEIGHT,
-              fill: '#ffffff',
-              selectable: false,
-              evented: false,
-            });
-            (artboard as FabricObject & { name?: string }).name = 'artboard';
-            artboard.customId = 'artboard';
-            artboard.customType = 'artboard';
-            canvas.add(artboard);
-            canvas.requestRenderAll();
-            localStorage.removeItem('vigma-autosave');
-            saveHistory();
-            notifyLayersChanged();
-            notifySelectionChanged();
-            showToast('Canvas cleared');
-          }
-          return;
-        }
+      }
+
+      // Delete (after ctrl block so Ctrl+Shift+Delete is handled first)
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault();
+        deleteSelectedObjects();
+        return;
       }
 
       // Z-order shortcuts without ctrl

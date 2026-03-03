@@ -22,7 +22,7 @@ export default function ExportModal({ canvas }: ExportModalProps) {
       if (format === 'png') {
         exportToPNG(canvas, quality, includeBackground);
       } else if (format === 'svg') {
-        exportToSVG(canvas);
+        exportToSVG(canvas, includeBackground);
       } else {
         exportToJSON(canvas);
       }
