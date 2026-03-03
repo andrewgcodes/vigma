@@ -1274,18 +1274,6 @@ export default function DesignPage() {
     if (dataURL) downloadDataURL(dataURL, `selection.${format}`)
   }, [])
 
-  const handleCropImage = useCallback((crop: { left: number, top: number, width: number, height: number }) => {
-    engineRef.current?.cropImage(crop)
-    refreshObjectProps()
-    syncActiveToCollab()
-  }, [syncActiveToCollab])
-
-  const handleResetCrop = useCallback(() => {
-    engineRef.current?.resetCrop()
-    refreshObjectProps()
-    syncActiveToCollab()
-  }, [syncActiveToCollab])
-
   const handleFlatten = useCallback(() => {
     engineRef.current?.flattenSelected().then(() => {
       refreshLayers()
