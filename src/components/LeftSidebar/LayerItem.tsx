@@ -6,7 +6,7 @@ import type { LayerInfo } from '../../types';
 
 const iconMap: Record<string, React.ReactNode> = {
   rect: <Square size={12} />,
-  circle: <Circle size={12} />,
+  ellipse: <Circle size={12} />,
   triangle: <Triangle size={12} />,
   line: <Minus size={12} />,
   path: <Pencil size={12} />,

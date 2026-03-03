@@ -16,7 +16,7 @@ export const PRESET_COLORS = [
 export function getDefaultName(type: string, count: number): string {
   const typeMap: Record<string, string> = {
     rect: 'Rectangle',
-    circle: 'Ellipse',
+    ellipse: 'Ellipse',
     triangle: 'Triangle',
     line: 'Line',
     path: 'Path',
@@ -31,7 +31,7 @@ export function getDefaultName(type: string, count: number): string {
 export function getLayerIcon(type: string): string {
   const iconMap: Record<string, string> = {
     rect: 'Square',
-    circle: 'Circle',
+    ellipse: 'Circle',
     triangle: 'Triangle',
     line: 'Minus',
     path: 'Pencil',

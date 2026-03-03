@@ -99,10 +99,12 @@ export default function CanvasArea() {
       localStorage.removeItem('vigma-autosave');
     }
 
-    // Save initial history
-    setTimeout(() => {
-      saveHistory();
-    }, 100);
+    // Save initial history only if no saved data to restore
+    if (!localStorage.getItem('vigma-autosave')) {
+      setTimeout(() => {
+        saveHistory();
+      }, 100);
+    }
 
     dispatch({ type: 'SET_CANVAS_READY' });
 
