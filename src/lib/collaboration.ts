@@ -110,6 +110,22 @@ export class CollaborationManager {
       signaling: [
         SIGNALING_SERVER,
       ],
+      // Explicit ICE server configuration for reliable WebRTC peer connections.
+      // simple-peer defaults to only Google + Twilio STUN which can be unreliable.
+      // Multiple STUN servers improve connectivity across networks and firewalls.
+      peerOpts: {
+        config: {
+          iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' },
+            { urls: 'stun:stun2.l.google.com:19302' },
+            { urls: 'stun:stun3.l.google.com:19302' },
+            { urls: 'stun:stun4.l.google.com:19302' },
+            { urls: 'stun:global.stun.twilio.com:3478' },
+            { urls: 'stun:stun.cloudflare.com:3478' },
+          ],
+        },
+      },
     })
 
     // Mark as connected once the provider is set up and signaling starts
@@ -450,23 +466,48 @@ export class CollaborationManager {
     return this.provider.awareness.getStates().size - 1 // exclude self
   }
 
-  /** Wait for either persistence sync or timeout */
-  waitForSync(timeoutMs = 500): Promise<void> {
+  /** Wait for persistence sync, peer connection, or timeout.
+   *  Resolves when:
+   *  - IndexedDB persistence finishes loading, OR
+   *  - A WebRTC/BC peer connects and Y.Doc receives data, OR
+   *  - The timeout expires (whichever comes first)
+   */
+  waitForSync(timeoutMs = 2000): Promise<void> {
     return new Promise((resolve) => {
-      if (this._persistenceSynced) {
-        resolve()
-        return
-      }
-      const timeout = setTimeout(() => resolve(), timeoutMs)
-      if (this.persistence) {
-        this.persistence.on('synced', () => {
-          clearTimeout(timeout)
-          resolve()
-        })
-      } else {
+      let resolved = false
+      const done = () => {
+        if (resolved) return
+        resolved = true
         clearTimeout(timeout)
         resolve()
       }
+
+      // If persistence is already synced AND we already have objects, resolve immediately
+      if (this._persistenceSynced && this.objectsMap.size > 0) {
+        resolve()
+        return
+      }
+
+      const timeout = setTimeout(done, timeoutMs)
+
+      // Resolve when IndexedDB finishes loading (if it has data)
+      if (this.persistence) {
+        this.persistence.on('synced', () => {
+          // Only resolve early if persistence actually had data
+          if (this.objectsMap.size > 0) {
+            done()
+          }
+        })
+      }
+
+      // Resolve when Y.Doc receives remote data (from WebRTC or BroadcastChannel)
+      const observer = () => {
+        if (this.objectsMap.size > 0) {
+          this.objectsMap.unobserve(observer)
+          done()
+        }
+      }
+      this.objectsMap.observe(observer)
     })
   }
 }

@@ -554,9 +554,11 @@ export default function DesignPage() {
     // onConnectionStatusChange('connected') synchronously, and React 18
     // batches setState calls so the last one wins.
 
-    // Wait for IndexedDB persistence to finish loading (or timeout after 500ms)
-    // This ensures we don't push empty state before persisted data loads
-    await collab.waitForSync(500)
+    // Wait for persistence sync or peer data arrival (timeout after 2s).
+    // The longer timeout gives WebRTC peers time to connect and sync Y.Doc
+    // data — the old 500ms was too short for signaling + ICE + sync to complete,
+    // causing joiners to see an empty canvas.
+    await collab.waitForSync(2000)
 
     // Guard: if user left the room or component unmounted during sync, bail out
     if (collabRef.current !== collab) return
