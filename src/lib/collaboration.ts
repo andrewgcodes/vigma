@@ -495,14 +495,14 @@ export class CollaborationManager {
 
       const timeout = setTimeout(() => { cleanup(); done() }, timeoutMs)
 
-      // Resolve when IndexedDB finishes loading (if it has data)
+      // Resolve when IndexedDB finishes loading.
+      // For new rooms (Share flow), persistence syncs instantly with no data,
+      // so we resolve immediately — the caller will push local objects to Yjs.
+      // For existing rooms, persistence may have cached data from a previous session.
       if (this.persistence) {
         this.persistence.on('synced', () => {
-          // Only resolve early if persistence actually had data
-          if (this.objectsMap.size > 0) {
-            cleanup()
-            done()
-          }
+          cleanup()
+          done()
         })
       }
 
