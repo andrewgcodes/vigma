@@ -194,13 +194,12 @@ export default function ContextMenu({ fabricRef }: ContextMenuProps) {
     if (!active || active.type !== 'group') return;
     const group = active as fabric.Group;
     const items = group.getObjects();
-    const groupLeft = group.left ?? 0;
-    const groupTop = group.top ?? 0;
     const groupScaleX = group.scaleX ?? 1;
     const groupScaleY = group.scaleY ?? 1;
     const groupAngle = (group.angle ?? 0) * (Math.PI / 180);
-    const groupCenterX = groupLeft + ((group.width ?? 0) * groupScaleX) / 2;
-    const groupCenterY = groupTop + ((group.height ?? 0) * groupScaleY) / 2;
+    const center = group.getCenterPoint();
+    const groupCenterX = center.x;
+    const groupCenterY = center.y;
     canvas.remove(group);
     items.forEach((item) => {
       const offsetX = (item.left ?? 0) * groupScaleX;

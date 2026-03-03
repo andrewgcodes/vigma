@@ -781,8 +781,10 @@ function showSmartGuides(canvas: fabric.Canvas, target: fabric.FabricObject) {
   // Apply the best snap per axis and create guide lines
   const guideLines: fabric.Line[] = [];
 
+  const zoom = canvas.getZoom();
+
   if (bestSnapX) {
-    target.set('left', (target.left ?? 0) + bestSnapX.delta);
+    target.set('left', (target.left ?? 0) + bestSnapX.delta / zoom);
     const guide = new fabric.Line([bestSnapX.guidePos, 0, bestSnapX.guidePos, canvasHeight], {
       stroke: '#FF69B4', strokeWidth: bestSnapX.isCenter ? 1 : 0.5,
       strokeDashArray: bestSnapX.isCenter ? [4, 4] : [2, 2],
@@ -793,7 +795,7 @@ function showSmartGuides(canvas: fabric.Canvas, target: fabric.FabricObject) {
   }
 
   if (bestSnapY) {
-    target.set('top', (target.top ?? 0) + bestSnapY.delta);
+    target.set('top', (target.top ?? 0) + bestSnapY.delta / zoom);
     const guide = new fabric.Line([0, bestSnapY.guidePos, canvasWidth, bestSnapY.guidePos], {
       stroke: '#FF69B4', strokeWidth: bestSnapY.isCenter ? 1 : 0.5,
       strokeDashArray: bestSnapY.isCenter ? [4, 4] : [2, 2],
