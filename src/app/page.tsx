@@ -187,6 +187,7 @@ export default function DesignPage() {
 
     const handleMouseDown = (opt: any) => {
       if (!shapeTools.includes(activeTool)) return
+      if (opt.e.button !== 0) return
 
       const pointer = engine.canvas.getScenePoint(opt.e)
       drawStartRef.current = { x: pointer.x, y: pointer.y }
