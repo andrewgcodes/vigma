@@ -386,6 +386,12 @@ export default function DesignCanvas({ canvasRef, historyRef }: DesignCanvasProp
           case "p":
             setActiveTool("pen");
             break;
+          case "t":
+            setActiveTool("text");
+            break;
+          case "s":
+            setActiveTool("star");
+            break;
         }
       }
 

@@ -27,6 +27,7 @@ export class CanvasHistory {
   }
 
   async undo(canvas: Canvas): Promise<boolean> {
+    if (this.isRestoring) return false;
     if (this.currentIndex <= 0) return false;
 
     this.currentIndex--;
@@ -35,6 +36,7 @@ export class CanvasHistory {
   }
 
   async redo(canvas: Canvas): Promise<boolean> {
+    if (this.isRestoring) return false;
     if (this.currentIndex >= this.history.length - 1) return false;
 
     this.currentIndex++;

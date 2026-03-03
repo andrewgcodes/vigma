@@ -119,7 +119,7 @@ export default function Toolbar({
     { tool: "hand", icon: <Hand size={18} />, label: "Pan", shortcut: "H" },
     { tool: "rectangle", icon: <Square size={18} />, label: "Rectangle", shortcut: "R" },
     { tool: "ellipse", icon: <Circle size={18} />, label: "Ellipse", shortcut: "O" },
-    { tool: "triangle", icon: <Triangle size={18} />, label: "Triangle", shortcut: "T" },
+    { tool: "triangle", icon: <Triangle size={18} />, label: "Triangle", shortcut: "" },
     { tool: "line", icon: <Minus size={18} />, label: "Line", shortcut: "L" },
     { tool: "arrow", icon: <ArrowRight size={18} />, label: "Arrow", shortcut: "A" },
     { tool: "star", icon: <Star size={18} />, label: "Star", shortcut: "S" },
