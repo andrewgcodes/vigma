@@ -69,7 +69,6 @@ const FONT_FAMILIES = [
 export default function PropertiesPanel({ fabricRef }: PropertiesPanelProps) {
   const { selectedObjectIds } = useStore();
   const [props, setProps] = useState<ObjectProps | null>(null);
-  const [showIndividualCorners, setShowIndividualCorners] = useState(false);
   const [isCropping, setIsCropping] = useState(false);
 
   const readProps = useCallback(() => {
@@ -308,23 +307,10 @@ export default function PropertiesPanel({ fabricRef }: PropertiesPanelProps) {
             <PropInput label="W" value={props.width} onChange={(v) => updateProp('width', v)} />
             <PropInput label="H" value={props.height} onChange={(v) => updateProp('height', v)} />
             <PropInput label="R" value={props.angle} onChange={(v) => updateProp('angle', v)} suffix="deg" />
-            {isRect && !showIndividualCorners && (
+            {isRect && (
               <PropInput label="Rd" value={Math.round(props.rx)} onChange={(v) => { updateProp('rx', v, true); updateProp('ry', v); }} />
             )}
           </div>
-          {isRect && (
-            <button onClick={() => setShowIndividualCorners(!showIndividualCorners)} className="text-[10px] text-indigo-500 mt-2 hover:text-indigo-700">
-              {showIndividualCorners ? 'Uniform corners' : 'Individual corners'}
-            </button>
-          )}
-          {isRect && showIndividualCorners && (
-            <div className="grid grid-cols-2 gap-2 mt-2">
-              <PropInput label="TL" value={Math.round(props.rx)} onChange={(v) => { updateProp('rx', v, true); updateProp('ry', v); }} />
-              <PropInput label="TR" value={Math.round(props.rx)} onChange={(v) => { updateProp('rx', v, true); updateProp('ry', v); }} />
-              <PropInput label="BL" value={Math.round(props.rx)} onChange={(v) => { updateProp('rx', v, true); updateProp('ry', v); }} />
-              <PropInput label="BR" value={Math.round(props.rx)} onChange={(v) => { updateProp('rx', v, true); updateProp('ry', v); }} />
-            </div>
-          )}
         </div>
 
         {/* Arrange */}

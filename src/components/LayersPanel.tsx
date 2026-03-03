@@ -155,11 +155,7 @@ export default function LayersPanel({ fabricRef }: LayersPanelProps) {
                           const toObj = reversed[i];
                           const fromIdx = canvas.getObjects().indexOf(fromObj);
                           const toIdx = canvas.getObjects().indexOf(toObj);
-                          if (fromIdx > toIdx) {
-                            canvas.moveObjectTo(fromObj, toIdx);
-                          } else {
-                            canvas.moveObjectTo(fromObj, toIdx);
-                          }
+                          canvas.moveObjectTo(fromObj, toIdx);
                           canvas.renderAll();
                         }
                       }

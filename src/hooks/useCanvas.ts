@@ -370,7 +370,7 @@ export function useCanvas() {
       if (shape) {
         const id = uuidv4();
         (shape as fabric.FabricObject & { id?: string }).id = id;
-        (shape as fabric.FabricObject & { name?: string }).name = getObjectName(shape.type || 'object');
+        (shape as fabric.FabricObject & { name?: string }).name = activeToolRef.current === 'frame' ? 'Frame' : getObjectName(shape.type || 'object');
         currentShape.current = shape;
         canvas.add(shape);
         canvas.renderAll();
@@ -727,6 +727,8 @@ function showSmartGuides(canvas: fabric.Canvas, target: fabric.FabricObject) {
   const targetBounds = target.getBoundingRect();
   const targetCenterX = targetBounds.left + targetBounds.width / 2;
   const targetCenterY = targetBounds.top + targetBounds.height / 2;
+  const targetRight = targetBounds.left + targetBounds.width;
+  const targetBottom = targetBounds.top + targetBounds.height;
 
   const objects = canvas.getObjects().filter((obj) => {
     if (obj === target) return false;
@@ -735,84 +737,70 @@ function showSmartGuides(canvas: fabric.Canvas, target: fabric.FabricObject) {
     return true;
   });
 
-  const guideLines: fabric.Line[] = [];
   const canvasWidth = canvas.width ?? 2000;
   const canvasHeight = canvas.height ?? 2000;
+
+  // Two-pass approach: collect all snap candidates, then apply only the closest per axis
+  let bestSnapX: { dist: number; delta: number; guidePos: number; isCenter: boolean } | null = null;
+  let bestSnapY: { dist: number; delta: number; guidePos: number; isCenter: boolean } | null = null;
 
   for (const obj of objects) {
     const bounds = obj.getBoundingRect();
     const centerX = bounds.left + bounds.width / 2;
     const centerY = bounds.top + bounds.height / 2;
-
-    // Horizontal center alignment
-    if (Math.abs(targetCenterX - centerX) < SNAP_THRESHOLD) {
-      target.set('left', (target.left ?? 0) + (centerX - targetCenterX));
-      const guide = new fabric.Line([centerX, 0, centerX, canvasHeight], {
-        stroke: '#FF69B4', strokeWidth: 1, strokeDashArray: [4, 4],
-        selectable: false, evented: false, excludeFromExport: true,
-      });
-      (guide as fabric.FabricObject & { isSmartGuide?: boolean }).isSmartGuide = true;
-      guideLines.push(guide);
-    }
-
-    // Vertical center alignment
-    if (Math.abs(targetCenterY - centerY) < SNAP_THRESHOLD) {
-      target.set('top', (target.top ?? 0) + (centerY - targetCenterY));
-      const guide = new fabric.Line([0, centerY, canvasWidth, centerY], {
-        stroke: '#FF69B4', strokeWidth: 1, strokeDashArray: [4, 4],
-        selectable: false, evented: false, excludeFromExport: true,
-      });
-      (guide as fabric.FabricObject & { isSmartGuide?: boolean }).isSmartGuide = true;
-      guideLines.push(guide);
-    }
-
-    // Left edge alignment
-    if (Math.abs(targetBounds.left - bounds.left) < SNAP_THRESHOLD) {
-      target.set('left', (target.left ?? 0) + (bounds.left - targetBounds.left));
-      const guide = new fabric.Line([bounds.left, 0, bounds.left, canvasHeight], {
-        stroke: '#FF69B4', strokeWidth: 0.5, strokeDashArray: [2, 2],
-        selectable: false, evented: false, excludeFromExport: true,
-      });
-      (guide as fabric.FabricObject & { isSmartGuide?: boolean }).isSmartGuide = true;
-      guideLines.push(guide);
-    }
-
-    // Top edge alignment
-    if (Math.abs(targetBounds.top - bounds.top) < SNAP_THRESHOLD) {
-      target.set('top', (target.top ?? 0) + (bounds.top - targetBounds.top));
-      const guide = new fabric.Line([0, bounds.top, canvasWidth, bounds.top], {
-        stroke: '#FF69B4', strokeWidth: 0.5, strokeDashArray: [2, 2],
-        selectable: false, evented: false, excludeFromExport: true,
-      });
-      (guide as fabric.FabricObject & { isSmartGuide?: boolean }).isSmartGuide = true;
-      guideLines.push(guide);
-    }
-
-    // Right edge alignment
-    const targetRight = targetBounds.left + targetBounds.width;
     const objRight = bounds.left + bounds.width;
-    if (Math.abs(targetRight - objRight) < SNAP_THRESHOLD) {
-      target.set('left', (target.left ?? 0) + (objRight - targetRight));
-      const guide = new fabric.Line([objRight, 0, objRight, canvasHeight], {
-        stroke: '#FF69B4', strokeWidth: 0.5, strokeDashArray: [2, 2],
-        selectable: false, evented: false, excludeFromExport: true,
-      });
-      (guide as fabric.FabricObject & { isSmartGuide?: boolean }).isSmartGuide = true;
-      guideLines.push(guide);
+    const objBottom = bounds.top + bounds.height;
+
+    // X-axis candidates: center, left edge, right edge
+    const xCandidates = [
+      { dist: Math.abs(targetCenterX - centerX), delta: centerX - targetCenterX, guidePos: centerX, isCenter: true },
+      { dist: Math.abs(targetBounds.left - bounds.left), delta: bounds.left - targetBounds.left, guidePos: bounds.left, isCenter: false },
+      { dist: Math.abs(targetRight - objRight), delta: objRight - targetRight, guidePos: objRight, isCenter: false },
+    ];
+
+    for (const candidate of xCandidates) {
+      if (candidate.dist < SNAP_THRESHOLD && (!bestSnapX || candidate.dist < bestSnapX.dist)) {
+        bestSnapX = candidate;
+      }
     }
 
-    // Bottom edge alignment
-    const targetBottom = targetBounds.top + targetBounds.height;
-    const objBottom = bounds.top + bounds.height;
-    if (Math.abs(targetBottom - objBottom) < SNAP_THRESHOLD) {
-      target.set('top', (target.top ?? 0) + (objBottom - targetBottom));
-      const guide = new fabric.Line([0, objBottom, canvasWidth, objBottom], {
-        stroke: '#FF69B4', strokeWidth: 0.5, strokeDashArray: [2, 2],
-        selectable: false, evented: false, excludeFromExport: true,
-      });
-      (guide as fabric.FabricObject & { isSmartGuide?: boolean }).isSmartGuide = true;
-      guideLines.push(guide);
+    // Y-axis candidates: center, top edge, bottom edge
+    const yCandidates = [
+      { dist: Math.abs(targetCenterY - centerY), delta: centerY - targetCenterY, guidePos: centerY, isCenter: true },
+      { dist: Math.abs(targetBounds.top - bounds.top), delta: bounds.top - targetBounds.top, guidePos: bounds.top, isCenter: false },
+      { dist: Math.abs(targetBottom - objBottom), delta: objBottom - targetBottom, guidePos: objBottom, isCenter: false },
+    ];
+
+    for (const candidate of yCandidates) {
+      if (candidate.dist < SNAP_THRESHOLD && (!bestSnapY || candidate.dist < bestSnapY.dist)) {
+        bestSnapY = candidate;
+      }
     }
+  }
+
+  // Apply the best snap per axis and create guide lines
+  const guideLines: fabric.Line[] = [];
+
+  if (bestSnapX) {
+    target.set('left', (target.left ?? 0) + bestSnapX.delta);
+    const guide = new fabric.Line([bestSnapX.guidePos, 0, bestSnapX.guidePos, canvasHeight], {
+      stroke: '#FF69B4', strokeWidth: bestSnapX.isCenter ? 1 : 0.5,
+      strokeDashArray: bestSnapX.isCenter ? [4, 4] : [2, 2],
+      selectable: false, evented: false, excludeFromExport: true,
+    });
+    (guide as fabric.FabricObject & { isSmartGuide?: boolean }).isSmartGuide = true;
+    guideLines.push(guide);
+  }
+
+  if (bestSnapY) {
+    target.set('top', (target.top ?? 0) + bestSnapY.delta);
+    const guide = new fabric.Line([0, bestSnapY.guidePos, canvasWidth, bestSnapY.guidePos], {
+      stroke: '#FF69B4', strokeWidth: bestSnapY.isCenter ? 1 : 0.5,
+      strokeDashArray: bestSnapY.isCenter ? [4, 4] : [2, 2],
+      selectable: false, evented: false, excludeFromExport: true,
+    });
+    (guide as fabric.FabricObject & { isSmartGuide?: boolean }).isSmartGuide = true;
+    guideLines.push(guide);
   }
 
   guideLines.forEach((g) => canvas.add(g));

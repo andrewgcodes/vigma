@@ -133,6 +133,7 @@ export default function ContextMenu({ fabricRef }: ContextMenuProps) {
     active.selectable = isLocked;
     active.evented = isLocked;
     canvas.renderAll();
+    historyManager.saveState();
     close();
   };
 
@@ -140,6 +141,7 @@ export default function ContextMenu({ fabricRef }: ContextMenuProps) {
     if (!active) return;
     active.visible = !active.visible;
     canvas.renderAll();
+    historyManager.saveState();
     close();
   };
 
