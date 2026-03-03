@@ -1217,6 +1217,30 @@ export class CanvasEngine {
     }
   }
 
+  // Helper to get bounding box of all visible objects (excludes background)
+  private getObjectsBoundingBox(): { left: number, top: number, width: number, height: number } | null {
+    const objects = this.canvas.getObjects().filter((o: any) => !o.isPreview && !o.isGrid)
+    if (objects.length === 0) return null
+
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+    for (const obj of objects) {
+      const bound = obj.getBoundingRect()
+      minX = Math.min(minX, bound.left)
+      minY = Math.min(minY, bound.top)
+      maxX = Math.max(maxX, bound.left + bound.width)
+      maxY = Math.max(maxY, bound.top + bound.height)
+    }
+
+    // Add small padding (4px)
+    const pad = 4
+    return {
+      left: minX - pad,
+      top: minY - pad,
+      width: (maxX - minX) + pad * 2,
+      height: (maxY - minY) + pad * 2,
+    }
+  }
+
   // EXPORT
   exportToPNG(scale: number = 2, selectedOnly: boolean = false): string {
     if (selectedOnly) {
@@ -1225,7 +1249,26 @@ export class CanvasEngine {
         return active.toDataURL({ format: 'png', multiplier: scale } as any)
       }
     }
-    return this.canvas.toDataURL({ format: 'png', multiplier: scale })
+    // Export only the bounding box of all objects (not the full canvas)
+    const bbox = this.getObjectsBoundingBox()
+    if (!bbox) {
+      return this.canvas.toDataURL({ format: 'png', multiplier: scale })
+    }
+    // Temporarily hide background, export the region, restore
+    const origBg = this.canvas.backgroundColor
+    this.canvas.backgroundColor = 'transparent'
+    this.canvas.renderAll()
+    const dataURL = this.canvas.toDataURL({
+      format: 'png',
+      multiplier: scale,
+      left: bbox.left,
+      top: bbox.top,
+      width: bbox.width,
+      height: bbox.height,
+    })
+    this.canvas.backgroundColor = origBg
+    this.canvas.renderAll()
+    return dataURL
   }
 
   exportToSVG(): string {
@@ -1233,7 +1276,27 @@ export class CanvasEngine {
   }
 
   exportToJPG(quality: number = 0.92, scale: number = 2): string {
-    return this.canvas.toDataURL({ format: 'jpeg', quality, multiplier: scale })
+    // Export only the bounding box of all objects
+    const bbox = this.getObjectsBoundingBox()
+    if (!bbox) {
+      return this.canvas.toDataURL({ format: 'jpeg', quality, multiplier: scale })
+    }
+    // Use white background for JPG (no transparency)
+    const origBg = this.canvas.backgroundColor
+    this.canvas.backgroundColor = '#ffffff'
+    this.canvas.renderAll()
+    const dataURL = this.canvas.toDataURL({
+      format: 'jpeg',
+      quality,
+      multiplier: scale,
+      left: bbox.left,
+      top: bbox.top,
+      width: bbox.width,
+      height: bbox.height,
+    })
+    this.canvas.backgroundColor = origBg
+    this.canvas.renderAll()
+    return dataURL
   }
 
   exportToJSON(): string {
