@@ -1015,7 +1015,7 @@ export default function DesignPage() {
     localStorage.setItem('vigma-project', json)
   }, [])
 
-  // Auto-save every 5 seconds (aggressive save to prevent data loss)
+  // Auto-save every 1 second (aggressive save to prevent data loss)
   useEffect(() => {
     const interval = setInterval(() => {
       const engine = engineRef.current
@@ -1024,7 +1024,7 @@ export default function DesignPage() {
         const json = engine.exportToJSON()
         localStorage.setItem('vigma-project', json)
       } catch (e) {}
-    }, 5000)
+    }, 1000)
     return () => clearInterval(interval)
   }, [])
 
