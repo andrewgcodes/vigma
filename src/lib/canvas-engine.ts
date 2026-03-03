@@ -902,7 +902,7 @@ export class CanvasEngine {
 
   exportToJSON(): string {
     if (!this.canvas) return '';
-    return JSON.stringify(this.canvas.toJSON(), null, 2);
+    return JSON.stringify((this.canvas as unknown as { toJSON(props: string[]): object }).toJSON(['id', 'customType', 'customName']), null, 2);
   }
 
   async importFromJSON(json: string) {
@@ -973,7 +973,7 @@ export class CanvasEngine {
   // History
   saveHistory() {
     if (!this.canvas || this.historyPaused) return;
-    const json = JSON.stringify(this.canvas.toJSON());
+    const json = JSON.stringify((this.canvas as unknown as { toJSON(props: string[]): object }).toJSON(['id', 'customType', 'customName']));
     this.onHistoryPush?.(json);
   }
 

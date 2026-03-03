@@ -231,6 +231,9 @@ export default function DesignCanvas() {
           case 'p':
             setActiveTool('pen');
             break;
+          case 't':
+            setActiveTool('text');
+            break;
           case 'f':
             setActiveTool('frame');
             break;
