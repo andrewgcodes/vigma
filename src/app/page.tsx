@@ -1283,12 +1283,15 @@ export default function DesignPage() {
     if (!engine) return
     const active = engine.canvas.getActiveObject()
     if (!active || (active as any).type !== 'image') return
-    // Get the image's bounding rect in screen (viewport) coordinates
+    // getBoundingRect() returns coordinates relative to the canvas element
+    // We need to add the canvas element's page offset for fixed-position overlay
     const bound = active.getBoundingRect()
+    const canvasEl = engine.canvas.getSelectionElement()
+    const canvasRect = canvasEl.getBoundingClientRect()
     setCropMode({
       imageRect: {
-        left: bound.left,
-        top: bound.top,
+        left: bound.left + canvasRect.left,
+        top: bound.top + canvasRect.top,
         width: bound.width,
         height: bound.height,
       },
