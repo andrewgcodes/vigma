@@ -58,7 +58,7 @@ export default function PagesPanel({ onSwitchPage }: PagesPanelProps) {
         {state.pages.map((page) => (
           <div
             key={page.id}
-            className={`h-7 px-3 flex items-center gap-2 cursor-pointer transition-colors ${
+            className={`h-7 px-3 flex items-center gap-2 cursor-pointer transition-colors group ${
               state.activePageId === page.id
                 ? 'bg-[#7c5cfc33] text-white'
                 : 'text-[#d0d0d0] hover:bg-[#333333]'
@@ -89,6 +89,13 @@ export default function PagesPanel({ onSwitchPage }: PagesPanelProps) {
                 className="text-[#666] hover:text-red-400 shrink-0 opacity-0 group-hover:opacity-100"
                 onClick={(e) => {
                   e.stopPropagation();
+                  if (page.id === state.activePageId) {
+                    const nextPage = state.pages.find(p => p.id !== page.id);
+                    if (nextPage) {
+                      onSwitchPage(nextPage.id);
+                      setActivePage(nextPage.id);
+                    }
+                  }
                   deletePage(page.id);
                 }}
                 title="Delete Page"
