@@ -12,6 +12,7 @@ export class CanvasEngine {
   private onZoomChange?: (zoom: number) => void;
   private historyPaused = false;
   private onHistoryPush?: (json: string) => void;
+  private _restoring: Promise<void> | null = null;
 
   init(
     canvasElement: HTMLCanvasElement,
@@ -165,8 +166,9 @@ export class CanvasEngine {
     this.canvas.selection = true;
     this.canvas.forEachObject((obj) => {
       if ((obj as fabric.FabricObject & { customType?: string }).customType !== 'grid') {
-        obj.selectable = true;
-        obj.evented = true;
+        const isLocked = obj.lockMovementX;
+        obj.selectable = !isLocked;
+        obj.evented = !isLocked;
       }
     });
 
@@ -512,7 +514,7 @@ export class CanvasEngine {
     });
   }
 
-  copyToClipboard() {
+  async copyToClipboard() {
     if (!this.canvas) return;
     const activeObjects = this.canvas.getActiveObjects();
     this.clipboard = [];
@@ -521,7 +523,7 @@ export class CanvasEngine {
         this.clipboard.push(cloned);
       })
     );
-    Promise.all(promises);
+    await Promise.all(promises);
   }
 
   pasteFromClipboard() {
@@ -976,6 +978,13 @@ export class CanvasEngine {
   }
 
   async restoreFromHistory(json: string) {
+    if (this._restoring) await this._restoring;
+    this._restoring = this._doRestore(json);
+    await this._restoring;
+    this._restoring = null;
+  }
+
+  private async _doRestore(json: string) {
     if (!this.canvas) return;
     this.historyPaused = true;
     try {
