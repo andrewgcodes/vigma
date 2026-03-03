@@ -229,34 +229,17 @@ export function useCanvas() {
       opt.e.stopPropagation();
     });
 
-    // Right-click context menu
-    canvas.on('mouse:down', (opt) => {
-      const evt = opt.e as MouseEvent;
-      if (evt.button === 2) {
-        evt.preventDefault();
-        const active = canvas.getActiveObject();
-        const pointer = canvas.getScenePoint(evt);
-        // Check if click is on an existing object
-        let targetId: string | null = null;
-        const objects = canvas.getObjects();
-        for (let i = objects.length - 1; i >= 0; i--) {
-          const obj = objects[i];
-          if (obj.containsPoint(pointer) && (obj as fabric.FabricObject & { id?: string }).id) {
-            if (!active || active !== obj) {
-              canvas.setActiveObject(obj);
-              canvas.renderAll();
-            }
-            targetId = (obj as fabric.FabricObject & { id?: string }).id || null;
-            break;
-          }
-        }
-        if (!targetId && active) {
-          targetId = (active as fabric.FabricObject & { id?: string }).id || null;
-        }
-        setContextMenuRef.current({ x: evt.clientX, y: evt.clientY, objectId: targetId });
-        return;
-      }
-    });
+    // Right-click context menu via native DOM event (more reliable than Fabric.js mouse:down for right-click)
+    const upperCanvas = canvas.upperCanvasEl;
+    const handleContextMenu = (evt: Event) => {
+      const e = evt as MouseEvent;
+      e.preventDefault();
+      e.stopPropagation();
+      const active = canvas.getActiveObject();
+      const targetId = active ? (active as fabric.FabricObject & { id?: string }).id || null : null;
+      setContextMenuRef.current({ x: e.clientX, y: e.clientY, objectId: targetId });
+    };
+    upperCanvas.addEventListener('contextmenu', handleContextMenu);
 
     canvas.on('mouse:down', (opt) => {
       const evt = opt.e as MouseEvent;
@@ -561,6 +544,7 @@ export function useCanvas() {
 
     return () => {
       window.removeEventListener('resize', handleResize);
+      upperCanvas.removeEventListener('contextmenu', handleContextMenu);
       canvas.dispose();
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps

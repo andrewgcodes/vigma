@@ -28,7 +28,7 @@ export default function Editor() {
   };
 
   return (
-    <div className={`w-screen h-screen overflow-hidden bg-gray-50 ${getCursorClass()}`}>
+    <div className={`w-screen h-screen overflow-hidden bg-gray-50 ${getCursorClass()}`} onContextMenu={(e) => e.preventDefault()}>
       <canvas ref={canvasRef} className="block" />
       <TopBar fabricRef={fabricRef} />
       <Toolbar fabricRef={fabricRef} />
