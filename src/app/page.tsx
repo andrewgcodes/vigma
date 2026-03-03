@@ -45,6 +45,7 @@ export default function DesignPage() {
   const [contextMenu, setContextMenu] = useState({ visible: false, x: 0, y: 0, hasSelection: false, multipleSelected: false, isLocked: false })
   const [isDrawingShape, setIsDrawingShape] = useState(false)
   const drawStartRef = useRef<{ x: number; y: number } | null>(null)
+  const previewObjRef = useRef<any>(null)
   const resizingRef = useRef<{ side: 'left' | 'right'; startX: number; startWidth: number } | null>(null)
 
   // Panel resize handlers
@@ -234,7 +235,72 @@ export default function DesignPage() {
       setIsDrawingShape(true)
     }
 
+    // Live shape preview during drag
+    const handleMouseMove = (opt: any) => {
+      if (!shapeTools.includes(activeTool) || !drawStartRef.current) return
+      const pointer = engine.canvas.getScenePoint(opt.e)
+      const startX = drawStartRef.current.x
+      const startY = drawStartRef.current.y
+      const w = Math.abs(pointer.x - startX)
+      const h = Math.abs(pointer.y - startY)
+      const left = Math.min(startX, pointer.x)
+      const top = Math.min(startY, pointer.y)
+
+      // Remove previous preview
+      if (previewObjRef.current) {
+        engine.canvas.remove(previewObjRef.current)
+        previewObjRef.current = null
+      }
+
+      if (w < 2 && h < 2) return // Too small to preview
+
+      const { Rect, Ellipse, Triangle, Line, Polygon } = require('fabric')
+      let preview: any = null
+      const previewStyle = { fill: fill.color + '80', stroke: fill.color, strokeWidth: 1, selectable: false, evented: false, excludeFromExport: true }
+
+      switch (activeTool) {
+        case 'rectangle':
+        case 'frame':
+          preview = new Rect({ left, top, width: w, height: h, ...previewStyle })
+          break
+        case 'ellipse':
+          preview = new Ellipse({ left, top, rx: w / 2, ry: h / 2, ...previewStyle })
+          break
+        case 'triangle':
+          preview = new Triangle({ left, top, width: w, height: h, ...previewStyle })
+          break
+        case 'line':
+        case 'arrow':
+          preview = new Line([startX, startY, pointer.x, pointer.y], { ...previewStyle, fill: '' })
+          break
+        case 'polygon':
+          const polyPoints = engine.createPolygonPoints(6, Math.max(w, h) / 2)
+          preview = new Polygon(polyPoints, { left, top, ...previewStyle })
+          break
+        case 'star':
+          const starPoints = engine.createStarPoints(5, Math.max(w, h) / 2, Math.max(w, h) / 4)
+          preview = new Polygon(starPoints, { left, top, ...previewStyle })
+          break
+        case 'text':
+          preview = new Rect({ left, top, width: Math.max(w, 10), height: Math.max(h, 20), ...previewStyle, fill: 'transparent', strokeDashArray: [4, 4] })
+          break
+      }
+
+      if (preview) {
+        ;(preview as any).isPreview = true
+        engine.canvas.add(preview)
+        engine.canvas.renderAll()
+        previewObjRef.current = preview
+      }
+    }
+
     const handleMouseUp = (opt: any) => {
+      // Remove preview object
+      if (previewObjRef.current) {
+        engine.canvas.remove(previewObjRef.current)
+        previewObjRef.current = null
+      }
+
       if (!shapeTools.includes(activeTool) || !drawStartRef.current) return
 
       const pointer = engine.canvas.getScenePoint(opt.e)
@@ -295,11 +361,13 @@ export default function DesignPage() {
     }
 
     engine.canvas.on('mouse:down', handleMouseDown)
+    engine.canvas.on('mouse:move', handleMouseMove)
     engine.canvas.on('mouse:up', handleMouseUp)
     engine.canvas.on('mouse:down', handleEyedropper)
 
     return () => {
       engine.canvas.off('mouse:down', handleMouseDown)
+      engine.canvas.off('mouse:move', handleMouseMove)
       engine.canvas.off('mouse:up', handleMouseUp)
       engine.canvas.off('mouse:down', handleEyedropper)
     }

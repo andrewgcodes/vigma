@@ -5,7 +5,7 @@ import {
   Undo2, Redo2, ZoomIn, ZoomOut, Maximize2,
   Download, Upload, Menu, Grid3X3, Ruler, Magnet,
   LayoutDashboard, PanelLeft, PanelRight, RotateCcw,
-  Save, FileJson, FileImage, FileCode
+  Save, FileJson, FileImage, FileCode, Info
 } from 'lucide-react'
 
 interface TopBarProps {
@@ -65,6 +65,7 @@ export default function TopBar({
   const jsonInputRef = useRef<HTMLInputElement>(null)
   const [showExportMenu, setShowExportMenu] = React.useState(false)
   const [showViewMenu, setShowViewMenu] = React.useState(false)
+  const [showInfoTooltip, setShowInfoTooltip] = React.useState(false)
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -95,6 +96,15 @@ export default function TopBar({
             <span className="text-white text-xs font-bold">V</span>
           </div>
           <span className="text-sm font-semibold text-canvas-text tracking-tight">Vigma</span>
+          <div className="relative" onMouseEnter={() => setShowInfoTooltip(true)} onMouseLeave={() => setShowInfoTooltip(false)}>
+            <Info size={13} className="text-canvas-text-tertiary hover:text-canvas-text-secondary cursor-pointer transition-colors" />
+            {showInfoTooltip && (
+              <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-3 py-1.5 bg-gray-900 text-white text-xs rounded-lg whitespace-nowrap shadow-lg z-50">
+                Made with <span className="text-red-400">❤️</span> by <a href="https://devin.ai" target="_blank" rel="noopener noreferrer" className="text-blue-300 hover:text-blue-200 underline">Devin</a>
+                <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-gray-900 rotate-45" />
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Panel toggles */}

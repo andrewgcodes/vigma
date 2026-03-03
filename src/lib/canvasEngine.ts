@@ -123,10 +123,10 @@ export class CanvasEngine {
 
   // HISTORY
   private serializeCanvas(extraProps: string[] = []): string {
-    const props = ['id', 'name', 'selectable', 'evented', 'lockMovementX', 'lockMovementY', 'lockRotation', 'lockScalingX', 'lockScalingY', 'hasControls', 'visible', 'rx', 'ry', 'isFrame', 'isGrid', ...extraProps]
+    const props = ['id', 'name', 'selectable', 'evented', 'lockMovementX', 'lockMovementY', 'lockRotation', 'lockScalingX', 'lockScalingY', 'hasControls', 'visible', 'rx', 'ry', 'isFrame', 'isGrid', 'isPreview', ...extraProps]
     const data = this.canvas.toJSON(props)
-    // Filter out grid lines from serialization
-    data.objects = (data.objects || []).filter((o: any) => !o.isGrid)
+    // Filter out grid lines and preview objects from serialization
+    data.objects = (data.objects || []).filter((o: any) => !o.isGrid && !o.isPreview)
     return JSON.stringify(data)
   }
 
@@ -313,7 +313,7 @@ export class CanvasEngine {
     return poly
   }
 
-  private createStarPoints(spikes: number, outerR: number, innerR: number) {
+  createStarPoints(spikes: number, outerR: number, innerR: number) {
     const points: { x: number; y: number }[] = []
     let rot = (Math.PI / 2) * 3
     const step = Math.PI / spikes
@@ -326,7 +326,7 @@ export class CanvasEngine {
     return points
   }
 
-  private createPolygonPoints(sides: number, radius: number) {
+  createPolygonPoints(sides: number, radius: number) {
     const points: { x: number; y: number }[] = []
     for (let i = 0; i < sides; i++) {
       const angle = (2 * Math.PI * i) / sides - Math.PI / 2
@@ -1126,7 +1126,7 @@ export class CanvasEngine {
   // GET OBJECTS LIST (for layers)
   getObjectsList(): Array<{ id: string, name: string, type: string, visible: boolean, locked: boolean }> {
     return this.canvas.getObjects()
-      .filter(o => !(o as any).isGrid)
+      .filter(o => !(o as any).isGrid && !(o as any).isPreview)
       .map(o => ({
         id: (o as any).id || '',
         name: (o as any).name || o.type || 'Object',
