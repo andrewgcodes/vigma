@@ -9,6 +9,8 @@ export class CanvasEngine {
   private maxHistory = 100
   private isLoadingHistory = false
   private gridLines: FabricObject[] = []
+  private gridRenderHandler: (() => void) | null = null
+  private gridSize: number = 20
   private guidelines: FabricObject[] = []
   private snapThreshold = 5
   private snapHandler: ((e: any) => void) | null = null
@@ -822,39 +824,51 @@ export class CanvasEngine {
     this.canvas.setViewportTransform(this.canvas.viewportTransform!)
   }
 
-  // GRID
+  // GRID - rendered as overlay, not as canvas objects
   showGrid(size: number = 20) {
     this.clearGrid()
-    const width = this.canvas.getWidth()
-    const height = this.canvas.getHeight()
-    for (let x = 0; x <= width; x += size) {
-      const line = new Line([x, 0, x, height], {
-        stroke: '#e0e0e0',
-        strokeWidth: x % (size * 5) === 0 ? 0.5 : 0.2,
-        selectable: false,
-        evented: false,
-      })
-      ;(line as any).isGrid = true
-      this.gridLines.push(line)
-      this.canvas.add(line)
-      this.canvas.sendObjectToBack(line)
+    this.gridSize = size
+    this.gridRenderHandler = () => {
+      const ctx = this.canvas.getContext()
+      const vpt = this.canvas.viewportTransform
+      if (!ctx || !vpt) return
+      const zoom = this.canvas.getZoom()
+      const width = this.canvas.getWidth()
+      const height = this.canvas.getHeight()
+      ctx.save()
+      ctx.strokeStyle = '#e0e0e0'
+      // Calculate visible area in canvas coordinates
+      const startX = Math.floor(-vpt[4] / zoom / size) * size
+      const startY = Math.floor(-vpt[5] / zoom / size) * size
+      const endX = startX + Math.ceil(width / zoom / size) * size + size
+      const endY = startY + Math.ceil(height / zoom / size) * size + size
+      for (let x = startX; x <= endX; x += size) {
+        ctx.lineWidth = (x % (size * 5) === 0 ? 0.5 : 0.2)
+        ctx.beginPath()
+        const screenX = x * zoom + vpt[4]
+        ctx.moveTo(screenX, 0)
+        ctx.lineTo(screenX, height)
+        ctx.stroke()
+      }
+      for (let y = startY; y <= endY; y += size) {
+        ctx.lineWidth = (y % (size * 5) === 0 ? 0.5 : 0.2)
+        ctx.beginPath()
+        const screenY = y * zoom + vpt[5]
+        ctx.moveTo(0, screenY)
+        ctx.lineTo(width, screenY)
+        ctx.stroke()
+      }
+      ctx.restore()
     }
-    for (let y = 0; y <= height; y += size) {
-      const line = new Line([0, y, width, y], {
-        stroke: '#e0e0e0',
-        strokeWidth: y % (size * 5) === 0 ? 0.5 : 0.2,
-        selectable: false,
-        evented: false,
-      })
-      ;(line as any).isGrid = true
-      this.gridLines.push(line)
-      this.canvas.add(line)
-      this.canvas.sendObjectToBack(line)
-    }
+    this.canvas.on('after:render', this.gridRenderHandler)
     this.canvas.renderAll()
   }
 
   clearGrid() {
+    if (this.gridRenderHandler) {
+      this.canvas.off('after:render', this.gridRenderHandler)
+      this.gridRenderHandler = null
+    }
     this.gridLines.forEach(l => this.canvas.remove(l))
     this.gridLines = []
     this.canvas.renderAll()
