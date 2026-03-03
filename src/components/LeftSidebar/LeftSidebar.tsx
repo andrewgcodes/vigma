@@ -2,7 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { Plus, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import LayerItem from './LayerItem';
 import { useAppContext } from '../../store/canvasStore';
-import { findObjectById } from '../../utils/canvasHelpers';
+import { findObjectById, assignObjectId, assignDefaultName } from '../../utils/canvasHelpers';
 
 export default function LeftSidebar() {
   const { state, dispatch, canvasRef } = useAppContext();
@@ -40,11 +40,15 @@ export default function LeftSidebar() {
       case 'rename':
         break;
       case 'duplicate':
-        obj.clone().then((cloned: typeof obj) => {
+        obj.clone(['objectId', 'customName']).then((cloned: typeof obj) => {
           cloned.set({ left: (cloned.left || 0) + 20, top: (cloned.top || 0) + 20 });
+          assignObjectId(cloned);
+          assignDefaultName(cloned);
           canvas.add(cloned);
-          window.dispatchEvent(new CustomEvent('vigma:object-added', { detail: cloned }));
+          canvas.setActiveObject(cloned);
           canvas.requestRenderAll();
+          window.dispatchEvent(new CustomEvent('vigma:update-layers'));
+          window.dispatchEvent(new CustomEvent('vigma:save-history'));
         });
         break;
       case 'delete':

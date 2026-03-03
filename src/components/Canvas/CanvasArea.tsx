@@ -1031,9 +1031,10 @@ export default function CanvasArea() {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
+    let drawGrid: (() => void) | null = null;
     if (state.gridEnabled) {
       const gridSize = 20;
-      canvas.on('after:render', function drawGrid() {
+      drawGrid = () => {
         const ctx = canvas.getContext();
         const zoom = canvas.getZoom();
         const vpt = canvas.viewportTransform;
@@ -1064,11 +1065,14 @@ export default function CanvasArea() {
         }
 
         ctx.restore();
-      });
+      };
+      canvas.on('after:render', drawGrid);
     }
 
     return () => {
-      canvas.off('after:render');
+      if (drawGrid) {
+        canvas.off('after:render', drawGrid);
+      }
     };
   }, [canvasRef, state.gridEnabled]);
 
