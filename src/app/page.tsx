@@ -19,6 +19,7 @@ import type { Comment, CommentReply, RemoteUser } from '@/lib/collaboration'
 import { getUserIdentity } from '@/lib/userIdentity'
 import type { UserIdentity } from '@/lib/userIdentity'
 import { v4 as uuidv4 } from 'uuid'
+import { util as fabricUtil } from 'fabric'
 import type { ToolType } from '@/types/design'
 import WelcomeModal from '@/components/WelcomeModal'
 import MobileGate from '@/components/MobileGate'
@@ -372,8 +373,7 @@ export default function DesignPage() {
           // the object entirely via enlivenObjects so the bitmap is rebuilt.
           const isImage = objData.type === 'image' && objData.src
           if (isImage) {
-            const fabric = require('fabric')
-            const promise = fabric.util.enlivenObjects([objData]).then((objs: any[]) => {
+            const promise = fabricUtil.enlivenObjects([objData]).then((objs: any[]) => {
               if (objs[0]) {
                 objs[0].id = id
                 // Preserve z-index: insert at the same position
@@ -395,9 +395,8 @@ export default function DesignPage() {
             existing.setCoords()
           }
         } else {
-          // Add new object - use fabric.util.enlivenObjects
-          const fabric = require('fabric')
-          const promise = fabric.util.enlivenObjects([objData]).then((objs: any[]) => {
+          // Add new object - use fabric enlivenObjects (same ESM instance as CanvasEngine)
+          const promise = fabricUtil.enlivenObjects([objData]).then((objs: any[]) => {
             if (objs[0]) {
               objs[0].id = id
               engine.canvas.add(objs[0])
@@ -565,7 +564,15 @@ export default function DesignPage() {
     // vs creating a new room (where we want to push our local canvas objects).
     const engine = engineRef.current
     if (engine) {
-      const remoteObjectCount = collab.getAllObjects().size
+      let remoteObjectCount = collab.getAllObjects().size
+
+      // If no objects found yet but peers exist, BroadcastChannel/WebRTC sync
+      // may still be in progress. Wait for peer-delivered content before
+      // deciding JOINING vs CREATING. Without this, the joining peer would
+      // see remoteObjectCount=0 and skip loading remote objects entirely.
+      if (remoteObjectCount === 0 && collab.getPeerCount() > 0) {
+        remoteObjectCount = await collab.waitForContent(1500)
+      }
 
       if (remoteObjectCount > 0) {
         // JOINING an existing room — clear any stale local objects first,
@@ -578,11 +585,11 @@ export default function DesignPage() {
         engine.canvas.renderAll()
 
         const allRemoteIds = Array.from(collab.getAllObjects().keys())
-        // Filter out IDs already being processed by a concurrent handleRemoteObjectChange
-        const safeRemoteIds = allRemoteIds.filter(id => (remoteObjectIdsRef.current.get(id) ?? 0) === 0)
-        if (safeRemoteIds.length > 0) {
+        // Observer is suppressed during initial sync, so no concurrent
+        // handleRemoteObjectChange calls — safe to add all remote IDs.
+        if (allRemoteIds.length > 0) {
           handleRemoteObjectChange({
-            added: safeRemoteIds,
+            added: allRemoteIds,
             updated: [],
             deleted: [],
           })
@@ -602,18 +609,20 @@ export default function DesignPage() {
 
         if (localObjects.length > 0) {
           const { remoteOnlyIds, overlappingIds } = collab.reconcileCanvasState(localObjects)
-          const safeRemoteOnlyIds = remoteOnlyIds.filter(id => (remoteObjectIdsRef.current.get(id) ?? 0) === 0)
-          const safeOverlappingIds = overlappingIds.filter(id => (remoteObjectIdsRef.current.get(id) ?? 0) === 0)
-          if (safeRemoteOnlyIds.length > 0 || safeOverlappingIds.length > 0) {
+          if (remoteOnlyIds.length > 0 || overlappingIds.length > 0) {
             handleRemoteObjectChange({
-              added: safeRemoteOnlyIds,
-              updated: safeOverlappingIds,
+              added: remoteOnlyIds,
+              updated: overlappingIds,
               deleted: [],
             })
           }
         }
       }
     }
+    // Enable the objectsMap observer for real-time remote object sync.
+    // Must be called AFTER the initial JOINING/CREATING path is complete
+    // to prevent race conditions between the observer and the initial load.
+    collab.enableRemoteObjectSync()
     setComments(collab.getComments())
   }, [handleRemoteObjectChange])
 

@@ -73,6 +73,7 @@ export class CollaborationManager {
   private onConnectionStatusChange?: (status: 'connecting' | 'connected' | 'disconnected') => void
   private connected = false
   private _persistenceSynced = false
+  private _suppressObserver = true // Suppress objectsMap observer until initial sync is done
 
   constructor(roomId: string, user: UserIdentity) {
     this.roomId = roomId
@@ -137,9 +138,11 @@ export class CollaborationManager {
       this.emitUsersChange()
     })
 
-    // Listen for remote object changes
+    // Listen for remote object changes.
+    // _suppressObserver is true during initial sync (startCollaboration)
+    // to prevent the observer from racing with the JOINING path.
     this.objectsMap.observe((event) => {
-      if (this.isSyncingLocal) return
+      if (this.isSyncingLocal || this._suppressObserver) return
 
       const added: string[] = []
       const updated: string[] = []
@@ -468,6 +471,42 @@ export class CollaborationManager {
         resolve()
       }
     })
+  }
+
+  /** Wait for objectsMap to receive content from peers (BroadcastChannel/WebRTC).
+   *  Returns the number of objects found when content arrives or timeout expires.
+   *  This is needed because BroadcastChannel sync takes longer than IndexedDB
+   *  persistence — without this wait, a joining peer would see remoteObjectCount=0
+   *  and incorrectly enter the CREATING path instead of the JOINING path. */
+  waitForContent(timeoutMs = 1500): Promise<number> {
+    return new Promise((resolve) => {
+      // Already has content — resolve immediately
+      if (this.objectsMap.size > 0) {
+        resolve(this.objectsMap.size)
+        return
+      }
+      const timeout = setTimeout(() => {
+        this.objectsMap.unobserve(observer)
+        resolve(this.objectsMap.size)
+      }, timeoutMs)
+      const observer = () => {
+        if (this.objectsMap.size > 0) {
+          clearTimeout(timeout)
+          this.objectsMap.unobserve(observer)
+          resolve(this.objectsMap.size)
+        }
+      }
+      this.objectsMap.observe(observer)
+    })
+  }
+
+  /** Enable the objectsMap observer for real-time remote object sync.
+   *  Must be called after initial sync/load is complete (e.g., after
+   *  startCollaboration finishes the JOINING or CREATING path).
+   *  Until this is called, the observer is suppressed to prevent race
+   *  conditions between the observer and the initial load logic. */
+  enableRemoteObjectSync() {
+    this._suppressObserver = false
   }
 }
 
