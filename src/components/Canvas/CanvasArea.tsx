@@ -83,7 +83,10 @@ const CanvasArea = forwardRef<CanvasAreaHandle, CanvasAreaProps>(({ onLayersChan
   const lastPosRef = useRef({ x: 0, y: 0 });
   const prevToolRef = useRef<ToolType>('select');
   const historyPauseRef = useRef(false);
-  const undoRedoRequestRef = useRef(false);
+  const historyRef = useRef(state.history);
+  const historyIndexRef = useRef(state.historyIndex);
+  historyRef.current = state.history;
+  historyIndexRef.current = state.historyIndex;
   const autoSaveTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const layersChangedRef = useRef(onLayersChange);
   const selectionChangedRef = useRef(onSelectionChange);
@@ -578,21 +581,23 @@ const CanvasArea = forwardRef<CanvasAreaHandle, CanvasAreaProps>(({ onLayersChan
     };
   }, [state.activeTool]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Handle undo/redo - only fires when undoRedoRequestRef is set
-  useEffect(() => {
-    if (!undoRedoRequestRef.current) return;
-    undoRedoRequestRef.current = false;
+  // Direct undo/redo - avoids useEffect timing issues
+  const loadHistoryState = useCallback((targetIndex: number) => {
     const canvas = canvasRef.current;
-    if (!canvas || state.history.length === 0 || state.historyIndex < 0) return;
-    const currentState = state.history[state.historyIndex];
-    if (!currentState) return;
+    const hist = historyRef.current;
+    if (!canvas || targetIndex < 0 || targetIndex >= hist.length) return;
+    const targetState = hist[targetIndex];
+    if (!targetState) return;
 
     historyPauseRef.current = true;
     try {
-      const parsed = JSON.parse(currentState);
+      const parsed = JSON.parse(targetState);
       canvas.loadFromJSON(parsed).then(() => {
         canvas.requestRenderAll();
-        historyPauseRef.current = false;
+        // Keep historyPause true briefly to prevent object:modified from firing
+        setTimeout(() => {
+          historyPauseRef.current = false;
+        }, 50);
         notifyLayersChanged();
         notifySelectionChanged();
       }).catch(() => {
@@ -601,7 +606,7 @@ const CanvasArea = forwardRef<CanvasAreaHandle, CanvasAreaProps>(({ onLayersChan
     } catch {
       historyPauseRef.current = false;
     }
-  }, [state.historyIndex]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [notifyLayersChanged, notifySelectionChanged]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -660,14 +665,21 @@ const CanvasArea = forwardRef<CanvasAreaHandle, CanvasAreaProps>(({ onLayersChan
       if (ctrl) {
         if (e.key === 'z' && !e.shiftKey) {
           e.preventDefault();
-          undoRedoRequestRef.current = true;
-          dispatch({ type: 'UNDO' });
+          const idx = historyIndexRef.current;
+          if (idx > 0) {
+            dispatch({ type: 'UNDO' });
+            loadHistoryState(idx - 1);
+          }
           return;
         }
         if ((e.key === 'z' && e.shiftKey) || e.key === 'y') {
           e.preventDefault();
-          undoRedoRequestRef.current = true;
-          dispatch({ type: 'REDO' });
+          const idx = historyIndexRef.current;
+          const hist = historyRef.current;
+          if (idx < hist.length - 1) {
+            dispatch({ type: 'REDO' });
+            loadHistoryState(idx + 1);
+          }
           return;
         }
         if (e.key === 'c') {
@@ -1398,12 +1410,19 @@ const CanvasArea = forwardRef<CanvasAreaHandle, CanvasAreaProps>(({ onLayersChan
     sendBackward: sendBackwardAction,
     zoomToFit: zoomToFitAction,
     performUndo: () => {
-      undoRedoRequestRef.current = true;
-      dispatch({ type: 'UNDO' });
+      const idx = historyIndexRef.current;
+      if (idx > 0) {
+        dispatch({ type: 'UNDO' });
+        loadHistoryState(idx - 1);
+      }
     },
     performRedo: () => {
-      undoRedoRequestRef.current = true;
-      dispatch({ type: 'REDO' });
+      const idx = historyIndexRef.current;
+      const hist = historyRef.current;
+      if (idx < hist.length - 1) {
+        dispatch({ type: 'REDO' });
+        loadHistoryState(idx + 1);
+      }
     },
   }));
 
