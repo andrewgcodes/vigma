@@ -20,6 +20,7 @@ import type { UserIdentity } from '@/lib/userIdentity'
 import { v4 as uuidv4 } from 'uuid'
 import type { ToolType } from '@/types/design'
 import WelcomeModal from '@/components/WelcomeModal'
+import MobileGate from '@/components/MobileGate'
 
 export default function DesignPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -1219,6 +1220,7 @@ export default function DesignPage() {
   }, [])
 
   return (
+    <MobileGate>
     <div className="h-screen w-screen overflow-hidden bg-canvas-bg" ref={containerRef}>
       {/* Top Bar */}
       <TopBar
@@ -1540,6 +1542,7 @@ export default function DesignPage() {
       {/* Welcome modal for first-time visitors */}
       <WelcomeModal />
     </div>
+    </MobileGate>
   )
 }
 
