@@ -17,6 +17,7 @@ export class CanvasEngine {
   private smartGuideHandler: ((e: any) => void) | null = null
   private smartGuideRenderHandler: (() => void) | null = null
   private activeGuideLines: { orientation: 'h' | 'v'; position: number; start: number; end: number }[] = []
+  private clearGuidesHandler: (() => void) | null = null
   private smartGuidesEnabled = true
   private onSelectionChange?: (ids: string[]) => void
   private onObjectModified?: () => void
@@ -1040,11 +1041,11 @@ export class CanvasEngine {
     this.canvas.on('after:render', this.smartGuideRenderHandler)
 
     // Clear guides when mouse is released
-    const clearGuides = () => {
+    this.clearGuidesHandler = () => {
       this.activeGuideLines = []
       this.canvas.requestRenderAll()
     }
-    this.canvas.on('mouse:up', clearGuides)
+    this.canvas.on('mouse:up', this.clearGuidesHandler)
   }
 
   disableSmartGuides() {
@@ -1055,6 +1056,10 @@ export class CanvasEngine {
     if (this.smartGuideRenderHandler) {
       this.canvas.off('after:render', this.smartGuideRenderHandler)
       this.smartGuideRenderHandler = null
+    }
+    if (this.clearGuidesHandler) {
+      this.canvas.off('mouse:up', this.clearGuidesHandler)
+      this.clearGuidesHandler = null
     }
     this.activeGuideLines = []
     this.smartGuidesEnabled = false
