@@ -165,15 +165,23 @@ export default function LeftSidebar() {
     dispatch({ type: 'SET_ACTIVE_PAGE', pageId });
     const targetPage = state.pages.find((p) => p.id === pageId);
     if (targetPage?.canvasJSON) {
-      canvas.loadFromJSON(targetPage.canvasJSON).then(() => {
-        // Re-apply artboard flags
-        const artboard = canvas.getObjects().find((o) => (o as unknown as Record<string, unknown>).name === 'artboard');
-        if (artboard) {
-          artboard.selectable = false;
-          artboard.evented = false;
-        }
+      const pageJSON = JSON.parse(targetPage.canvasJSON);
+      canvas.loadFromJSON(pageJSON).then(() => {
+        // Re-mark artboard as non-selectable after JSON restore (robust fallback)
+        canvas.getObjects().forEach((obj) => {
+          const record = obj as unknown as Record<string, unknown>;
+          if (record.name === 'artboard' || (obj.width === 1200 && obj.height === 800 && obj.fill === '#ffffff' && !record.objectId)) {
+            obj.selectable = false;
+            obj.evented = false;
+            obj.hoverCursor = 'default';
+            record.name = 'artboard';
+          }
+        });
+        canvas.discardActiveObject();
         canvas.requestRenderAll();
-        window.dispatchEvent(new CustomEvent('vigma:update-layers'));
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('vigma:update-layers'));
+        }, 100);
       });
     } else {
       // Empty page - remove all user objects
