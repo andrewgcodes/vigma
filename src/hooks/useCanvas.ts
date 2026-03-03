@@ -296,23 +296,11 @@ export function useCanvas() {
     if (!activeObj || activeObj.type !== 'group') return;
 
     const group = activeObj as fabric.Group;
-    const items = group.getObjects();
-    // Use group's transform matrix to convert each child's group-local
-    // left/top to canvas-world left/top BEFORE removing the group
-    const groupMatrix = group.calcTransformMatrix();
-    const worldPositions = items.map((item) =>
-      fabric.util.transformPoint(new fabric.Point(item.left || 0, item.top || 0), groupMatrix)
-    );
+    // removeAll() properly transforms children from group-local to world coords
+    const items = group.removeAll();
     canvas.remove(group);
-    items.forEach((item, i) => {
-      item.set({
-        left: worldPositions[i].x,
-        top: worldPositions[i].y,
-      });
-      item.setCoords();
-      canvas.add(item);
-    });
-    canvas.renderAll();
+    canvas.add(...items);
+    canvas.requestRenderAll();
     saveHistory();
   }, [saveHistory]);
 
