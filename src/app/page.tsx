@@ -214,7 +214,7 @@ export default function DesignPage() {
           engine.addRect({ left, top, width: minW, height: minH, fill: fill.color })
           break
         case 'ellipse':
-          engine.addEllipse({ left, top, radius: Math.max(minW, minH) / 2, fill: fill.color })
+          engine.addEllipse({ left, top, rx: minW / 2, ry: minH / 2, fill: fill.color })
           break
         case 'triangle':
           engine.addTriangle({ left, top, width: minW, height: minH, fill: fill.color })
@@ -775,7 +775,7 @@ export default function DesignPage() {
             onShadowChange={handleShadowChange}
             onShadowRemove={handleShadowRemove}
             onDelete={() => { engineRef.current?.deleteSelected(); refreshLayers(); refreshObjectProps() }}
-            onDuplicate={() => { engineRef.current?.duplicate(); refreshLayers() }}
+            onDuplicate={() => { engineRef.current?.duplicate().then(() => refreshLayers()) }}
             onFlipH={() => { engineRef.current?.flipHorizontal(); refreshObjectProps() }}
             onFlipV={() => { engineRef.current?.flipVertical(); refreshObjectProps() }}
             onBringToFront={() => { engineRef.current?.bringToFront(); refreshLayers() }}
@@ -826,9 +826,9 @@ export default function DesignPage() {
         visible={contextMenu.visible}
         onClose={() => setContextMenu({ visible: false, x: 0, y: 0 })}
         onCopy={() => engineRef.current?.copy()}
-        onCut={() => { engineRef.current?.cut(); refreshLayers() }}
-        onPaste={() => { engineRef.current?.paste(); refreshLayers() }}
-        onDuplicate={() => { engineRef.current?.duplicate(); refreshLayers() }}
+        onCut={() => { engineRef.current?.cut().then(() => refreshLayers()) }}
+        onPaste={() => { engineRef.current?.paste().then(() => refreshLayers()) }}
+        onDuplicate={() => { engineRef.current?.duplicate().then(() => refreshLayers()) }}
         onDelete={() => { engineRef.current?.deleteSelected(); refreshLayers(); refreshObjectProps() }}
         onSelectAll={() => engineRef.current?.selectAll()}
         onBringToFront={() => { engineRef.current?.bringToFront(); refreshLayers() }}

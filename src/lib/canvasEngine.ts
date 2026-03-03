@@ -1,4 +1,4 @@
-import { Canvas, Rect, Circle, Triangle, Line, Textbox, Group, Path, Polygon, FabricObject, PencilBrush, CircleBrush, SprayBrush, Shadow, Gradient, Pattern, FabricImage, ActiveSelection, Point, util } from 'fabric'
+import { Canvas, Rect, Circle, Ellipse, Triangle, Line, Textbox, Group, Path, Polygon, FabricObject, PencilBrush, CircleBrush, SprayBrush, Shadow, Gradient, Pattern, FabricImage, ActiveSelection, Point, util } from 'fabric'
 import { v4 as uuidv4 } from 'uuid'
 
 export class CanvasEngine {
@@ -75,13 +75,13 @@ export class CanvasEngine {
       this.saveHistory()
       this.onObjectModified?.()
     })
-    this.canvas.on('object:added', () => {
-      if (!this.isLoadingHistory) {
+    this.canvas.on('object:added', (e) => {
+      if (!this.isLoadingHistory && !(e.target as any)?.isGrid) {
         this.saveHistory()
       }
     })
-    this.canvas.on('object:removed', () => {
-      if (!this.isLoadingHistory) {
+    this.canvas.on('object:removed', (e) => {
+      if (!this.isLoadingHistory && !(e.target as any)?.isGrid) {
         this.saveHistory()
       }
     })
@@ -183,10 +183,11 @@ export class CanvasEngine {
 
   addEllipse(options?: Partial<any>) {
     const id = uuidv4()
-    const ellipse = new Circle({
+    const ellipse = new Ellipse({
       left: 100 + Math.random() * 200,
       top: 100 + Math.random() * 200,
-      radius: 75,
+      rx: 75,
+      ry: 50,
       fill: '#E86C6C',
       stroke: '',
       strokeWidth: 0,
