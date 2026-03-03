@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useRef, useEffect, useCallback } from 'react';
-import { Canvas, FabricObject, Rect, Circle, Ellipse, Triangle, Point } from 'fabric';
+import { Canvas, FabricObject, Rect, Circle, Ellipse, Triangle, Line, Point } from 'fabric';
 import { useEditorStore } from '@/store/useEditorStore';
 import Toolbar from './Toolbar';
 import LayersPanel from './LayersPanel';
@@ -130,11 +130,21 @@ export default function Editor() {
 
     canvas.on('object:removed', () => {
       syncLayers();
-      saveHistory();
+      // Only save history for intentional deletions, not temp shape removal during drawing
+      if (!isDrawingShape.current) {
+        saveHistory();
+      }
     });
 
-    // Path created (from drawing)
-    canvas.on('path:created', () => {
+    // Path created (from drawing) - assign customId/customName
+    canvas.on('path:created', (e: { path?: FabricObject }) => {
+      if (e.path) {
+        const path = e.path as FabricObject & { customId?: string; customName?: string };
+        if (!path.customId) {
+          path.customId = `path-${Date.now()}`;
+          path.customName = `Path`;
+        }
+      }
       syncLayers();
       saveHistory();
     });
@@ -157,6 +167,18 @@ export default function Editor() {
     canvas.backgroundColor = canvasColor;
     canvas.renderAll();
   }, [canvasColor]);
+
+  // Sync zoom from store to canvas (for StatusBar zoom buttons)
+  useEffect(() => {
+    const canvas = fabricRef.current;
+    if (!canvas) return;
+    const currentZoom = Math.round(canvas.getZoom() * 100);
+    if (currentZoom !== zoom) {
+      const center = canvas.getCenter();
+      canvas.zoomToPoint(new Point(center.left, center.top), zoom / 100);
+      canvas.renderAll();
+    }
+  }, [zoom]);
 
   // Handle tool changes
   useEffect(() => {
@@ -221,11 +243,48 @@ export default function Editor() {
         return;
       }
 
-      // Shape drawing
+      // Shape drawing - create shape once in mouseDown
       if (['rectangle', 'circle', 'ellipse', 'triangle', 'line', 'arrow', 'star', 'polygon'].includes(tool)) {
         const pointer = canvas.getScenePoint(e);
         isDrawingShape.current = true;
         drawStartRef.current = { x: pointer.x, y: pointer.y };
+
+        const { fillColor: fc, strokeColor: sc, strokeWidth: sw } = useEditorStore.getState();
+        let shape: FabricObject | null = null;
+
+        if (tool === 'rectangle') {
+          shape = createRectangle(pointer.x, pointer.y, fc, sc, sw);
+          (shape as Rect).set({ width: 0, height: 0 });
+        } else if (tool === 'circle') {
+          shape = createCircle(pointer.x, pointer.y, fc, sc, sw);
+          (shape as Circle).set({ radius: 0 });
+        } else if (tool === 'ellipse') {
+          shape = createEllipse(pointer.x, pointer.y, fc, sc, sw);
+          (shape as Ellipse).set({ rx: 0, ry: 0 });
+        } else if (tool === 'triangle') {
+          shape = createTriangle(pointer.x, pointer.y, fc, sc, sw);
+          (shape as Triangle).set({ width: 0, height: 0 });
+        } else if (tool === 'line') {
+          shape = createLine([pointer.x, pointer.y, pointer.x, pointer.y], sc || '#ffffff', sw || 2);
+        } else if (tool === 'arrow') {
+          shape = createArrow([pointer.x, pointer.y, pointer.x, pointer.y], sc || '#ffffff', sw || 2);
+        } else if (tool === 'star') {
+          shape = createStar(pointer.x, pointer.y, fc, sc, sw);
+          shape.scaleX = 0.01;
+          shape.scaleY = 0.01;
+        } else if (tool === 'polygon') {
+          shape = createPolygon(pointer.x, pointer.y, fc, sc, sw);
+          shape.scaleX = 0.01;
+          shape.scaleY = 0.01;
+        }
+
+        if (shape) {
+          shape.selectable = false;
+          shape.evented = false;
+          canvas.add(shape);
+          tempShapeRef.current = shape;
+          canvas.renderAll();
+        }
       }
 
       // Text tool - click to add
@@ -256,74 +315,54 @@ export default function Editor() {
         return;
       }
 
-      if (isDrawingShape.current) {
+      if (isDrawingShape.current && tempShapeRef.current) {
         const pointer = canvas.getScenePoint(e);
         const tool = useEditorStore.getState().activeTool;
-        const { fillColor: fc, strokeColor: sc, strokeWidth: sw } = useEditorStore.getState();
         const sx = drawStartRef.current.x;
         const sy = drawStartRef.current.y;
         const dx = pointer.x - sx;
         const dy = pointer.y - sy;
-
-        // Remove temp shape
-        if (tempShapeRef.current) {
-          canvas.remove(tempShapeRef.current);
-        }
-
-        let shape: FabricObject | null = null;
+        const shape = tempShapeRef.current;
 
         if (tool === 'rectangle') {
-          shape = createRectangle(
-            dx >= 0 ? sx : pointer.x,
-            dy >= 0 ? sy : pointer.y,
-            fc, sc, sw
-          );
-          (shape as Rect).set({ width: Math.abs(dx), height: Math.abs(dy) });
+          (shape as Rect).set({
+            left: dx >= 0 ? sx : pointer.x,
+            top: dy >= 0 ? sy : pointer.y,
+            width: Math.abs(dx),
+            height: Math.abs(dy),
+          });
         } else if (tool === 'circle') {
           const radius = Math.sqrt(dx * dx + dy * dy) / 2;
-          shape = createCircle(sx + dx / 2 - radius, sy + dy / 2 - radius, fc, sc, sw);
-          (shape as Circle).set({ radius });
+          (shape as Circle).set({
+            left: sx + dx / 2 - radius,
+            top: sy + dy / 2 - radius,
+            radius,
+          });
         } else if (tool === 'ellipse') {
-          shape = createEllipse(
-            dx >= 0 ? sx : pointer.x,
-            dy >= 0 ? sy : pointer.y,
-            fc, sc, sw
-          );
-          (shape as Ellipse).set({ rx: Math.abs(dx) / 2, ry: Math.abs(dy) / 2 });
+          (shape as Ellipse).set({
+            left: dx >= 0 ? sx : pointer.x,
+            top: dy >= 0 ? sy : pointer.y,
+            rx: Math.abs(dx) / 2,
+            ry: Math.abs(dy) / 2,
+          });
         } else if (tool === 'triangle') {
-          shape = createTriangle(
-            dx >= 0 ? sx : pointer.x,
-            dy >= 0 ? sy : pointer.y,
-            fc, sc, sw
-          );
-          (shape as Triangle).set({ width: Math.abs(dx), height: Math.abs(dy) });
+          (shape as Triangle).set({
+            left: dx >= 0 ? sx : pointer.x,
+            top: dy >= 0 ? sy : pointer.y,
+            width: Math.abs(dx),
+            height: Math.abs(dy),
+          });
         } else if (tool === 'line' || tool === 'arrow') {
-          if (tool === 'arrow') {
-            shape = createArrow([sx, sy, pointer.x, pointer.y], sc || '#ffffff', sw || 2);
-          } else {
-            shape = createLine([sx, sy, pointer.x, pointer.y], sc || '#ffffff', sw || 2);
-          }
-        } else if (tool === 'star') {
+          (shape as Line).set({ x1: sx, y1: sy, x2: pointer.x, y2: pointer.y });
+        } else if (tool === 'star' || tool === 'polygon') {
           const size = Math.max(Math.abs(dx), Math.abs(dy));
-          shape = createStar(sx, sy, fc, sc, sw);
           const scaleFactor = size / 120;
-          shape.scaleX = scaleFactor || 0.1;
-          shape.scaleY = scaleFactor || 0.1;
-        } else if (tool === 'polygon') {
-          const size = Math.max(Math.abs(dx), Math.abs(dy));
-          shape = createPolygon(sx, sy, fc, sc, sw);
-          const scaleFactor = size / 120;
-          shape.scaleX = scaleFactor || 0.1;
-          shape.scaleY = scaleFactor || 0.1;
+          shape.scaleX = scaleFactor || 0.01;
+          shape.scaleY = scaleFactor || 0.01;
         }
 
-        if (shape) {
-          shape.selectable = false;
-          shape.evented = false;
-          canvas.add(shape);
-          tempShapeRef.current = shape;
-          canvas.renderAll();
-        }
+        shape.setCoords();
+        canvas.renderAll();
       }
     };
 

@@ -311,5 +311,8 @@ export function getObjectName(obj: FabricObject): string {
 
 export function getObjectId(obj: FabricObject): string {
   const customObj = obj as FabricObject & { customId?: string };
-  return customObj.customId || `obj-${Math.random().toString(36).substr(2, 9)}`;
+  if (!customObj.customId) {
+    customObj.customId = `obj-${Math.random().toString(36).substr(2, 9)}`;
+  }
+  return customObj.customId;
 }
