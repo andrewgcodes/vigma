@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
-import { Canvas, Rect, Circle, Triangle, Line, Textbox, PencilBrush, Point, FabricImage, Polygon, FabricObject, ActiveSelection, Group, type TPointerEvent } from 'fabric';
+import { Canvas, Rect, Ellipse, Triangle, Line, Textbox, PencilBrush, Point, FabricImage, Polygon, FabricObject, ActiveSelection, Group, type TPointerEvent } from 'fabric';
 import { useAppContext } from '../../store/canvasStore';
 import { assignObjectId, assignDefaultName, getObjectId, getLayersFromCanvas, saveCanvasJSON } from '../../utils/canvasHelpers';
 import { DEFAULT_FILL, DEFAULT_STROKE, DEFAULT_STROKE_WIDTH, LINE_STROKE, LINE_STROKE_WIDTH, ARTBOARD_WIDTH, ARTBOARD_HEIGHT } from '../../utils/defaultStyles';
@@ -296,10 +296,11 @@ export default function CanvasArea() {
           });
           break;
         case 'ellipse':
-          shape = new Circle({
+          shape = new Ellipse({
             left: pointer.x,
             top: pointer.y,
-            radius: 0,
+            rx: 0,
+            ry: 0,
             fill: DEFAULT_FILL,
             stroke: DEFAULT_STROKE,
             strokeWidth: DEFAULT_STROKE_WIDTH,
@@ -388,12 +389,12 @@ export default function CanvasArea() {
           x2: e.shiftKey ? drawStart.current.x + width : pointer.x,
           y2: e.shiftKey ? drawStart.current.y + height : pointer.y,
         });
-      } else if (shape.type === 'circle') {
-        const radius = Math.max(Math.abs(width), Math.abs(height)) / 2;
-        (shape as Circle).set({
-          radius,
-          left: width < 0 ? drawStart.current.x - Math.abs(width) : drawStart.current.x,
-          top: height < 0 ? drawStart.current.y - Math.abs(height) : drawStart.current.y,
+      } else if (shape.type === 'ellipse') {
+        (shape as Ellipse).set({
+          rx: Math.abs(width) / 2,
+          ry: Math.abs(height) / 2,
+          left: width < 0 ? pointer.x : drawStart.current.x,
+          top: height < 0 ? pointer.y : drawStart.current.y,
         });
       } else if (shape.type === 'polygon') {
         const size = Math.max(Math.abs(width), Math.abs(height)) / 2;

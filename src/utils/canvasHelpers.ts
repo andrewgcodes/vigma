@@ -37,8 +37,8 @@ export function getLayersFromCanvas(canvas: Canvas): LayerInfo[] {
       const record = obj as unknown as Record<string, unknown>;
       // Exclude the artboard background
       if (record.name === 'artboard') return false;
-      // Exclude non-selectable, non-evented objects (like artboard)
-      if (obj.selectable === false && obj.evented === false) return false;
+      // The artboard is already filtered by name check above
+      // Do not filter locked user objects (selectable === false)
       return true;
     }
   );
