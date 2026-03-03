@@ -929,8 +929,10 @@ export class CanvasEngine {
       let snappedX = false
       let snappedY = false
 
+      // Exclude objects that are part of the ActiveSelection (multi-select) to avoid snapping to own members
+      const selObjs = (target instanceof ActiveSelection) ? new Set(target.getObjects()) : null
       const objects = this.canvas.getObjects().filter(
-        (o) => o !== target && !(o as any).isGrid && !(o as any).isPreview && o.visible !== false
+        (o) => o !== target && (!selObjs || !selObjs.has(o)) && !(o as any).isGrid && !(o as any).isPreview && o.visible !== false
       )
 
       for (const obj of objects) {
