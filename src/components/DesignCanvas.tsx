@@ -211,14 +211,29 @@ export default function DesignCanvas() {
       }
     };
 
+    // Smart guides on object moving
+    const handleObjectMoving = (opt: { target: unknown }) => {
+      if (opt.target) {
+        canvasEngine.showSmartGuides(opt.target as import('fabric').FabricObject);
+      }
+    };
+
+    const handleObjectModified = () => {
+      canvasEngine.clearSmartGuides();
+    };
+
     canvas.on('mouse:down', handleMouseDown);
     canvas.on('mouse:move', handleMouseMove);
     canvas.on('mouse:up', handleMouseUp);
+    canvas.on('object:moving', handleObjectMoving);
+    canvas.on('object:modified', handleObjectModified);
 
     return () => {
       canvas.off('mouse:down', handleMouseDown);
       canvas.off('mouse:move', handleMouseMove);
       canvas.off('mouse:up', handleMouseUp);
+      canvas.off('object:moving', handleObjectMoving);
+      canvas.off('object:modified', handleObjectModified);
     };
   }, [setActiveTool]);
 
@@ -294,6 +309,9 @@ export default function DesignCanvas() {
             break;
           case 'f':
             setActiveTool('frame');
+            break;
+          case 'i':
+            setActiveTool('eyedropper');
             break;
           case 'delete':
           case 'backspace':

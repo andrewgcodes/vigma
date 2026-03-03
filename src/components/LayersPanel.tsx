@@ -17,6 +17,9 @@ import {
   Frame,
   FolderOpen,
   GripVertical,
+  ChevronDown,
+  ChevronRight,
+  Star,
 } from 'lucide-react';
 import { useCanvasStore } from '@/store/canvas-store';
 import { canvasEngine } from '@/lib/canvas-engine';
@@ -27,6 +30,8 @@ interface LayerItem {
   name: string;
   visible: boolean;
   locked: boolean;
+  children?: LayerItem[];
+  depth?: number;
 }
 
 const typeIcons: Record<string, React.ReactNode> = {
@@ -42,6 +47,7 @@ const typeIcons: Record<string, React.ReactNode> = {
   line: <Minus size={14} />,
   frame: <Frame size={14} />,
   group: <FolderOpen size={14} />,
+  star: <Star size={14} />,
 };
 
 export default function LayersPanel() {
@@ -51,6 +57,7 @@ export default function LayersPanel() {
   const [editName, setEditName] = useState('');
   const [dragId, setDragId] = useState<string | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const editInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -105,6 +112,99 @@ export default function LayersPanel() {
     setDragOverIndex(null);
   }, []);
 
+  const toggleGroupCollapse = useCallback((id: string) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }, []);
+
+  const renderLayer = (layer: LayerItem, index: number, depth: number = 0) => {
+    const isGroup = layer.type === 'group';
+    const isCollapsed = collapsedGroups.has(layer.id);
+
+    return (
+      <React.Fragment key={layer.id}>
+        <div
+          className={`layer-item ${selectedObjectIds.includes(layer.id) ? 'selected' : ''} ${dragId === layer.id ? 'dragging' : ''} ${dragOverIndex === index ? 'drag-over' : ''}`}
+          style={{ paddingLeft: 12 + depth * 16 }}
+          onClick={() => canvasEngine.selectObjectById(layer.id)}
+          onDoubleClick={() => handleDoubleClick(layer)}
+          draggable
+          onDragStart={(e) => handleDragStart(e, layer.id)}
+          onDragOver={(e) => handleDragOver(e, index)}
+          onDrop={(e) => handleDrop(e, index)}
+          onDragEnd={handleDragEnd}
+        >
+          <span className="layer-drag-handle">
+            <GripVertical size={12} />
+          </span>
+          {isGroup && (
+            <button
+              className="layer-expand-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleGroupCollapse(layer.id);
+              }}
+            >
+              {isCollapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
+            </button>
+          )}
+          <span className="layer-icon">
+            {typeIcons[layer.type] || <Square size={14} />}
+          </span>
+          {editingId === layer.id ? (
+            <input
+              ref={editInputRef}
+              className="layer-rename-input"
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              onBlur={handleRenameSubmit}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleRenameSubmit();
+                if (e.key === 'Escape') setEditingId(null);
+                e.stopPropagation();
+              }}
+              onClick={(e) => e.stopPropagation()}
+            />
+          ) : (
+            <span className="layer-name">{layer.name}</span>
+          )}
+          <div className="layer-actions">
+            <button
+              className="layer-action-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                canvasEngine.toggleObjectVisibility(layer.id);
+              }}
+              title={layer.visible ? 'Hide' : 'Show'}
+            >
+              {layer.visible ? <Eye size={12} /> : <EyeOff size={12} />}
+            </button>
+            <button
+              className="layer-action-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                canvasEngine.toggleObjectLock(layer.id);
+              }}
+              title={layer.locked ? 'Unlock' : 'Lock'}
+            >
+              {layer.locked ? <Lock size={12} /> : <Unlock size={12} />}
+            </button>
+          </div>
+        </div>
+        {isGroup && !isCollapsed && layer.children && layer.children.map((child, childIdx) =>
+          renderLayer(child, index + childIdx + 1, depth + 1)
+        )}
+      </React.Fragment>
+    );
+  };
+
   if (!showLayers) return null;
 
   return (
@@ -119,65 +219,7 @@ export default function LayersPanel() {
             <p>No layers yet</p>
           </div>
         ) : (
-          layers.map((layer, index) => (
-            <div
-              key={layer.id}
-              className={`layer-item ${selectedObjectIds.includes(layer.id) ? 'selected' : ''} ${dragId === layer.id ? 'dragging' : ''} ${dragOverIndex === index ? 'drag-over' : ''}`}
-              onClick={() => canvasEngine.selectObjectById(layer.id)}
-              onDoubleClick={() => handleDoubleClick(layer)}
-              draggable
-              onDragStart={(e) => handleDragStart(e, layer.id)}
-              onDragOver={(e) => handleDragOver(e, index)}
-              onDrop={(e) => handleDrop(e, index)}
-              onDragEnd={handleDragEnd}
-            >
-              <span className="layer-drag-handle">
-                <GripVertical size={12} />
-              </span>
-              <span className="layer-icon">
-                {typeIcons[layer.type] || <Square size={14} />}
-              </span>
-              {editingId === layer.id ? (
-                <input
-                  ref={editInputRef}
-                  className="layer-rename-input"
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                  onBlur={handleRenameSubmit}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleRenameSubmit();
-                    if (e.key === 'Escape') setEditingId(null);
-                    e.stopPropagation();
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                />
-              ) : (
-                <span className="layer-name">{layer.name}</span>
-              )}
-              <div className="layer-actions">
-                <button
-                  className="layer-action-btn"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    canvasEngine.toggleObjectVisibility(layer.id);
-                  }}
-                  title={layer.visible ? 'Hide' : 'Show'}
-                >
-                  {layer.visible ? <Eye size={12} /> : <EyeOff size={12} />}
-                </button>
-                <button
-                  className="layer-action-btn"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    canvasEngine.toggleObjectLock(layer.id);
-                  }}
-                  title={layer.locked ? 'Unlock' : 'Lock'}
-                >
-                  {layer.locked ? <Lock size={12} /> : <Unlock size={12} />}
-                </button>
-              </div>
-            </div>
-          ))
+          layers.map((layer, index) => renderLayer(layer, index))
         )}
       </div>
     </div>

@@ -1066,6 +1066,138 @@ html, body {
   color: var(--accent);
 }
 
+/* ========== PANEL RESIZE HANDLE ========== */
+
+.panel-resize-handle {
+  width: 4px;
+  cursor: col-resize;
+  background: transparent;
+  transition: background var(--transition-fast);
+  flex-shrink: 0;
+  z-index: 10;
+  position: relative;
+}
+
+.panel-resize-handle:hover,
+.panel-resize-handle:active {
+  background: var(--accent);
+}
+
+.panel-resize-handle::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -3px;
+  right: -3px;
+}
+
+/* ========== RULERS ========== */
+
+.ruler-corner {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 20px;
+  height: 20px;
+  background: #f5f5f7;
+  border-right: 1px solid var(--border-primary);
+  border-bottom: 1px solid var(--border-primary);
+  z-index: 15;
+}
+
+.ruler-horizontal {
+  position: absolute;
+  top: 0;
+  left: 20px;
+  right: 0;
+  height: 20px;
+  z-index: 14;
+  overflow: hidden;
+}
+
+.ruler-horizontal canvas {
+  display: block;
+  width: 100%;
+  height: 20px;
+}
+
+.ruler-vertical {
+  position: absolute;
+  top: 20px;
+  left: 0;
+  bottom: 0;
+  width: 20px;
+  z-index: 14;
+  overflow: hidden;
+}
+
+.ruler-vertical canvas {
+  display: block;
+  width: 20px;
+  height: 100%;
+}
+
+/* ========== LAYER EXPAND BUTTON ========== */
+
+.layer-expand-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  border-radius: 3px;
+  flex-shrink: 0;
+  padding: 0;
+  transition: all var(--transition-fast);
+}
+
+.layer-expand-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+/* ========== SECTION HEADER ACTIONS ========== */
+
+.section-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.section-toggle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 0;
+  transition: all var(--transition-fast);
+}
+
+.section-toggle-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+/* ========== TOOLBAR SEPARATOR ========== */
+
+.toolbar-separator {
+  width: 24px;
+  height: 1px;
+  background: var(--border-primary);
+  margin: 4px auto;
+}
+
 /* ========== RESPONSIVE ========== */
 
 @media (max-width: 768px) {

@@ -7,10 +7,19 @@ import {
   AlignRight,
   Bold,
   Italic,
+  Underline,
+  Strikethrough,
   RotateCcw,
   ChevronDown,
   ChevronRight,
-  Sun,
+  FlipHorizontal2,
+  FlipVertical2,
+  Lock,
+  Unlock,
+  Download,
+  Plus,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { useCanvasStore } from '@/store/canvas-store';
 import { canvasEngine } from '@/lib/canvas-engine';
@@ -25,8 +34,37 @@ const fontFamilies = [
   'Courier New',
   'Verdana',
   'Trebuchet MS',
-  'Impact',
-  'Comic Sans MS',
+  'Roboto',
+  'Open Sans',
+  'Lato',
+  'Montserrat',
+  'Poppins',
+  'Raleway',
+  'Playfair Display',
+  'Source Code Pro',
+  'Fira Code',
+  'Space Grotesk',
+  'DM Sans',
+  'JetBrains Mono',
+];
+
+const blendModes = [
+  'source-over',
+  'multiply',
+  'screen',
+  'overlay',
+  'darken',
+  'lighten',
+  'color-dodge',
+  'color-burn',
+  'hard-light',
+  'soft-light',
+  'difference',
+  'exclusion',
+  'hue',
+  'saturation',
+  'color',
+  'luminosity',
 ];
 
 export default function PropertiesPanel() {
@@ -56,16 +94,36 @@ export default function PropertiesPanel() {
   const [sizeW, setSizeW] = useState(0);
   const [sizeH, setSizeH] = useState(0);
   const [angle, setAngle] = useState(0);
+  const [lockAspect, setLockAspect] = useState(false);
   const [showTransform, setShowTransform] = useState(true);
   const [showFill, setShowFill] = useState(true);
   const [showStroke, setShowStroke] = useState(true);
-  const [showShadow, setShowShadow] = useState(false);
+  const [showShadow, setShowShadow] = useState(true);
   const [showTypography, setShowTypography] = useState(true);
   const [showGradient, setShowGradient] = useState(false);
+  const [showAppearance, setShowAppearance] = useState(true);
+  const [showExport, setShowExport] = useState(false);
   const [gradientType, setGradientType] = useState<'linear' | 'radial'>('linear');
   const [gradientAngle, setGradientAngle] = useState(0);
   const [gradientColor1, setGradientColor1] = useState('#6366f1');
   const [gradientColor2, setGradientColor2] = useState('#ec4899');
+
+  // Typography extras
+  const [lineHeight, setLineHeight] = useState(1.2);
+  const [charSpacing, setCharSpacing] = useState(0);
+  const [textUnderline, setTextUnderline] = useState(false);
+  const [textLinethrough, setTextLinethrough] = useState(false);
+
+  // Blend mode
+  const [blendMode, setBlendMode] = useState('source-over');
+
+  // Export settings
+  const [exportScale, setExportScale] = useState(2);
+  const [exportFormat, setExportFormat] = useState<'png' | 'svg'>('png');
+
+  // Additional fills
+  const [fillEnabled, setFillEnabled] = useState(true);
+  const [strokeEnabled, setStrokeEnabled] = useState(true);
 
   const syncProps = useCallback(() => {
     const props = canvasEngine.getSelectedObjectProperties();
@@ -77,8 +135,14 @@ export default function PropertiesPanel() {
       setSizeH(props.height as number || 0);
       setAngle(props.angle as number || 0);
 
-      if (typeof props.fill === 'string') setFillColor(props.fill);
-      if (typeof props.stroke === 'string') setStrokeColor(props.stroke);
+      if (typeof props.fill === 'string') {
+        setFillColor(props.fill);
+        setFillEnabled(props.fill !== 'transparent' && props.fill !== '');
+      }
+      if (typeof props.stroke === 'string') {
+        setStrokeColor(props.stroke);
+        setStrokeEnabled(!!props.stroke && props.stroke !== 'transparent');
+      }
       if (typeof props.strokeWidth === 'number') setStrokeWidth(props.strokeWidth);
       if (typeof props.opacity === 'number') setOpacity(props.opacity);
       if (typeof props.rx === 'number') setCornerRadius(props.rx);
@@ -87,6 +151,10 @@ export default function PropertiesPanel() {
       if (typeof props.fontWeight === 'string') setFontWeight(props.fontWeight);
       if (typeof props.fontStyle === 'string') setFontStyle(props.fontStyle);
       if (typeof props.textAlign === 'string') setTextAlign(props.textAlign);
+      if (typeof props.lineHeight === 'number') setLineHeight(props.lineHeight);
+      if (typeof props.charSpacing === 'number') setCharSpacing(props.charSpacing);
+      if (typeof props.underline === 'boolean') setTextUnderline(props.underline);
+      if (typeof props.linethrough === 'boolean') setTextLinethrough(props.linethrough);
 
       if (props.shadow) {
         setShadowEnabled(true);
@@ -95,6 +163,8 @@ export default function PropertiesPanel() {
         if (typeof s.blur === 'number') setShadowBlur(s.blur);
         if (typeof s.offsetX === 'number') setShadowOffsetX(s.offsetX);
         if (typeof s.offsetY === 'number') setShadowOffsetY(s.offsetY);
+      } else {
+        setShadowEnabled(false);
       }
     }
   }, [setFillColor, setStrokeColor, setStrokeWidth, setOpacity, setCornerRadius, setFontSize, setFontFamily, setFontWeight, setFontStyle, setTextAlign, setShadowEnabled, setShadowColor, setShadowBlur, setShadowOffsetX, setShadowOffsetY]);
@@ -103,7 +173,6 @@ export default function PropertiesPanel() {
     syncProps();
   }, [selectedObjectIds, syncProps]);
 
-  // Watch for canvas changes
   useEffect(() => {
     const interval = setInterval(() => {
       if (selectedObjectIds.length > 0) {
@@ -120,6 +189,29 @@ export default function PropertiesPanel() {
     return () => clearInterval(interval);
   }, [selectedObjectIds]);
 
+  const handleExportSelected = () => {
+    if (exportFormat === 'png') {
+      const data = canvasEngine.exportSelectedToPNG(exportScale);
+      const a = document.createElement('a');
+      a.href = data;
+      a.download = `vigma-export-${exportScale}x.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } else {
+      const data = canvasEngine.exportSelectedToSVG();
+      const blob = new Blob([data], { type: 'image/svg+xml' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'vigma-export.svg';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+  };
+
   if (!showProperties) return null;
 
   const isText = objProps?.type === 'i-text' || objProps?.type === 'textbox';
@@ -129,7 +221,7 @@ export default function PropertiesPanel() {
   return (
     <div className="properties-panel">
       <div className="panel-header">
-        <span>Properties</span>
+        <span>Design</span>
       </div>
 
       {!hasSelection ? (
@@ -144,85 +236,205 @@ export default function PropertiesPanel() {
               className="prop-section-header clickable"
               onClick={() => setShowTransform(!showTransform)}
             >
-              <span>Transform</span>
+              <span>Position</span>
               {showTransform ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
             </div>
             {showTransform && (
-              <div className="prop-grid">
-                <div className="prop-field">
-                  <label>X</label>
-                  <input
-                    type="number"
-                    value={posX}
-                    onChange={(e) => {
-                      const v = parseInt(e.target.value) || 0;
-                      setPosX(v);
-                      canvasEngine.setSelectedPosition(v, posY);
-                    }}
-                  />
+              <>
+                <div className="prop-grid">
+                  <div className="prop-field">
+                    <label>X</label>
+                    <input
+                      type="number"
+                      value={posX}
+                      onChange={(e) => {
+                        const v = parseInt(e.target.value) || 0;
+                        setPosX(v);
+                        canvasEngine.setSelectedPosition(v, posY);
+                      }}
+                    />
+                  </div>
+                  <div className="prop-field">
+                    <label>Y</label>
+                    <input
+                      type="number"
+                      value={posY}
+                      onChange={(e) => {
+                        const v = parseInt(e.target.value) || 0;
+                        setPosY(v);
+                        canvasEngine.setSelectedPosition(posX, v);
+                      }}
+                    />
+                  </div>
+                  <div className="prop-field">
+                    <label>W</label>
+                    <input
+                      type="number"
+                      value={sizeW}
+                      onChange={(e) => {
+                        const v = parseInt(e.target.value) || 0;
+                        setSizeW(v);
+                        if (lockAspect) {
+                          canvasEngine.setSelectedSizeConstrained(v, sizeH, true);
+                        } else {
+                          canvasEngine.setSelectedSize(v, sizeH);
+                        }
+                      }}
+                    />
+                  </div>
+                  <div className="prop-field">
+                    <label>H</label>
+                    <input
+                      type="number"
+                      value={sizeH}
+                      onChange={(e) => {
+                        const v = parseInt(e.target.value) || 0;
+                        setSizeH(v);
+                        if (lockAspect) {
+                          canvasEngine.setSelectedSizeConstrained(sizeW, v, true);
+                        } else {
+                          canvasEngine.setSelectedSize(sizeW, v);
+                        }
+                      }}
+                    />
+                  </div>
                 </div>
-                <div className="prop-field">
-                  <label>Y</label>
-                  <input
-                    type="number"
-                    value={posY}
-                    onChange={(e) => {
-                      const v = parseInt(e.target.value) || 0;
-                      setPosY(v);
-                      canvasEngine.setSelectedPosition(posX, v);
-                    }}
-                  />
+                <div className="prop-row button-row">
+                  <div className="prop-field" style={{ flex: 1 }}>
+                    <label><RotateCcw size={12} /></label>
+                    <input
+                      type="number"
+                      value={angle}
+                      onChange={(e) => {
+                        const v = parseInt(e.target.value) || 0;
+                        setAngle(v);
+                        canvasEngine.setSelectedAngle(v);
+                      }}
+                      style={{ width: 56 }}
+                    />
+                    <span className="range-value">&deg;</span>
+                  </div>
+                  <button
+                    className={`icon-btn ${lockAspect ? 'active' : ''}`}
+                    onClick={() => setLockAspect(!lockAspect)}
+                    title={lockAspect ? 'Unlock Aspect Ratio' : 'Lock Aspect Ratio'}
+                  >
+                    {lockAspect ? <Lock size={14} /> : <Unlock size={14} />}
+                  </button>
+                  <button
+                    className="icon-btn"
+                    onClick={() => canvasEngine.flipSelectedHorizontal()}
+                    title="Flip Horizontal"
+                  >
+                    <FlipHorizontal2 size={14} />
+                  </button>
+                  <button
+                    className="icon-btn"
+                    onClick={() => canvasEngine.flipSelectedVertical()}
+                    title="Flip Vertical"
+                  >
+                    <FlipVertical2 size={14} />
+                  </button>
                 </div>
-                <div className="prop-field">
-                  <label>W</label>
-                  <input
-                    type="number"
-                    value={sizeW}
-                    onChange={(e) => {
-                      const v = parseInt(e.target.value) || 0;
-                      setSizeW(v);
-                      canvasEngine.setSelectedSize(v, sizeH);
-                    }}
-                  />
+              </>
+            )}
+          </div>
+
+          {/* Appearance */}
+          <div className="prop-section">
+            <div
+              className="prop-section-header clickable"
+              onClick={() => setShowAppearance(!showAppearance)}
+            >
+              <span>Appearance</span>
+              {showAppearance ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            </div>
+            {showAppearance && (
+              <>
+                <div className="prop-row">
+                  <div className="prop-field" style={{ flex: 1 }}>
+                    <label>Opacity</label>
+                    <input
+                      type="range"
+                      min={0}
+                      max={1}
+                      step={0.01}
+                      value={opacity}
+                      onChange={(e) => {
+                        const v = parseFloat(e.target.value);
+                        setOpacity(v);
+                        canvasEngine.setSelectedOpacity(v);
+                      }}
+                      style={{ flex: 1 }}
+                    />
+                    <span className="range-value">{Math.round(opacity * 100)}%</span>
+                  </div>
                 </div>
-                <div className="prop-field">
-                  <label>H</label>
-                  <input
-                    type="number"
-                    value={sizeH}
-                    onChange={(e) => {
-                      const v = parseInt(e.target.value) || 0;
-                      setSizeH(v);
-                      canvasEngine.setSelectedSize(sizeW, v);
-                    }}
-                  />
+                {isRect && (
+                  <div className="prop-row">
+                    <div className="prop-field" style={{ flex: 1 }}>
+                      <label>Radius</label>
+                      <input
+                        type="range"
+                        min={0}
+                        max={100}
+                        value={cornerRadius}
+                        onChange={(e) => {
+                          const v = parseInt(e.target.value);
+                          setCornerRadius(v);
+                          canvasEngine.setSelectedCornerRadius(v);
+                        }}
+                        style={{ flex: 1 }}
+                      />
+                      <span className="range-value">{cornerRadius}px</span>
+                    </div>
+                  </div>
+                )}
+                <div className="prop-row">
+                  <div className="prop-field" style={{ flex: 1 }}>
+                    <label>Blend</label>
+                    <select
+                      value={blendMode}
+                      onChange={(e) => {
+                        setBlendMode(e.target.value);
+                        canvasEngine.setSelectedBlendMode(e.target.value as GlobalCompositeOperation);
+                      }}
+                      style={{ flex: 1 }}
+                    >
+                      {blendModes.map((m) => (
+                        <option key={m} value={m}>{m === 'source-over' ? 'Normal' : m.charAt(0).toUpperCase() + m.slice(1)}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
-                <div className="prop-field">
-                  <label><RotateCcw size={12} /></label>
-                  <input
-                    type="number"
-                    value={angle}
-                    onChange={(e) => {
-                      const v = parseInt(e.target.value) || 0;
-                      setAngle(v);
-                      canvasEngine.setSelectedAngle(v);
-                    }}
-                  />
-                </div>
-              </div>
+              </>
             )}
           </div>
 
           {/* Fill */}
           <div className="prop-section">
-            <div
-              className="prop-section-header clickable"
-              onClick={() => setShowFill(!showFill)}
-            >
+            <div className="prop-section-header clickable" onClick={() => setShowFill(!showFill)}>
               <span>Fill</span>
-              {showFill ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              <div className="section-header-actions">
+                <button
+                  className="section-toggle-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setFillEnabled(!fillEnabled);
+                    if (fillEnabled) {
+                      canvasEngine.setSelectedFill('transparent');
+                    } else {
+                      canvasEngine.setSelectedFill(fillColor);
+                    }
+                  }}
+                  title={fillEnabled ? 'Disable Fill' : 'Enable Fill'}
+                >
+                  {fillEnabled ? <Eye size={12} /> : <EyeOff size={12} />}
+                </button>
+                {showFill ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              </div>
             </div>
-            {showFill && (
+            {showFill && fillEnabled && (
               <div className="prop-row">
                 <ColorPicker
                   color={fillColor}
@@ -238,14 +450,42 @@ export default function PropertiesPanel() {
 
           {/* Stroke */}
           <div className="prop-section">
-            <div
-              className="prop-section-header clickable"
-              onClick={() => setShowStroke(!showStroke)}
-            >
+            <div className="prop-section-header clickable" onClick={() => setShowStroke(!showStroke)}>
               <span>Stroke</span>
-              {showStroke ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              <div className="section-header-actions">
+                <button
+                  className="section-toggle-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setStrokeEnabled(!strokeEnabled);
+                    if (strokeEnabled) {
+                      canvasEngine.setSelectedStroke('transparent');
+                      canvasEngine.setSelectedStrokeWidth(0);
+                    } else {
+                      canvasEngine.setSelectedStroke(strokeColor);
+                      canvasEngine.setSelectedStrokeWidth(strokeWidth || 1);
+                    }
+                  }}
+                  title={strokeEnabled ? 'Disable Stroke' : 'Enable Stroke'}
+                >
+                  {strokeEnabled ? <Eye size={12} /> : <EyeOff size={12} />}
+                </button>
+                <button
+                  className="section-toggle-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setStrokeEnabled(true);
+                    canvasEngine.setSelectedStroke(strokeColor || '#000000');
+                    canvasEngine.setSelectedStrokeWidth(strokeWidth || 1);
+                  }}
+                  title="Add Stroke"
+                >
+                  <Plus size={12} />
+                </button>
+                {showStroke ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              </div>
             </div>
-            {showStroke && (
+            {showStroke && strokeEnabled && (
               <>
                 <div className="prop-row">
                   <ColorPicker
@@ -257,78 +497,51 @@ export default function PropertiesPanel() {
                   />
                   <span className="color-hex">{strokeColor}</span>
                 </div>
-                <div className="prop-field full-width">
-                  <label>Width</label>
-                  <input
-                    type="number"
-                    min={0}
-                    max={50}
-                    value={strokeWidth}
-                    onChange={(e) => {
-                      const v = parseFloat(e.target.value) || 0;
-                      setStrokeWidth(v);
-                      canvasEngine.setSelectedStrokeWidth(v);
-                    }}
-                  />
+                <div className="prop-grid">
+                  <div className="prop-field">
+                    <label>Weight</label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={50}
+                      value={strokeWidth}
+                      onChange={(e) => {
+                        const v = parseFloat(e.target.value) || 0;
+                        setStrokeWidth(v);
+                        canvasEngine.setSelectedStrokeWidth(v);
+                      }}
+                    />
+                  </div>
                 </div>
               </>
             )}
           </div>
 
-          {/* Corner Radius (rect only) */}
-          {isRect && (
-            <div className="prop-section">
-              <div className="prop-section-header">
-                <span>Corner Radius</span>
-              </div>
-              <div className="prop-field full-width">
-                <input
-                  type="range"
-                  min={0}
-                  max={100}
-                  value={cornerRadius}
-                  onChange={(e) => {
-                    const v = parseInt(e.target.value);
-                    setCornerRadius(v);
-                    canvasEngine.setSelectedCornerRadius(v);
+          {/* Effects (Shadow) */}
+          <div className="prop-section">
+            <div className="prop-section-header clickable" onClick={() => setShowShadow(!showShadow)}>
+              <span>Effects</span>
+              <div className="section-header-actions">
+                <button
+                  className="section-toggle-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (!shadowEnabled) {
+                      setShadowEnabled(true);
+                      canvasEngine.setSelectedShadow({
+                        color: shadowColor,
+                        blur: shadowBlur,
+                        offsetX: shadowOffsetX,
+                        offsetY: shadowOffsetY,
+                      });
+                    }
                   }}
-                />
-                <span className="range-value">{cornerRadius}px</span>
+                  title="Add Effect"
+                >
+                  <Plus size={12} />
+                </button>
+                {showShadow ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
               </div>
-            </div>
-          )}
-
-          {/* Opacity */}
-          <div className="prop-section">
-            <div className="prop-section-header">
-              <span>Opacity</span>
-            </div>
-            <div className="prop-field full-width">
-              <Sun size={14} />
-              <input
-                type="range"
-                min={0}
-                max={1}
-                step={0.01}
-                value={opacity}
-                onChange={(e) => {
-                  const v = parseFloat(e.target.value);
-                  setOpacity(v);
-                  canvasEngine.setSelectedOpacity(v);
-                }}
-              />
-              <span className="range-value">{Math.round(opacity * 100)}%</span>
-            </div>
-          </div>
-
-          {/* Shadow */}
-          <div className="prop-section">
-            <div
-              className="prop-section-header clickable"
-              onClick={() => setShowShadow(!showShadow)}
-            >
-              <span>Shadow</span>
-              {showShadow ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
             </div>
             {showShadow && (
               <>
@@ -351,7 +564,7 @@ export default function PropertiesPanel() {
                         }
                       }}
                     />
-                    <span>Enable</span>
+                    <span>Drop Shadow</span>
                   </label>
                 </div>
                 {shadowEnabled && (
@@ -538,6 +751,37 @@ export default function PropertiesPanel() {
                         }}
                       />
                     </div>
+                    <div className="prop-field">
+                      <label>Line</label>
+                      <input
+                        type="number"
+                        min={0.5}
+                        max={5}
+                        step={0.1}
+                        value={lineHeight}
+                        onChange={(e) => {
+                          const v = parseFloat(e.target.value) || 1.2;
+                          setLineHeight(v);
+                          canvasEngine.setSelectedLineHeight(v);
+                        }}
+                      />
+                    </div>
+                  </div>
+                  <div className="prop-grid">
+                    <div className="prop-field">
+                      <label>Spacing</label>
+                      <input
+                        type="number"
+                        min={-200}
+                        max={1000}
+                        value={charSpacing}
+                        onChange={(e) => {
+                          const v = parseInt(e.target.value) || 0;
+                          setCharSpacing(v);
+                          canvasEngine.setSelectedCharSpacing(v);
+                        }}
+                      />
+                    </div>
                   </div>
                   <div className="prop-row button-row">
                     <button
@@ -561,6 +805,28 @@ export default function PropertiesPanel() {
                       title="Italic"
                     >
                       <Italic size={14} />
+                    </button>
+                    <button
+                      className={`icon-btn ${textUnderline ? 'active' : ''}`}
+                      onClick={() => {
+                        const v = !textUnderline;
+                        setTextUnderline(v);
+                        canvasEngine.setSelectedUnderline(v);
+                      }}
+                      title="Underline"
+                    >
+                      <Underline size={14} />
+                    </button>
+                    <button
+                      className={`icon-btn ${textLinethrough ? 'active' : ''}`}
+                      onClick={() => {
+                        const v = !textLinethrough;
+                        setTextLinethrough(v);
+                        canvasEngine.setSelectedLinethrough(v);
+                      }}
+                      title="Strikethrough"
+                    >
+                      <Strikethrough size={14} />
                     </button>
                     <div className="separator" />
                     <button
@@ -598,6 +864,67 @@ export default function PropertiesPanel() {
               )}
             </div>
           )}
+
+          {/* Export */}
+          <div className="prop-section">
+            <div
+              className="prop-section-header clickable"
+              onClick={() => setShowExport(!showExport)}
+            >
+              <span>Export</span>
+              <div className="section-header-actions">
+                <button
+                  className="section-toggle-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowExport(true);
+                  }}
+                  title="Add Export"
+                >
+                  <Plus size={12} />
+                </button>
+                {showExport ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              </div>
+            </div>
+            {showExport && (
+              <>
+                <div className="prop-grid">
+                  <div className="prop-field">
+                    <label>Scale</label>
+                    <select
+                      value={exportScale}
+                      onChange={(e) => setExportScale(parseInt(e.target.value))}
+                    >
+                      <option value={1}>1x</option>
+                      <option value={2}>2x</option>
+                      <option value={3}>3x</option>
+                      <option value={4}>4x</option>
+                    </select>
+                  </div>
+                  <div className="prop-field">
+                    <label>Format</label>
+                    <select
+                      value={exportFormat}
+                      onChange={(e) => setExportFormat(e.target.value as 'png' | 'svg')}
+                    >
+                      <option value="png">PNG</option>
+                      <option value="svg">SVG</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="prop-row">
+                  <button
+                    className="apply-gradient-btn"
+                    onClick={handleExportSelected}
+                    style={{ width: '100%', margin: '0 0 8px 0', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+                  >
+                    <Download size={14} />
+                    Export Selection
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       )}
     </div>

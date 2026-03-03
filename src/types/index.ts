@@ -10,7 +10,8 @@ export type ToolType =
   | 'text'
   | 'pen'
   | 'image'
-  | 'frame';
+  | 'frame'
+  | 'eyedropper';
 
 export interface CanvasObject {
   id: string;

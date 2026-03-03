@@ -696,8 +696,12 @@ export class CanvasEngine {
     if (active.length === 0) return;
     active.forEach((obj) => {
       obj.set({
-        left: this.snapValue((obj.left || 0) + dx),
-        top: this.snapValue((obj.top || 0) + dy),
+        left: this.snapEnabled
+          ? (obj.left || 0) + (dx !== 0 ? Math.sign(dx) * this.snapGridSize : 0)
+          : (obj.left || 0) + dx,
+        top: this.snapEnabled
+          ? (obj.top || 0) + (dy !== 0 ? Math.sign(dy) * this.snapGridSize : 0)
+          : (obj.top || 0) + dy,
       });
       obj.setCoords();
     });
@@ -1505,6 +1509,347 @@ export class CanvasEngine {
     if (!this.canvas) return;
     this.canvas.backgroundColor = color;
     this.canvas.requestRenderAll();
+  }
+
+  // Flip operations
+  flipSelectedHorizontal() {
+    if (!this.canvas) return;
+    const active = this.canvas.getActiveObjects();
+    active.forEach((obj) => {
+      obj.set({ flipX: !obj.flipX });
+    });
+    this.canvas.requestRenderAll();
+    this.saveHistory();
+  }
+
+  flipSelectedVertical() {
+    if (!this.canvas) return;
+    const active = this.canvas.getActiveObjects();
+    active.forEach((obj) => {
+      obj.set({ flipY: !obj.flipY });
+    });
+    this.canvas.requestRenderAll();
+    this.saveHistory();
+  }
+
+  // Line height
+  setSelectedLineHeight(value: number) {
+    if (!this.canvas) return;
+    const active = this.canvas.getActiveObjects();
+    active.forEach((obj) => {
+      if (obj.type === 'i-text' || obj.type === 'textbox') {
+        (obj as fabric.IText).set({ lineHeight: value });
+      }
+    });
+    this.canvas.requestRenderAll();
+    this.saveHistory();
+  }
+
+  // Letter spacing (charSpacing in fabric.js is in 1/1000 em)
+  setSelectedCharSpacing(value: number) {
+    if (!this.canvas) return;
+    const active = this.canvas.getActiveObjects();
+    active.forEach((obj) => {
+      if (obj.type === 'i-text' || obj.type === 'textbox') {
+        (obj as fabric.IText).set({ charSpacing: value });
+      }
+    });
+    this.canvas.requestRenderAll();
+    this.saveHistory();
+  }
+
+  // Text decoration
+  setSelectedUnderline(value: boolean) {
+    if (!this.canvas) return;
+    const active = this.canvas.getActiveObjects();
+    active.forEach((obj) => {
+      if (obj.type === 'i-text' || obj.type === 'textbox') {
+        (obj as fabric.IText).set({ underline: value });
+      }
+    });
+    this.canvas.requestRenderAll();
+    this.saveHistory();
+  }
+
+  setSelectedLinethrough(value: boolean) {
+    if (!this.canvas) return;
+    const active = this.canvas.getActiveObjects();
+    active.forEach((obj) => {
+      if (obj.type === 'i-text' || obj.type === 'textbox') {
+        (obj as fabric.IText).set({ linethrough: value });
+      }
+    });
+    this.canvas.requestRenderAll();
+    this.saveHistory();
+  }
+
+  // Blend mode / globalCompositeOperation
+  setSelectedBlendMode(mode: GlobalCompositeOperation) {
+    if (!this.canvas) return;
+    const active = this.canvas.getActiveObjects();
+    active.forEach((obj) => {
+      obj.set({ globalCompositeOperation: mode });
+    });
+    this.canvas.requestRenderAll();
+    this.saveHistory();
+  }
+
+  // Export selected object(s)
+  exportSelectedToPNG(multiplier: number = 2): string {
+    if (!this.canvas) return '';
+    const active = this.canvas.getActiveObject();
+    if (!active) return this.exportToPNG(multiplier);
+    return active.toDataURL({
+      format: 'png',
+      quality: 1,
+      multiplier,
+    });
+  }
+
+  exportSelectedToSVG(): string {
+    if (!this.canvas) return '';
+    const active = this.canvas.getActiveObject();
+    if (!active) return this.exportToSVG();
+    return active.toSVG();
+  }
+
+  // Boolean operations (using clip paths for union/subtract/intersect)
+  booleanUnion() {
+    if (!this.canvas) return;
+    const active = this.canvas.getActiveObject();
+    if (!active || active.type !== 'activeSelection') return;
+    // Group objects as a visual union
+    this.groupSelected();
+  }
+
+  booleanSubtract() {
+    if (!this.canvas) return;
+    const active = this.canvas.getActiveObject();
+    if (!active || active.type !== 'activeSelection') return;
+    const selection = active as fabric.ActiveSelection;
+    const objects = selection.getObjects();
+    if (objects.length < 2) return;
+
+    // Use the first object as base, apply inverted clip path from second
+    const base = objects[0];
+    const clipObj = objects[1];
+    this.historyPaused = true;
+    // Remove clipObj from canvas
+    this.canvas.remove(clipObj);
+    this.canvas.discardActiveObject();
+    // Set clip path (inverted)
+    base.clipPath = clipObj;
+    (base.clipPath as fabric.FabricObject & { inverted?: boolean }).inverted = true;
+    base.clipPath.absolutePositioned = true;
+    this.historyPaused = false;
+    this.canvas.requestRenderAll();
+    this.saveHistory();
+  }
+
+  booleanIntersect() {
+    if (!this.canvas) return;
+    const active = this.canvas.getActiveObject();
+    if (!active || active.type !== 'activeSelection') return;
+    const selection = active as fabric.ActiveSelection;
+    const objects = selection.getObjects();
+    if (objects.length < 2) return;
+
+    const base = objects[0];
+    const clipObj = objects[1];
+    this.historyPaused = true;
+    this.canvas.remove(clipObj);
+    this.canvas.discardActiveObject();
+    base.clipPath = clipObj;
+    base.clipPath.absolutePositioned = true;
+    this.historyPaused = false;
+    this.canvas.requestRenderAll();
+    this.saveHistory();
+  }
+
+  // Smart guides
+  private smartGuides: fabric.Line[] = [];
+
+  showSmartGuides(movingObj: fabric.FabricObject) {
+    if (!this.canvas) return;
+    this.clearSmartGuides();
+
+    const objects = this.canvas.getObjects().filter(
+      (o) => o !== movingObj &&
+        (o as fabric.FabricObject & { customType?: string }).customType !== 'grid' &&
+        (o as fabric.FabricObject & { customType?: string }).customType !== 'smartGuide'
+    );
+
+    const SNAP_THRESHOLD = 5;
+    const movingBounds = movingObj.getBoundingRect();
+    const movingCenter = {
+      x: movingBounds.left + movingBounds.width / 2,
+      y: movingBounds.top + movingBounds.height / 2,
+    };
+
+    objects.forEach((obj) => {
+      const bounds = obj.getBoundingRect();
+      const center = {
+        x: bounds.left + bounds.width / 2,
+        y: bounds.top + bounds.height / 2,
+      };
+
+      // Vertical center alignment
+      if (Math.abs(movingCenter.x - center.x) < SNAP_THRESHOLD) {
+        this.addSmartGuideLine(center.x, 0, center.x, this.canvas!.height || 600);
+      }
+      // Horizontal center alignment
+      if (Math.abs(movingCenter.y - center.y) < SNAP_THRESHOLD) {
+        this.addSmartGuideLine(0, center.y, this.canvas!.width || 800, center.y);
+      }
+      // Left edge alignment
+      if (Math.abs(movingBounds.left - bounds.left) < SNAP_THRESHOLD) {
+        this.addSmartGuideLine(bounds.left, 0, bounds.left, this.canvas!.height || 600);
+      }
+      // Right edge alignment
+      if (Math.abs(movingBounds.left + movingBounds.width - (bounds.left + bounds.width)) < SNAP_THRESHOLD) {
+        const x = bounds.left + bounds.width;
+        this.addSmartGuideLine(x, 0, x, this.canvas!.height || 600);
+      }
+      // Top edge alignment
+      if (Math.abs(movingBounds.top - bounds.top) < SNAP_THRESHOLD) {
+        this.addSmartGuideLine(0, bounds.top, this.canvas!.width || 800, bounds.top);
+      }
+      // Bottom edge alignment
+      if (Math.abs(movingBounds.top + movingBounds.height - (bounds.top + bounds.height)) < SNAP_THRESHOLD) {
+        const y = bounds.top + bounds.height;
+        this.addSmartGuideLine(0, y, this.canvas!.width || 800, y);
+      }
+    });
+  }
+
+  private addSmartGuideLine(x1: number, y1: number, x2: number, y2: number) {
+    if (!this.canvas) return;
+    const line = new fabric.Line([x1, y1, x2, y2], {
+      stroke: '#ff4081',
+      strokeWidth: 1,
+      strokeDashArray: [4, 4],
+      selectable: false,
+      evented: false,
+      excludeFromExport: true,
+    });
+    (line as fabric.FabricObject & { customType?: string }).customType = 'smartGuide';
+    this.canvas.add(line);
+    this.smartGuides.push(line);
+  }
+
+  clearSmartGuides() {
+    if (!this.canvas) return;
+    this.smartGuides.forEach((line) => {
+      this.historyPaused = true;
+      this.canvas!.remove(line);
+      this.historyPaused = false;
+    });
+    this.smartGuides = [];
+  }
+
+  // Rulers data
+  getRulerData(): { horizontal: number[]; vertical: number[] } {
+    if (!this.canvas) return { horizontal: [], vertical: [] };
+    const zoom = this.canvas.getZoom();
+    const vpt = this.canvas.viewportTransform!;
+    const width = this.canvas.width || 800;
+    const height = this.canvas.height || 600;
+
+    // Determine ruler step based on zoom level
+    let step = 100;
+    if (zoom > 2) step = 50;
+    if (zoom > 4) step = 25;
+    if (zoom < 0.5) step = 200;
+    if (zoom < 0.25) step = 500;
+
+    const horizontal: number[] = [];
+    const vertical: number[] = [];
+
+    const startX = Math.floor(-vpt[4] / zoom / step) * step;
+    const endX = Math.ceil((width - vpt[4]) / zoom / step) * step;
+    for (let x = startX; x <= endX; x += step) {
+      horizontal.push(x);
+    }
+
+    const startY = Math.floor(-vpt[5] / zoom / step) * step;
+    const endY = Math.ceil((height - vpt[5]) / zoom / step) * step;
+    for (let y = startY; y <= endY; y += step) {
+      vertical.push(y);
+    }
+
+    return { horizontal, vertical };
+  }
+
+  // Get viewport transform for ruler positioning
+  getViewportTransform(): number[] {
+    if (!this.canvas) return [1, 0, 0, 1, 0, 0];
+    return [...(this.canvas.viewportTransform || [1, 0, 0, 1, 0, 0])];
+  }
+
+  // Aspect ratio constrained resize
+  setSelectedSizeConstrained(w: number, h: number, lockAspect: boolean) {
+    if (!this.canvas) return;
+    const active = this.canvas.getActiveObjects();
+    active.forEach((obj) => {
+      if (lockAspect) {
+        const currentW = (obj.width || 1) * (obj.scaleX || 1);
+        const currentH = (obj.height || 1) * (obj.scaleY || 1);
+        const ratio = currentW / currentH;
+        // If width changed, adjust height
+        if (Math.abs(w - currentW) > Math.abs(h - currentH)) {
+          h = w / ratio;
+        } else {
+          w = h * ratio;
+        }
+      }
+      const scaleX = w / (obj.width || 1);
+      const scaleY = h / (obj.height || 1);
+      obj.set({ scaleX, scaleY });
+      obj.setCoords();
+    });
+    this.canvas.requestRenderAll();
+    this.saveHistory();
+  }
+
+  // Export selected objects as individual PNG/SVG
+  exportObjectToPNG(id: string, multiplier: number = 2): string {
+    if (!this.canvas) return '';
+    const obj = this.canvas.getObjects().find(
+      (o) => (o as fabric.FabricObject & { id?: string }).id === id
+    );
+    if (!obj) return this.exportToPNG(multiplier);
+    return obj.toDataURL({
+      format: 'png',
+      quality: 1,
+      multiplier,
+    });
+  }
+
+  // Add image from URL
+  addImageFromUrl(url: string) {
+    if (!this.canvas) return;
+    const imgEl = new Image();
+    imgEl.crossOrigin = 'anonymous';
+    imgEl.onload = () => {
+      const img = new fabric.FabricImage(imgEl);
+      const maxDim = 400;
+      const scale = Math.min(maxDim / (img.width || 1), maxDim / (img.height || 1), 1);
+      img.set({
+        scaleX: scale,
+        scaleY: scale,
+      });
+      const center = this.getCanvasCenter();
+      img.set({
+        left: center.x - ((img.width || 0) * scale) / 2,
+        top: center.y - ((img.height || 0) * scale) / 2,
+      });
+      this.setObjectId(img);
+      this.canvas!.add(img);
+      this.canvas!.setActiveObject(img);
+      this.canvas!.requestRenderAll();
+      this.saveHistory();
+    };
+    imgEl.src = url;
   }
 
   destroy() {

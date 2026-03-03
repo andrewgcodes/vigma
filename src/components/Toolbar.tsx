@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useRef } from 'react';
 import {
   MousePointer2,
   Hand,
@@ -14,8 +14,10 @@ import {
   Pen,
   ImagePlus,
   Frame,
+  Pipette,
 } from 'lucide-react';
 import { useCanvasStore } from '@/store/canvas-store';
+import { canvasEngine } from '@/lib/canvas-engine';
 import type { ToolType } from '@/types';
 
 interface ToolItem {
@@ -37,11 +39,28 @@ const tools: ToolItem[] = [
   { id: 'star', icon: <Star size={18} />, label: 'Star' },
   { id: 'text', icon: <Type size={18} />, label: 'Text', shortcut: 'T' },
   { id: 'pen', icon: <Pen size={18} />, label: 'Pen', shortcut: 'P' },
-  { id: 'image', icon: <ImagePlus size={18} />, label: 'Image' },
 ];
 
 export default function Toolbar() {
   const { activeTool, setActiveTool } = useCanvasStore();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImageClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        const dataUrl = evt.target?.result as string;
+        canvasEngine.addImage(dataUrl);
+      };
+      reader.readAsDataURL(file);
+    }
+    e.target.value = '';
+  };
 
   return (
     <div className="toolbar">
@@ -56,6 +75,32 @@ export default function Toolbar() {
             {tool.icon}
           </button>
         ))}
+        {/* Image button - directly opens file picker */}
+        <button
+          className="toolbar-btn"
+          onClick={handleImageClick}
+          title="Image (Upload)"
+        >
+          <ImagePlus size={18} />
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          onChange={handleImageUpload}
+          style={{ display: 'none' }}
+        />
+
+        <div className="toolbar-separator" />
+
+        {/* Eyedropper tool */}
+        <button
+          className={`toolbar-btn ${activeTool === 'eyedropper' ? 'active' : ''}`}
+          onClick={() => setActiveTool('eyedropper')}
+          title="Eyedropper (I)"
+        >
+          <Pipette size={18} />
+        </button>
       </div>
     </div>
   );

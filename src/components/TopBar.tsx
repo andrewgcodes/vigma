@@ -29,6 +29,7 @@ import {
   ArrowDown,
   Clipboard,
   Scissors,
+  Merge,
 } from 'lucide-react';
 import { useCanvasStore } from '@/store/canvas-store';
 import { canvasEngine } from '@/lib/canvas-engine';
@@ -269,13 +270,38 @@ export default function TopBar() {
 
             {/* Group/Ungroup */}
             {hasMultipleSelection && (
-              <button
-                className="topbar-btn"
-                onClick={() => canvasEngine.groupSelected()}
-                title="Group (Ctrl+G)"
-              >
-                <Group size={16} />
-              </button>
+              <>
+                <button
+                  className="topbar-btn"
+                  onClick={() => canvasEngine.groupSelected()}
+                  title="Group (Ctrl+G)"
+                >
+                  <Group size={16} />
+                </button>
+                <div className="topbar-divider" />
+                {/* Boolean Operations */}
+                <button
+                  className="topbar-btn"
+                  onClick={() => canvasEngine.booleanUnion()}
+                  title="Union"
+                >
+                  <Merge size={16} />
+                </button>
+                <button
+                  className="topbar-btn"
+                  onClick={() => canvasEngine.booleanSubtract()}
+                  title="Subtract"
+                >
+                  <span style={{ fontSize: 11, fontWeight: 600 }}>SUB</span>
+                </button>
+                <button
+                  className="topbar-btn"
+                  onClick={() => canvasEngine.booleanIntersect()}
+                  title="Intersect"
+                >
+                  <span style={{ fontSize: 11, fontWeight: 600 }}>INT</span>
+                </button>
+              </>
             )}
             <button
               className="topbar-btn"
