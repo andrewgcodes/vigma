@@ -56,12 +56,11 @@ export default function PropertiesPanel({ fabricRef }: PropertiesPanelProps) {
       return;
     }
 
-    const bound = active.getBoundingRect();
     setProps({
       left: Math.round(active.left ?? 0),
       top: Math.round(active.top ?? 0),
-      width: Math.round(bound.width),
-      height: Math.round(bound.height),
+      width: Math.round((active.width ?? 0) * (active.scaleX ?? 1)),
+      height: Math.round((active.height ?? 0) * (active.scaleY ?? 1)),
       angle: Math.round(active.angle ?? 0),
       opacity: Math.round((active.opacity ?? 1) * 100),
       fill: (typeof active.fill === 'string' ? active.fill : '#000000'),
@@ -108,6 +107,14 @@ export default function PropertiesPanel({ fabricRef }: PropertiesPanelProps) {
 
     if (key === 'opacity') {
       active.set('opacity', (value as number) / 100);
+    } else if (key === 'width') {
+      // Adjust scaleX to achieve the desired visual width
+      const intrinsicWidth = active.width ?? 1;
+      active.set('scaleX', (value as number) / intrinsicWidth);
+    } else if (key === 'height') {
+      // Adjust scaleY to achieve the desired visual height
+      const intrinsicHeight = active.height ?? 1;
+      active.set('scaleY', (value as number) / intrinsicHeight);
     } else {
       active.set(key as keyof fabric.FabricObject, value);
     }

@@ -424,19 +424,28 @@ export function useCanvas() {
 
       if (isDrawing.current && currentShape.current) {
         const tool = activeToolRef.current;
+        let finalObject: fabric.FabricObject = currentShape.current;
+
         if (tool === 'arrow') {
           const line = currentShape.current as fabric.Line;
-          addArrowHead(canvas, line);
+          const arrowGroup = createArrowGroup(canvas, line);
+          if (arrowGroup) {
+            // Transfer id and name from the line to the group
+            const lineId = (line as fabric.FabricObject & { id?: string }).id;
+            (arrowGroup as fabric.FabricObject & { id?: string }).id = lineId;
+            (arrowGroup as fabric.FabricObject & { name?: string }).name = 'Arrow';
+            finalObject = arrowGroup;
+          }
         }
 
-        canvas.setActiveObject(currentShape.current);
+        canvas.setActiveObject(finalObject);
         saveHistory();
-        const id = (currentShape.current as fabric.FabricObject & { id?: string }).id || '';
-        const name = (currentShape.current as fabric.FabricObject & { name?: string }).name || 'Object';
+        const id = (finalObject as fabric.FabricObject & { id?: string }).id || '';
+        const name = (finalObject as fabric.FabricObject & { name?: string }).name || 'Object';
         addLayer({
           id,
           name,
-          type: currentShape.current.type || 'object',
+          type: finalObject.type || 'object',
           visible: true,
           locked: false,
         });
@@ -557,7 +566,7 @@ function createHexagon(
   });
 }
 
-function addArrowHead(canvas: fabric.Canvas, line: fabric.Line) {
+function createArrowGroup(canvas: fabric.Canvas, line: fabric.Line): fabric.Group | null {
   const x1 = line.x1 ?? 0;
   const y1 = line.y1 ?? 0;
   const x2 = line.x2 ?? 0;
@@ -585,7 +594,15 @@ function addArrowHead(canvas: fabric.Canvas, line: fabric.Line) {
     evented: false,
   });
 
-  canvas.add(arrowHead);
+  // Remove the standalone line from canvas and group it with the arrowhead
+  canvas.remove(line);
+  const group = new fabric.Group([line, arrowHead], {
+    left: line.left,
+    top: line.top,
+  });
+
+  canvas.add(group);
+  return group;
 }
 
 function drawGrid(canvas: fabric.Canvas, gridSize: number) {
