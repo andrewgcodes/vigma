@@ -130,6 +130,8 @@ async function handlePaste(canvas: fabric.Canvas) {
   canvas.add(cloned);
   canvas.setActiveObject(cloned);
   canvas.renderAll();
+  // Update clipboard so next paste cascades further
+  (window as unknown as Record<string, unknown>).__vigma_clipboard = cloned;
   // syncLayers() already ran via the object:added event, no need for addLayer
   historyManager.saveState();
 }
