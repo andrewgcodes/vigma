@@ -113,7 +113,9 @@ function NumberInput({
   }, [value, isFocused]);
 
   const commit = (val: string) => {
-    const num = parseFloat(val) || 0;
+    let num = parseFloat(val) || 0;
+    if (min !== undefined) num = Math.max(num, min);
+    if (max !== undefined) num = Math.min(num, max);
     if (num !== value) {
       onChange(num);
     }
@@ -688,7 +690,10 @@ export default function PropertiesPanel({
                   max={100}
                   value={obj.opacity * 100}
                   onChange={(e) =>
-                    onPropertyChange("opacity", parseInt(e.target.value) / 100)
+                    onPropertyChange("opacity", parseInt(e.target.value) / 100, { skipHistory: true })
+                  }
+                  onMouseUp={(e) =>
+                    onPropertyChange("opacity", parseInt((e.target as HTMLInputElement).value) / 100)
                   }
                   style={{ width: 60 }}
                 />
