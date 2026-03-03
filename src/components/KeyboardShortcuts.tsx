@@ -38,6 +38,8 @@ export default function KeyboardShortcuts({ fabricRef }: KeyboardShortcutsProps)
           case 'l': setActiveTool('line'); break;
           case 't': setActiveTool('text'); break;
           case 'p': setActiveTool('pen'); break;
+          case 'e': setActiveTool('eyedropper'); break;
+          case 'f': setActiveTool('frame'); break;
           case 'escape':
             canvas.discardActiveObject();
             canvas.renderAll();
@@ -83,6 +85,22 @@ export default function KeyboardShortcuts({ fabricRef }: KeyboardShortcutsProps)
               ungroupObjects(canvas);
             } else {
               groupObjects(canvas);
+            }
+            break;
+          case ']':
+            e.preventDefault();
+            if (e.shiftKey) {
+              bringToFront(canvas);
+            } else {
+              bringForward(canvas);
+            }
+            break;
+          case '[':
+            e.preventDefault();
+            if (e.shiftKey) {
+              sendToBack(canvas);
+            } else {
+              sendBackward(canvas);
             }
             break;
         }
@@ -192,21 +210,69 @@ function ungroupObjects(canvas: fabric.Canvas) {
   const group = active as fabric.Group;
   const items = group.getObjects();
 
-  // Get the group's transform
+  // Get the group's full transform
   const groupLeft = group.left ?? 0;
   const groupTop = group.top ?? 0;
+  const groupScaleX = group.scaleX ?? 1;
+  const groupScaleY = group.scaleY ?? 1;
+  const groupAngle = (group.angle ?? 0) * (Math.PI / 180);
+  const groupCenterX = groupLeft + ((group.width ?? 0) * groupScaleX) / 2;
+  const groupCenterY = groupTop + ((group.height ?? 0) * groupScaleY) / 2;
 
   canvas.remove(group);
 
   items.forEach((item) => {
+    // Scale child offset by group's scale
+    const offsetX = (item.left ?? 0) * groupScaleX;
+    const offsetY = (item.top ?? 0) * groupScaleY;
+
+    // Rotate the scaled offset by group's angle
+    const rotatedX = offsetX * Math.cos(groupAngle) - offsetY * Math.sin(groupAngle);
+    const rotatedY = offsetX * Math.sin(groupAngle) + offsetY * Math.cos(groupAngle);
+
     item.set({
-      left: (item.left ?? 0) + groupLeft + (group.width ?? 0) / 2,
-      top: (item.top ?? 0) + groupTop + (group.height ?? 0) / 2,
+      left: groupCenterX + rotatedX,
+      top: groupCenterY + rotatedY,
+      scaleX: (item.scaleX ?? 1) * groupScaleX,
+      scaleY: (item.scaleY ?? 1) * groupScaleY,
+      angle: (item.angle ?? 0) + (group.angle ?? 0),
     });
     item.setCoords();
     canvas.add(item);
   });
 
+  canvas.renderAll();
+  historyManager.saveState();
+}
+
+function bringToFront(canvas: fabric.Canvas) {
+  const active = canvas.getActiveObject();
+  if (!active) return;
+  canvas.bringObjectToFront(active);
+  canvas.renderAll();
+  historyManager.saveState();
+}
+
+function bringForward(canvas: fabric.Canvas) {
+  const active = canvas.getActiveObject();
+  if (!active) return;
+  canvas.bringObjectForward(active);
+  canvas.renderAll();
+  historyManager.saveState();
+}
+
+function sendBackward(canvas: fabric.Canvas) {
+  const active = canvas.getActiveObject();
+  if (!active) return;
+  canvas.sendObjectBackwards(active);
+  canvas.renderAll();
+  historyManager.saveState();
+}
+
+function sendToBack(canvas: fabric.Canvas) {
+  const active = canvas.getActiveObject();
+  if (!active) return;
+  canvas.sendObjectToBack(active);
   canvas.renderAll();
   historyManager.saveState();
 }

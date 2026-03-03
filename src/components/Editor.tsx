@@ -8,6 +8,7 @@ import LayersPanel from './LayersPanel';
 import PropertiesPanel from './PropertiesPanel';
 import ZoomBar from './ZoomBar';
 import KeyboardShortcuts from './KeyboardShortcuts';
+import ContextMenu from './ContextMenu';
 import { useStore } from '@/store/useStore';
 
 export default function Editor() {
@@ -20,6 +21,8 @@ export default function Editor() {
       case 'select': return 'cursor-default';
       case 'pen': return 'cursor-crosshair';
       case 'text': return 'cursor-text';
+      case 'eyedropper': return 'cursor-crosshair';
+      case 'frame': return 'cursor-crosshair';
       default: return 'cursor-crosshair';
     }
   };
@@ -28,8 +31,9 @@ export default function Editor() {
     <div className={`w-screen h-screen overflow-hidden bg-gray-50 ${getCursorClass()}`}>
       <canvas ref={canvasRef} className="block" />
       <TopBar fabricRef={fabricRef} />
-      <Toolbar />
+      <Toolbar fabricRef={fabricRef} />
       <LayersPanel fabricRef={fabricRef} />
+      <ContextMenu fabricRef={fabricRef} />
       <PropertiesPanel fabricRef={fabricRef} />
       <ZoomBar fabricRef={fabricRef} />
       <KeyboardShortcuts fabricRef={fabricRef} />

@@ -14,7 +14,9 @@ export type ToolType =
   | 'polygon'
   | 'text'
   | 'pen'
-  | 'image';
+  | 'image'
+  | 'eyedropper'
+  | 'frame';
 
 export interface LayerItem {
   id: string;
@@ -27,6 +29,8 @@ export interface LayerItem {
 export interface CanvasState {
   activeTool: ToolType;
   setActiveTool: (tool: ToolType) => void;
+  previousTool: ToolType;
+  setPreviousTool: (tool: ToolType) => void;
 
   zoom: number;
   setZoom: (zoom: number) => void;
@@ -78,11 +82,17 @@ export interface CanvasState {
   canvasWidth: number;
   canvasHeight: number;
   setCanvasSize: (w: number, h: number) => void;
+
+  // Context menu
+  contextMenu: { x: number; y: number; objectId: string | null } | null;
+  setContextMenu: (menu: { x: number; y: number; objectId: string | null } | null) => void;
 }
 
 export const useStore = create<CanvasState>((set) => ({
   activeTool: 'select',
-  setActiveTool: (tool) => set({ activeTool: tool }),
+  setActiveTool: (tool) => set((state) => ({ activeTool: tool, previousTool: state.activeTool })),
+  previousTool: 'select',
+  setPreviousTool: (tool) => set({ previousTool: tool }),
 
   zoom: 100,
   setZoom: (zoom) => set({ zoom }),
@@ -143,4 +153,7 @@ export const useStore = create<CanvasState>((set) => ({
   canvasWidth: 1920,
   canvasHeight: 1080,
   setCanvasSize: (w, h) => set({ canvasWidth: w, canvasHeight: h }),
+
+  contextMenu: null,
+  setContextMenu: (menu) => set({ contextMenu: menu }),
 }));

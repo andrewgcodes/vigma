@@ -48,9 +48,12 @@ export default function LayersPanel({ fabricRef }: LayersPanelProps) {
     layers,
     selectedObjectIds,
     updateLayer,
+    reorderLayers,
   } = useStore();
 
   const [collapsed, setCollapsed] = React.useState(false);
+  const [dragIndex, setDragIndex] = React.useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = React.useState<number | null>(null);
 
   const handleSelect = (id: string) => {
     const canvas = fabricRef.current;
@@ -130,15 +133,44 @@ export default function LayersPanel({ fabricRef }: LayersPanelProps) {
               <p className="text-[10px] text-gray-300 mt-1">Draw something to get started</p>
             </div>
           ) : (
-            layers.map((layer) => {
+            layers.map((layer, i) => {
               const isSelected = selectedObjectIds.includes(layer.id);
               return (
                 <div
                   key={layer.id}
+                  draggable
+                  onDragStart={() => setDragIndex(i)}
+                  onDragOver={(e) => { e.preventDefault(); setDragOverIndex(i); }}
+                  onDragEnd={() => { setDragIndex(null); setDragOverIndex(null); }}
+                  onDrop={() => {
+                    if (dragIndex !== null && dragIndex !== i) {
+                      reorderLayers(dragIndex, i);
+                      // Also reorder on canvas
+                      const canvas = fabricRef.current;
+                      if (canvas) {
+                        const objects = canvas.getObjects().filter((obj) => (obj as fabric.FabricObject & { id?: string }).id);
+                        const reversed = [...objects].reverse();
+                        if (reversed[dragIndex] && reversed[i]) {
+                          const fromObj = reversed[dragIndex];
+                          const toObj = reversed[i];
+                          const fromIdx = canvas.getObjects().indexOf(fromObj);
+                          const toIdx = canvas.getObjects().indexOf(toObj);
+                          if (fromIdx > toIdx) {
+                            canvas.moveObjectTo(fromObj, toIdx);
+                          } else {
+                            canvas.moveObjectTo(fromObj, toIdx);
+                          }
+                          canvas.renderAll();
+                        }
+                      }
+                    }
+                    setDragIndex(null);
+                    setDragOverIndex(null);
+                  }}
                   onClick={() => handleSelect(layer.id)}
                   className={`flex items-center gap-2 px-3 py-2 cursor-pointer transition-colors group ${
                     isSelected ? 'bg-indigo-50' : 'hover:bg-gray-50'
-                  }`}
+                  } ${dragOverIndex === i ? 'border-t-2 border-indigo-400' : ''}`}
                 >
                   {getLayerIcon(layer.type)}
                   <span className={`flex-1 text-xs truncate ${

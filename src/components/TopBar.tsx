@@ -29,7 +29,7 @@ import * as fabric from 'fabric';
 import { v4 as uuidv4 } from 'uuid';
 import { useStore } from '@/store/useStore';
 import { historyManager } from '@/utils/history';
-import { exportToPNG, exportToSVG, exportToJSON, importFromJSON } from '@/utils/export';
+import { exportToPNG, exportToSVG, exportToJSON, exportToPDF, importFromJSON, importSVG } from '@/utils/export';
 import { alignObjects, distributeObjects } from '@/utils/alignment';
 
 interface TopBarProps {
@@ -50,6 +50,7 @@ export default function TopBar({ fabricRef }: TopBarProps) {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const svgInputRef = useRef<HTMLInputElement>(null);
   const [showExportMenu, setShowExportMenu] = React.useState(false);
   const [showViewMenu, setShowViewMenu] = React.useState(false);
   const [showAlignMenu, setShowAlignMenu] = React.useState(false);
@@ -182,6 +183,13 @@ export default function TopBar({ fabricRef }: TopBarProps) {
                 >
                   <ImageIcon size={14} className="text-gray-400" />
                   Import Image
+                </button>
+                <button
+                  onClick={() => { svgInputRef.current?.click(); closeAllMenus(); }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  <FileCode size={14} className="text-gray-400" />
+                  Import SVG
                 </button>
                 <button
                   onClick={() => { fileInputRef.current?.click(); closeAllMenus(); }}
@@ -357,6 +365,13 @@ export default function TopBar({ fabricRef }: TopBarProps) {
                   <FileJson size={14} className="text-gray-400" />
                   Export as JSON
                 </button>
+                <button
+                  onClick={() => { const c = fabricRef.current; if (c) exportToPDF(c); closeAllMenus(); }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  <Download size={14} className="text-gray-400" />
+                  Export as PDF
+                </button>
               </div>
             )}
           </div>
@@ -376,6 +391,19 @@ export default function TopBar({ fabricRef }: TopBarProps) {
         accept="image/*"
         className="hidden"
         onChange={handleImageUpload}
+      />
+      <input
+        ref={svgInputRef}
+        type="file"
+        accept=".svg"
+        className="hidden"
+        onChange={async (e) => {
+          const canvas = fabricRef.current;
+          if (!canvas || !e.target.files?.[0]) return;
+          await importSVG(canvas, e.target.files[0]);
+          historyManager.saveState();
+          e.target.value = '';
+        }}
       />
     </>
   );

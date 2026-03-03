@@ -48,6 +48,9 @@ export function useCanvas() {
     showGrid,
     gridSize,
     snapToGrid,
+    setContextMenu,
+    previousTool,
+    setFillColor,
   } = useStore();
 
   const activeToolRef = useRef(activeTool);
@@ -68,6 +71,12 @@ export function useCanvas() {
   snapToGridRef.current = snapToGrid;
   const gridSizeRef = useRef(gridSize);
   gridSizeRef.current = gridSize;
+  const previousToolRef = useRef(previousTool);
+  previousToolRef.current = previousTool;
+  const setFillColorRef = useRef(setFillColor);
+  setFillColorRef.current = setFillColor;
+  const setContextMenuRef = useRef(setContextMenu);
+  setContextMenuRef.current = setContextMenu;
 
   const syncLayers = useCallback(() => {
     const canvas = fabricRef.current;
@@ -210,9 +219,40 @@ export function useCanvas() {
       opt.e.stopPropagation();
     });
 
+    // Right-click context menu
     canvas.on('mouse:down', (opt) => {
       const evt = opt.e as MouseEvent;
+      if (evt.button === 2) {
+        evt.preventDefault();
+        const result = canvas.findTarget(evt);
+        const target = result as unknown as fabric.FabricObject | undefined;
+        if (target) {
+          canvas.setActiveObject(target);
+          canvas.renderAll();
+        }
+        const targetId = target ? (target as fabric.FabricObject & { id?: string }).id || null : null;
+        setContextMenuRef.current({ x: evt.clientX, y: evt.clientY, objectId: targetId });
+        return;
+      }
+    });
+
+    canvas.on('mouse:down', (opt) => {
+      const evt = opt.e as MouseEvent;
+      if (evt.button === 2) return; // handled above
       const tool = activeToolRef.current;
+
+      // Eyedropper tool
+      if (tool === 'eyedropper') {
+        const result = canvas.findTarget(evt);
+        const target = result as unknown as fabric.FabricObject | undefined;
+        if (target) {
+          const fill = target.fill;
+          const color = typeof fill === 'string' ? fill : '#000000';
+          setFillColorRef.current(color);
+        }
+        setActiveTool(previousToolRef.current || 'select');
+        return;
+      }
 
       if (tool === 'hand' || (evt.altKey && tool === 'select')) {
         isPanning.current = true;
@@ -303,6 +343,19 @@ export function useCanvas() {
         shape = createStar(pointer.x, pointer.y, 0, fillColorRef.current, strokeColorRef.current, strokeWidthRef.current, opacityRef.current);
       } else if (tool === 'polygon') {
         shape = createHexagon(pointer.x, pointer.y, 0, fillColorRef.current, strokeColorRef.current, strokeWidthRef.current, opacityRef.current);
+      } else if (tool === 'frame') {
+        shape = new fabric.Rect({
+          left: pointer.x,
+          top: pointer.y,
+          width: 0,
+          height: 0,
+          fill: '#ffffff',
+          stroke: '#cccccc',
+          strokeWidth: 1,
+          opacity: 1,
+          rx: 0,
+          ry: 0,
+        });
       }
 
       if (shape) {
@@ -359,6 +412,16 @@ export function useCanvas() {
         const w = Math.abs(pointer.x - drawStart.current.x);
         const h = Math.abs(pointer.y - drawStart.current.y);
         tri.set({
+          left: Math.min(pointer.x, drawStart.current.x),
+          top: Math.min(pointer.y, drawStart.current.y),
+          width: w,
+          height: h,
+        });
+      } else if (tool === 'frame') {
+        const rect = currentShape.current as fabric.Rect;
+        const w = Math.abs(pointer.x - drawStart.current.x);
+        const h = Math.abs(pointer.y - drawStart.current.y);
+        rect.set({
           left: Math.min(pointer.x, drawStart.current.x),
           top: Math.min(pointer.y, drawStart.current.y),
           width: w,
@@ -446,7 +509,7 @@ export function useCanvas() {
       }
     });
 
-    // Snapping
+    // Snapping + Smart Guides
     canvas.on('object:moving', (e) => {
       if (snapToGridRef.current && e.target) {
         const gs = gridSizeRef.current;
@@ -456,6 +519,18 @@ export function useCanvas() {
           top: Math.round((obj.top ?? 0) / gs) * gs,
         });
       }
+      // Smart guides
+      if (e.target) {
+        showSmartGuides(canvas, e.target);
+      }
+    });
+
+    canvas.on('object:modified', () => {
+      removeSmartGuides(canvas);
+    });
+
+    canvas.on('mouse:up', () => {
+      removeSmartGuides(canvas);
     });
 
     return () => {
@@ -492,7 +567,7 @@ export function useCanvas() {
         canvas.setCursor('crosshair');
       }
     }
-  }, [activeTool, fillColor, strokeWidth]);
+  }, [activeTool, fillColor, strokeWidth, setActiveTool]);
 
   useEffect(() => {
     const canvas = fabricRef.current;
@@ -634,4 +709,115 @@ function removeGrid(canvas: fabric.Canvas) {
   );
   gridLines.forEach((line) => canvas.remove(line));
   canvas.renderAll();
+}
+
+function showSmartGuides(canvas: fabric.Canvas, target: fabric.FabricObject) {
+  removeSmartGuides(canvas);
+  const SNAP_THRESHOLD = 5;
+  const targetBounds = target.getBoundingRect();
+  const targetCenterX = targetBounds.left + targetBounds.width / 2;
+  const targetCenterY = targetBounds.top + targetBounds.height / 2;
+
+  const objects = canvas.getObjects().filter((obj) => {
+    if (obj === target) return false;
+    if ((obj as fabric.FabricObject & { isGrid?: boolean }).isGrid) return false;
+    if ((obj as fabric.FabricObject & { isSmartGuide?: boolean }).isSmartGuide) return false;
+    return true;
+  });
+
+  const guideLines: fabric.Line[] = [];
+  const canvasWidth = canvas.width ?? 2000;
+  const canvasHeight = canvas.height ?? 2000;
+
+  for (const obj of objects) {
+    const bounds = obj.getBoundingRect();
+    const centerX = bounds.left + bounds.width / 2;
+    const centerY = bounds.top + bounds.height / 2;
+
+    // Horizontal center alignment
+    if (Math.abs(targetCenterX - centerX) < SNAP_THRESHOLD) {
+      target.set('left', (target.left ?? 0) + (centerX - targetCenterX));
+      const guide = new fabric.Line([centerX, 0, centerX, canvasHeight], {
+        stroke: '#FF69B4', strokeWidth: 1, strokeDashArray: [4, 4],
+        selectable: false, evented: false, excludeFromExport: true,
+      });
+      (guide as fabric.FabricObject & { isSmartGuide?: boolean }).isSmartGuide = true;
+      guideLines.push(guide);
+    }
+
+    // Vertical center alignment
+    if (Math.abs(targetCenterY - centerY) < SNAP_THRESHOLD) {
+      target.set('top', (target.top ?? 0) + (centerY - targetCenterY));
+      const guide = new fabric.Line([0, centerY, canvasWidth, centerY], {
+        stroke: '#FF69B4', strokeWidth: 1, strokeDashArray: [4, 4],
+        selectable: false, evented: false, excludeFromExport: true,
+      });
+      (guide as fabric.FabricObject & { isSmartGuide?: boolean }).isSmartGuide = true;
+      guideLines.push(guide);
+    }
+
+    // Left edge alignment
+    if (Math.abs(targetBounds.left - bounds.left) < SNAP_THRESHOLD) {
+      target.set('left', (target.left ?? 0) + (bounds.left - targetBounds.left));
+      const guide = new fabric.Line([bounds.left, 0, bounds.left, canvasHeight], {
+        stroke: '#FF69B4', strokeWidth: 0.5, strokeDashArray: [2, 2],
+        selectable: false, evented: false, excludeFromExport: true,
+      });
+      (guide as fabric.FabricObject & { isSmartGuide?: boolean }).isSmartGuide = true;
+      guideLines.push(guide);
+    }
+
+    // Top edge alignment
+    if (Math.abs(targetBounds.top - bounds.top) < SNAP_THRESHOLD) {
+      target.set('top', (target.top ?? 0) + (bounds.top - targetBounds.top));
+      const guide = new fabric.Line([0, bounds.top, canvasWidth, bounds.top], {
+        stroke: '#FF69B4', strokeWidth: 0.5, strokeDashArray: [2, 2],
+        selectable: false, evented: false, excludeFromExport: true,
+      });
+      (guide as fabric.FabricObject & { isSmartGuide?: boolean }).isSmartGuide = true;
+      guideLines.push(guide);
+    }
+
+    // Right edge alignment
+    const targetRight = targetBounds.left + targetBounds.width;
+    const objRight = bounds.left + bounds.width;
+    if (Math.abs(targetRight - objRight) < SNAP_THRESHOLD) {
+      target.set('left', (target.left ?? 0) + (objRight - targetRight));
+      const guide = new fabric.Line([objRight, 0, objRight, canvasHeight], {
+        stroke: '#FF69B4', strokeWidth: 0.5, strokeDashArray: [2, 2],
+        selectable: false, evented: false, excludeFromExport: true,
+      });
+      (guide as fabric.FabricObject & { isSmartGuide?: boolean }).isSmartGuide = true;
+      guideLines.push(guide);
+    }
+
+    // Bottom edge alignment
+    const targetBottom = targetBounds.top + targetBounds.height;
+    const objBottom = bounds.top + bounds.height;
+    if (Math.abs(targetBottom - objBottom) < SNAP_THRESHOLD) {
+      target.set('top', (target.top ?? 0) + (objBottom - targetBottom));
+      const guide = new fabric.Line([0, objBottom, canvasWidth, objBottom], {
+        stroke: '#FF69B4', strokeWidth: 0.5, strokeDashArray: [2, 2],
+        selectable: false, evented: false, excludeFromExport: true,
+      });
+      (guide as fabric.FabricObject & { isSmartGuide?: boolean }).isSmartGuide = true;
+      guideLines.push(guide);
+    }
+  }
+
+  guideLines.forEach((g) => canvas.add(g));
+  if (guideLines.length > 0) {
+    target.setCoords();
+    canvas.renderAll();
+  }
+}
+
+function removeSmartGuides(canvas: fabric.Canvas) {
+  const guides = canvas.getObjects().filter(
+    (obj) => (obj as fabric.FabricObject & { isSmartGuide?: boolean }).isSmartGuide
+  );
+  if (guides.length > 0) {
+    guides.forEach((g) => canvas.remove(g));
+    canvas.renderAll();
+  }
 }
