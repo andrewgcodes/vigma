@@ -99,7 +99,7 @@ export default function PropertiesPanel({ fabricRef }: PropertiesPanelProps) {
     };
   }, [fabricRef, readProps]);
 
-  const updateProp = (key: string, value: number | string) => {
+  const updateProp = (key: string, value: number | string, skipHistory = false) => {
     const canvas = fabricRef.current;
     if (!canvas) return;
     const active = canvas.getActiveObject();
@@ -122,7 +122,9 @@ export default function PropertiesPanel({ fabricRef }: PropertiesPanelProps) {
     active.setCoords();
     canvas.renderAll();
     readProps();
-    historyManager.saveState();
+    if (!skipHistory) {
+      historyManager.saveState();
+    }
   };
 
   if (!props || selectedObjectIds.length === 0) {
@@ -153,7 +155,7 @@ export default function PropertiesPanel({ fabricRef }: PropertiesPanelProps) {
             <PropInput label="H" value={props.height} onChange={(v) => updateProp('height', v)} />
             <PropInput label="R" value={props.angle} onChange={(v) => updateProp('angle', v)} suffix="°" />
             {isRect && (
-              <PropInput label="↻" value={Math.round(props.rx)} onChange={(v) => { updateProp('rx', v); updateProp('ry', v); }} />
+              <PropInput label="↻" value={Math.round(props.rx)} onChange={(v) => { updateProp('rx', v, true); updateProp('ry', v); }} />
             )}
           </div>
         </div>

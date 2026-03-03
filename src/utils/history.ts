@@ -52,30 +52,36 @@ export class HistoryManager {
   async undo() {
     if (!this.canvas || this.undoStack.length <= 1 || this.isRestoring) return;
     this.isRestoring = true;
-    const current = this.undoStack.pop();
-    if (current) this.redoStack.push(current);
-    const prev = this.undoStack[this.undoStack.length - 1];
-    if (prev) {
-      await this.canvas.loadFromJSON(prev);
-      this.canvas.renderAll();
+    try {
+      const current = this.undoStack.pop();
+      if (current) this.redoStack.push(current);
+      const prev = this.undoStack[this.undoStack.length - 1];
+      if (prev) {
+        await this.canvas.loadFromJSON(prev);
+        this.canvas.renderAll();
+      }
+    } finally {
+      this.isRestoring = false;
+      this.notify();
+      this.notifyRestore();
     }
-    this.isRestoring = false;
-    this.notify();
-    this.notifyRestore();
   }
 
   async redo() {
     if (!this.canvas || this.redoStack.length === 0 || this.isRestoring) return;
     this.isRestoring = true;
-    const next = this.redoStack.pop();
-    if (next) {
-      this.undoStack.push(next);
-      await this.canvas.loadFromJSON(next);
-      this.canvas.renderAll();
+    try {
+      const next = this.redoStack.pop();
+      if (next) {
+        this.undoStack.push(next);
+        await this.canvas.loadFromJSON(next);
+        this.canvas.renderAll();
+      }
+    } finally {
+      this.isRestoring = false;
+      this.notify();
+      this.notifyRestore();
     }
-    this.isRestoring = false;
-    this.notify();
-    this.notifyRestore();
   }
 
   get canUndo() {

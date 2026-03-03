@@ -9,7 +9,7 @@ import { historyManager } from '@/utils/history';
 function getObjectName(type: string): string {
   const names: Record<string, string> = {
     rect: 'Rectangle',
-    circle: 'Ellipse',
+    ellipse: 'Ellipse',
     triangle: 'Triangle',
     line: 'Line',
     path: 'Path',
