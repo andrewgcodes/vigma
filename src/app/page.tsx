@@ -65,6 +65,7 @@ export default function DesignPage() {
   const [showResolved, setShowResolved] = useState(false)
   const [commentInput, setCommentInput] = useState<{ x: number; y: number; text: string } | null>(null)
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('disconnected')
+  const [showShareWarning, setShowShareWarning] = useState(false)
   const collabRef = useRef<CollaborationManager | null>(null)
   const userRef = useRef<UserIdentity>(getUserIdentity())
   const syncingFromRemoteCountRef = useRef(0)
@@ -479,6 +480,11 @@ export default function DesignPage() {
 
   // === SHARE HANDLER ===
   const handleShare = useCallback(() => {
+    setShowShareWarning(true)
+  }, [])
+
+  const handleShareConfirm = useCallback(() => {
+    setShowShareWarning(false)
     prewarmSignalingServer() // Wake up Fly.io server before WebSocket connects
     const rid = generateRoomId()
     setRoomIdInHash(rid)
@@ -1307,6 +1313,41 @@ export default function DesignPage() {
 
   return (
     <MobileGate>
+    {/* Share Beta Warning Modal */}
+    {showShareWarning && (
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+        <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 p-6 animate-in fade-in zoom-in duration-200">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+              <svg className="w-5 h-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+              </svg>
+            </div>
+            <h3 className="text-lg font-semibold text-gray-900">Experimental Feature</h3>
+          </div>
+          <p className="text-sm text-gray-600 mb-2">
+            Live collaboration is <span className="font-semibold text-amber-600">extremely early beta</span> and is known to have bugs.
+          </p>
+          <p className="text-sm text-gray-600 mb-4">
+            Currently, only <span className="font-medium">basic shape movement</span> reliably syncs between users. Images, text editing, and other property changes may not work as expected. Use this for fun, but don&apos;t expect production-ready results!
+          </p>
+          <div className="flex gap-3">
+            <button
+              onClick={() => setShowShareWarning(false)}
+              className="flex-1 px-4 py-2.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleShareConfirm}
+              className="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-canvas-accent rounded-lg hover:opacity-90 transition-opacity"
+            >
+              I understand, start sharing
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
     <div className="h-screen w-screen overflow-hidden bg-canvas-bg" ref={containerRef}>
       {/* Top Bar */}
       <TopBar
