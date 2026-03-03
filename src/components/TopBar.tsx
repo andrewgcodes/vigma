@@ -5,7 +5,7 @@ import {
   Undo2, Redo2, ZoomIn, ZoomOut, Maximize2,
   Download, Upload, Menu, Grid3X3, Ruler, Magnet,
   LayoutDashboard, PanelLeft, PanelRight, RotateCcw,
-  Save, FileJson, FileImage, FileCode, Info, Share2, Users, Copy, Check, LogOut, MessageSquare, HelpCircle, Cloud, CloudOff, Loader2
+  Save, FileJson, FileImage, FileCode, Info, Share2, Users, Copy, Check, LogOut, MessageSquare, HelpCircle, Cloud, Loader2
 } from 'lucide-react'
 import type { RemoteUser } from '@/lib/collaboration'
 

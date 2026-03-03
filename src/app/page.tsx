@@ -1100,7 +1100,6 @@ export default function DesignPage() {
 
   // SAVE PROJECT (saves all pages) – called by Cmd+S and the "Save to Browser" menu item
   const handleSaveProject = useCallback(() => {
-    setSaveStatus('saving')
     persistAllPages()
     // Clear any pending timeout so rapid Cmd+S presses don't fight
     if (saveStatusTimeoutRef.current) clearTimeout(saveStatusTimeoutRef.current)
