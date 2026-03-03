@@ -81,13 +81,20 @@ export default function DesignPage() {
     window.addEventListener('resize', handleResize)
 
     // Load saved project from localStorage
-    try {
-      const saved = localStorage.getItem('vigma-project')
-      if (saved) {
-        engine.loadFromJSON(saved)
-        setTimeout(refreshLayers, 100)
+    const loadSaved = async () => {
+      try {
+        const saved = localStorage.getItem('vigma-project')
+        if (saved) {
+          await engine.loadFromJSON(saved)
+          refreshLayers()
+        }
+      } catch (e) {
+        // If saved data is corrupt or incompatible, clear it
+        console.warn('Failed to load saved project, clearing localStorage', e)
+        localStorage.removeItem('vigma-project')
       }
-    } catch (e) {}
+    }
+    loadSaved()
 
     return () => {
       window.removeEventListener('resize', handleResize)
