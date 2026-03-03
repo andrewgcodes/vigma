@@ -141,7 +141,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   setGridSize: (size) => set({ gridSize: size }),
 
   // Properties
-  fillColor: '#6366f1',
+  fillColor: '#000000',
   setFillColor: (color) => set({ fillColor: color }),
   strokeColor: '#000000',
   setStrokeColor: (color) => set({ strokeColor: color }),
