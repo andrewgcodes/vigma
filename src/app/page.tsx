@@ -199,6 +199,25 @@ export default function DesignPage() {
     collab.pushCanvasState(items)
   }, [])
 
+  /** Sync all currently-selected canvas objects to Yjs (for property panel changes).
+   *  Fabric.js `object:modified` only fires for interactive transforms (drag/resize/rotate),
+   *  NOT for programmatic `.set(...)` calls from the properties panel. */
+  const syncActiveToCollab = useCallback(() => {
+    const engine = engineRef.current
+    const collab = collabRef.current
+    if (!engine || !collab) return
+    const active = engine.canvas.getActiveObject()
+    if (!active) return
+    if ((active as any).type === 'activeselection') {
+      const objects = (active as any).getObjects()
+      for (const obj of objects) {
+        syncObjectToCollab(obj)
+      }
+    } else {
+      syncObjectToCollab(active)
+    }
+  }, [syncObjectToCollab])
+
   // Handle remote object changes from Yjs
   const handleRemoteObjectChange = useCallback((changes: { added: string[], updated: string[], deleted: string[] }) => {
     const engine = engineRef.current
@@ -225,9 +244,32 @@ export default function DesignPage() {
         const objData = JSON.parse(jsonStr)
         const existing = engine.canvas.getObjects().find((o: any) => o.id === id)
         if (existing) {
-          // Update existing object
-          existing.set(objData)
-          existing.setCoords()
+          // For Image objects, .set() won't reload the src — we must replace
+          // the object entirely via enlivenObjects so the bitmap is rebuilt.
+          const isImage = objData.type === 'image' && objData.src
+          if (isImage) {
+            const fabric = require('fabric')
+            const promise = fabric.util.enlivenObjects([objData]).then((objs: any[]) => {
+              if (objs[0]) {
+                objs[0].id = id
+                // Preserve z-index: insert at the same position
+                const idx = engine.canvas.getObjects().indexOf(existing)
+                engine.canvas.remove(existing)
+                if (idx >= 0) {
+                  engine.canvas.insertAt(idx, objs[0])
+                } else {
+                  engine.canvas.add(objs[0])
+                }
+                engine.canvas.renderAll()
+                refreshLayers()
+              }
+            })
+            enlivenPromises.push(promise)
+          } else {
+            // Update existing non-image object in-place
+            existing.set(objData)
+            existing.setCoords()
+          }
         } else {
           // Add new object - use fabric.util.enlivenObjects
           const fabric = require('fabric')
@@ -370,16 +412,38 @@ export default function DesignPage() {
       syncObjectToCollab(path)
     }
 
+    // Sync text content when user finishes editing (Fabric.js text editing
+    // does NOT fire object:modified for content changes — only for
+    // move/resize/rotate transforms)
+    const onTextEditingExited = (opt: any) => {
+      if (syncingFromRemoteCountRef.current > 0) return
+      const target = opt.target
+      if (!target) return
+      syncObjectToCollab(target)
+    }
+
+    // Also sync on every keystroke so collaborators see live typing
+    const onTextChanged = (opt: any) => {
+      if (syncingFromRemoteCountRef.current > 0) return
+      const target = opt.target
+      if (!target) return
+      syncObjectToCollab(target)
+    }
+
     engine.canvas.on('object:modified', onModified)
     engine.canvas.on('object:added', onAdded)
     engine.canvas.on('object:removed', onRemoved)
     engine.canvas.on('path:created', onPathCreated)
+    engine.canvas.on('text:editing:exited', onTextEditingExited)
+    engine.canvas.on('text:changed', onTextChanged)
 
     return () => {
       engine.canvas.off('object:modified', onModified)
       engine.canvas.off('object:added', onAdded)
       engine.canvas.off('object:removed', onRemoved)
       engine.canvas.off('path:created', onPathCreated)
+      engine.canvas.off('text:editing:exited', onTextEditingExited)
+      engine.canvas.off('text:changed', onTextChanged)
     }
   }, [isCollaborating, syncObjectToCollab])
 
@@ -844,10 +908,11 @@ export default function DesignPage() {
           case 'g':
             if (shift) { engine.ungroupSelected(); } else { engine.groupSelected(); }
             refreshLayers()
+            syncAllObjectsToCollab()
             e.preventDefault()
             return
-          case ']': engine.bringToFront(); refreshLayers(); e.preventDefault(); return
-          case '[': engine.sendToBack(); refreshLayers(); e.preventDefault(); return
+          case ']': engine.bringToFront(); refreshLayers(); syncActiveToCollab(); e.preventDefault(); return
+          case '[': engine.sendToBack(); refreshLayers(); syncActiveToCollab(); e.preventDefault(); return
           case '=': engine.zoomIn(); e.preventDefault(); return
           case '-': engine.zoomOut(); e.preventDefault(); return
           case '0': engine.resetZoom(); e.preventDefault(); return
@@ -898,6 +963,7 @@ export default function DesignPage() {
         active.setCoords()
         engine.canvas.renderAll()
         refreshObjectProps()
+        syncActiveToCollab()
         e.preventDefault()
       }
     }
@@ -949,7 +1015,7 @@ export default function DesignPage() {
     localStorage.setItem('vigma-project', json)
   }, [])
 
-  // Auto-save every 30 seconds
+  // Auto-save every 1 second (aggressive save to prevent data loss)
   useEffect(() => {
     const interval = setInterval(() => {
       const engine = engineRef.current
@@ -958,7 +1024,7 @@ export default function DesignPage() {
         const json = engine.exportToJSON()
         localStorage.setItem('vigma-project', json)
       } catch (e) {}
-    }, 30000)
+    }, 1000)
     return () => clearInterval(interval)
   }, [])
 
@@ -1072,87 +1138,104 @@ export default function DesignPage() {
     engineRef.current?.setObjectFill(color)
     setFill({ color })
     refreshObjectProps()
-  }, [])
+    syncActiveToCollab()
+  }, [syncActiveToCollab])
 
   const handleStrokeChange = useCallback((color: string, width?: number) => {
     engineRef.current?.setObjectStroke(color, width)
     refreshObjectProps()
-  }, [])
+    syncActiveToCollab()
+  }, [syncActiveToCollab])
 
   const handleOpacityChange = useCallback((opacity: number) => {
     engineRef.current?.setObjectOpacity(opacity)
     refreshObjectProps()
-  }, [])
+    syncActiveToCollab()
+  }, [syncActiveToCollab])
 
   const handleCornerRadiusChange = useCallback((radius: number) => {
     engineRef.current?.setCornerRadius(radius)
     refreshObjectProps()
-  }, [])
+    syncActiveToCollab()
+  }, [syncActiveToCollab])
 
   const handleShadowChange = useCallback((config: any) => {
     engineRef.current?.setObjectShadow(config)
     refreshObjectProps()
-  }, [])
+    syncActiveToCollab()
+  }, [syncActiveToCollab])
 
   const handleShadowRemove = useCallback(() => {
     engineRef.current?.removeShadow()
     refreshObjectProps()
-  }, [])
+    syncActiveToCollab()
+  }, [syncActiveToCollab])
 
   const handlePositionChange = useCallback((x: number, y: number) => {
     engineRef.current?.setObjectPosition(x, y)
     refreshObjectProps()
-  }, [])
+    syncActiveToCollab()
+  }, [syncActiveToCollab])
 
   const handleSizeChange = useCallback((w: number, h: number) => {
     engineRef.current?.setObjectSize(w, h)
     refreshObjectProps()
-  }, [])
+    syncActiveToCollab()
+  }, [syncActiveToCollab])
 
   const handleRotationChange = useCallback((angle: number) => {
     engineRef.current?.setObjectRotation(angle)
     refreshObjectProps()
-  }, [])
+    syncActiveToCollab()
+  }, [syncActiveToCollab])
 
   const handleTextPropertyChange = useCallback((prop: string, value: any) => {
     engineRef.current?.setTextProperty(prop, value)
     refreshObjectProps()
-  }, [])
+    syncActiveToCollab()
+  }, [syncActiveToCollab])
 
   const handleGradientChange = useCallback((config: any) => {
     engineRef.current?.setObjectGradient(config)
     refreshObjectProps()
-  }, [])
+    syncActiveToCollab()
+  }, [syncActiveToCollab])
 
   const handleStrokeDashChange = useCallback((dash: number[]) => {
     engineRef.current?.setObjectStrokeDash(dash)
     refreshObjectProps()
-  }, [])
+    syncActiveToCollab()
+  }, [syncActiveToCollab])
 
   const handleBlendModeChange = useCallback((mode: string) => {
     engineRef.current?.setBlendMode(mode)
     refreshObjectProps()
-  }, [])
+    syncActiveToCollab()
+  }, [syncActiveToCollab])
 
   const handleStrokePositionChange = useCallback((position: 'center' | 'inside' | 'outside') => {
     engineRef.current?.setStrokePosition(position)
     refreshObjectProps()
-  }, [])
+    syncActiveToCollab()
+  }, [syncActiveToCollab])
 
   const handleIndividualCornerChange = useCallback((corners: { tl: number, tr: number, br: number, bl: number }) => {
     engineRef.current?.setIndividualCornerRadius(corners)
     refreshObjectProps()
-  }, [])
+    syncActiveToCollab()
+  }, [syncActiveToCollab])
 
   const handleBlurChange = useCallback((blur: number) => {
     engineRef.current?.setLayerBlur(blur)
     refreshObjectProps()
-  }, [])
+    syncActiveToCollab()
+  }, [syncActiveToCollab])
 
   const handleInnerShadowChange = useCallback((config: { color: string, blur: number, offsetX: number, offsetY: number }) => {
     engineRef.current?.setInnerShadow(config)
     refreshObjectProps()
-  }, [])
+    syncActiveToCollab()
+  }, [syncActiveToCollab])
 
   const handleExportSelected = useCallback((format: string, scale: number) => {
     const engine = engineRef.current
@@ -1174,19 +1257,22 @@ export default function DesignPage() {
   const handleCropImage = useCallback((crop: { left: number, top: number, width: number, height: number }) => {
     engineRef.current?.cropImage(crop)
     refreshObjectProps()
-  }, [])
+    syncActiveToCollab()
+  }, [syncActiveToCollab])
 
   const handleResetCrop = useCallback(() => {
     engineRef.current?.resetCrop()
     refreshObjectProps()
-  }, [])
+    syncActiveToCollab()
+  }, [syncActiveToCollab])
 
   const handleFlatten = useCallback(() => {
     engineRef.current?.flattenSelected().then(() => {
       refreshLayers()
       refreshObjectProps()
+      syncActiveToCollab()
     })
-  }, [])
+  }, [syncActiveToCollab])
 
   // DROP handler for images
   useEffect(() => {
