@@ -9,7 +9,7 @@ export class CanvasHistory {
   saveState(canvas: Canvas) {
     if (this.isRestoring) return;
 
-    const json = JSON.stringify(canvas.toJSON());
+    const json = JSON.stringify((canvas as unknown as { toJSON(props: string[]): object }).toJSON(['id', 'name']));
 
     // Remove any future states if we've undone
     if (this.currentIndex < this.history.length - 1) {
@@ -26,30 +26,29 @@ export class CanvasHistory {
     }
   }
 
-  undo(canvas: Canvas): boolean {
+  async undo(canvas: Canvas): Promise<boolean> {
     if (this.currentIndex <= 0) return false;
 
     this.currentIndex--;
-    this.restoreState(canvas);
+    await this.restoreState(canvas);
     return true;
   }
 
-  redo(canvas: Canvas): boolean {
+  async redo(canvas: Canvas): Promise<boolean> {
     if (this.currentIndex >= this.history.length - 1) return false;
 
     this.currentIndex++;
-    this.restoreState(canvas);
+    await this.restoreState(canvas);
     return true;
   }
 
-  private restoreState(canvas: Canvas) {
+  private async restoreState(canvas: Canvas): Promise<void> {
     this.isRestoring = true;
     const state = this.history[this.currentIndex];
     const parsed = JSON.parse(state);
-    canvas.loadFromJSON(parsed).then(() => {
-      canvas.renderAll();
-      this.isRestoring = false;
-    });
+    await canvas.loadFromJSON(parsed);
+    canvas.renderAll();
+    this.isRestoring = false;
   }
 
   get canUndo(): boolean {

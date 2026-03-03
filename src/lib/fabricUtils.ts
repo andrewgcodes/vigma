@@ -8,7 +8,6 @@ function nextId(): string {
 }
 
 function getObjectName(type: string): string {
-  objectCounter++;
   const names: Record<string, string> = {
     rect: "Rectangle",
     circle: "Ellipse",
@@ -270,7 +269,7 @@ export function exportCanvasAsSVG(canvas: fabric.Canvas, fileName = "design.svg"
 }
 
 export function exportCanvasAsJSON(canvas: fabric.Canvas, fileName = "design.json") {
-  const json = JSON.stringify(canvas.toJSON(), null, 2);
+  const json = JSON.stringify((canvas as unknown as { toJSON(props: string[]): object }).toJSON(['id', 'name']), null, 2);
   const blob = new Blob([json], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");

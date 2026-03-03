@@ -399,23 +399,27 @@ export default function DesignCanvas({ canvasRef, historyRef }: DesignCanvasProp
       }
 
       // Ctrl+Z Undo
-      if ((e.ctrlKey || e.metaKey) && e.key === "z" && !e.shiftKey) {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && !e.shiftKey) {
         e.preventDefault();
-        if (historyRef.current.undo(canvas)) {
-          setCanUndo(historyRef.current.canUndo);
-          setCanRedo(historyRef.current.canRedo);
-          syncLayers(canvas);
-        }
+        historyRef.current.undo(canvas).then((didUndo) => {
+          if (didUndo) {
+            setCanUndo(historyRef.current.canUndo);
+            setCanRedo(historyRef.current.canRedo);
+            syncLayers(canvas);
+          }
+        });
       }
 
       // Ctrl+Shift+Z or Ctrl+Y Redo
-      if ((e.ctrlKey || e.metaKey) && (e.key === "y" || (e.key === "z" && e.shiftKey))) {
+      if ((e.ctrlKey || e.metaKey) && (e.key === "y" || (e.key.toLowerCase() === "z" && e.shiftKey))) {
         e.preventDefault();
-        if (historyRef.current.redo(canvas)) {
-          setCanUndo(historyRef.current.canUndo);
-          setCanRedo(historyRef.current.canRedo);
-          syncLayers(canvas);
-        }
+        historyRef.current.redo(canvas).then((didRedo) => {
+          if (didRedo) {
+            setCanUndo(historyRef.current.canUndo);
+            setCanRedo(historyRef.current.canRedo);
+            syncLayers(canvas);
+          }
+        });
       }
 
       // Ctrl+D Duplicate

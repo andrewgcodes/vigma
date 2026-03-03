@@ -310,16 +310,16 @@ export default function Home() {
   );
 
   // Undo/Redo
-  const handleUndo = useCallback(() => {
-    if (canvasRef.current && historyRef.current.undo(canvasRef.current)) {
+  const handleUndo = useCallback(async () => {
+    if (canvasRef.current && await historyRef.current.undo(canvasRef.current)) {
       setCanUndo(historyRef.current.canUndo);
       setCanRedo(historyRef.current.canRedo);
       syncLayers(canvasRef.current);
     }
   }, [setCanUndo, setCanRedo]);
 
-  const handleRedo = useCallback(() => {
-    if (canvasRef.current && historyRef.current.redo(canvasRef.current)) {
+  const handleRedo = useCallback(async () => {
+    if (canvasRef.current && await historyRef.current.redo(canvasRef.current)) {
       setCanUndo(historyRef.current.canUndo);
       setCanRedo(historyRef.current.canRedo);
       syncLayers(canvasRef.current);
