@@ -919,9 +919,6 @@ export class CanvasEngine {
       const tCenterX = tBound.left + tBound.width / 2
       const tCenterY = tBound.top + tBound.height / 2
 
-      // Convert viewport coordinates back to scene coordinates for snapping
-      const zoom = this.canvas.getZoom()
-      const vpt = this.canvas.viewportTransform || [1, 0, 0, 1, 0, 0]
 
       const newGuides: { orientation: 'h' | 'v'; position: number; start: number; end: number }[] = []
       let snapDx = 0
@@ -945,10 +942,6 @@ export class CanvasEngine {
         const oCenterX = oBound.left + oBound.width / 2
         const oCenterY = oBound.top + oBound.height / 2
 
-        // Convert screen coords to scene coords for guide line rendering
-        const toSceneX = (sx: number) => (sx - vpt[4]) / zoom
-        const toSceneY = (sy: number) => (sy - vpt[5]) / zoom
-
         // Vertical alignment checks (X-axis snapping)
         if (!snappedX) {
           const vChecks = [
@@ -960,10 +953,10 @@ export class CanvasEngine {
           ]
           for (const { tEdge, oEdge } of vChecks) {
             if (Math.abs(tEdge - oEdge) < threshold) {
-              snapDx = (oEdge - tEdge) / zoom
+              snapDx = oEdge - tEdge
               const minY = Math.min(tTop, oTop)
               const maxY = Math.max(tBottom, oBottom)
-              newGuides.push({ orientation: 'v', position: toSceneX(oEdge), start: toSceneY(minY), end: toSceneY(maxY) })
+              newGuides.push({ orientation: 'v', position: oEdge, start: minY, end: maxY })
               snappedX = true
               break
             }
@@ -981,10 +974,10 @@ export class CanvasEngine {
           ]
           for (const { tEdge, oEdge } of hChecks) {
             if (Math.abs(tEdge - oEdge) < threshold) {
-              snapDy = (oEdge - tEdge) / zoom
+              snapDy = oEdge - tEdge
               const minX = Math.min(tLeft, oLeft)
               const maxX = Math.max(tRight, oRight)
-              newGuides.push({ orientation: 'h', position: toSceneY(oEdge), start: toSceneX(minX), end: toSceneX(maxX) })
+              newGuides.push({ orientation: 'h', position: oEdge, start: minX, end: maxX })
               snappedY = true
               break
             }
