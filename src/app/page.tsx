@@ -137,21 +137,67 @@ export default function DesignPage() {
     }
     window.addEventListener('resize', handleResize)
 
-    // Load saved project from localStorage
-    const loadSaved = async () => {
-      try {
-        const saved = localStorage.getItem('vigma-project')
-        if (saved) {
-          await engine.loadFromJSON(saved)
-          refreshLayers()
+      // Load saved project from localStorage (supports multi-page persistence)
+      const loadSaved = async () => {
+        try {
+          const savedPages = localStorage.getItem('vigma-pages')
+          if (savedPages) {
+            const parsed = JSON.parse(savedPages)
+            if (parsed.pages && Array.isArray(parsed.pages) && parsed.pages.length > 0) {
+              // Restore all pages into the store
+              // Clear existing pages and load saved ones
+              const store = useDesignStore.getState()
+              // Remove default pages
+              for (const p of store.pages) {
+                if (!parsed.pages.find((sp: any) => sp.id === p.id)) {
+                  store.removePage(p.id)
+                }
+              }
+              // Add/update saved pages
+              for (const savedPage of parsed.pages) {
+                const existing = store.pages.find(p => p.id === savedPage.id)
+                if (existing) {
+                  store.updatePage(savedPage.id, { name: savedPage.name, canvasJSON: savedPage.canvasJSON })
+                } else {
+                  store.addPage(savedPage)
+                }
+              }
+              // Remove any default pages that weren't in the saved data
+              const savedIds = new Set(parsed.pages.map((p: any) => p.id))
+              for (const p of useDesignStore.getState().pages) {
+                if (!savedIds.has(p.id)) {
+                  // Only remove if there will still be pages left
+                  if (useDesignStore.getState().pages.length > 1) {
+                    store.removePage(p.id)
+                  }
+                }
+              }
+              // Set the current page
+              const targetPageId = parsed.currentPageId || parsed.pages[0].id
+              store.setCurrentPageId(targetPageId)
+              // Load the current page's canvas
+              const currentPage = parsed.pages.find((p: any) => p.id === targetPageId)
+              if (currentPage && currentPage.canvasJSON) {
+                await engine.loadFromJSON(currentPage.canvasJSON)
+              }
+              refreshLayers()
+              return
+            }
+          }
+          // Fallback: try loading legacy single-page format
+          const saved = localStorage.getItem('vigma-project')
+          if (saved) {
+            await engine.loadFromJSON(saved)
+            refreshLayers()
+          }
+        } catch (e) {
+          // If saved data is corrupt or incompatible, clear it
+          console.warn('Failed to load saved project, clearing localStorage', e)
+          localStorage.removeItem('vigma-pages')
+          localStorage.removeItem('vigma-project')
         }
-      } catch (e) {
-        // If saved data is corrupt or incompatible, clear it
-        console.warn('Failed to load saved project, clearing localStorage', e)
-        localStorage.removeItem('vigma-project')
       }
-    }
-    loadSaved()
+      loadSaved()
 
     return () => {
       window.removeEventListener('resize', handleResize)
@@ -1027,26 +1073,50 @@ export default function DesignPage() {
     }
   }, [snapToGrid, gridSize])
 
-  // SAVE PROJECT
-  const handleSaveProject = useCallback(() => {
+  // Helper: persist current canvas state into the Zustand store for the active page,
+  // then write ALL pages to localStorage. Always reads from the store directly to
+  // avoid stale-closure bugs.
+  const persistAllPages = useCallback(() => {
     const engine = engineRef.current
     if (!engine) return
-    const json = engine.exportToJSON()
-    localStorage.setItem('vigma-project', json)
+    try {
+      const store = useDesignStore.getState()
+      // Snapshot the live canvas into the current page's canvasJSON
+      store.updatePage(store.currentPageId, { canvasJSON: engine.exportToJSON() })
+      // Write all pages + currentPageId to localStorage
+      const pagesData = {
+        pages: useDesignStore.getState().pages,
+        currentPageId: store.currentPageId,
+      }
+      localStorage.setItem('vigma-pages', JSON.stringify(pagesData))
+      // Legacy single-page key for backward compat
+      localStorage.setItem('vigma-project', engine.exportToJSON())
+    } catch (e) {
+      console.warn('Failed to persist pages', e)
+    }
   }, [])
+
+  // SAVE PROJECT (saves all pages)
+  const handleSaveProject = useCallback(() => {
+    persistAllPages()
+  }, [persistAllPages])
 
   // Auto-save every 1 second (aggressive save to prevent data loss)
   useEffect(() => {
     const interval = setInterval(() => {
-      const engine = engineRef.current
-      if (!engine) return
-      try {
-        const json = engine.exportToJSON()
-        localStorage.setItem('vigma-project', json)
-      } catch (e) {}
+      persistAllPages()
     }, 1000)
     return () => clearInterval(interval)
-  }, [])
+  }, [persistAllPages])
+
+  // Save on browser close / refresh to prevent data loss
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      persistAllPages()
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [persistAllPages])
 
   // EXPORT
   const handleExport = useCallback((format: 'png' | 'svg' | 'jpg' | 'pdf' | 'json') => {
@@ -1095,11 +1165,13 @@ export default function DesignPage() {
   const handleImportJSON = useCallback((json: string) => {
     const engine = engineRef.current
     if (!engine) return
+    // Save the current page before replacing the canvas with imported data
+    persistAllPages()
     engine.loadFromJSON(json).then(() => {
       refreshLayers()
       refreshObjectProps()
     })
-  }, [])
+  }, [persistAllPages])
 
   const handleImportImage = useCallback(async (file: File) => {
     const engine = engineRef.current
@@ -1109,25 +1181,37 @@ export default function DesignPage() {
   }, [])
 
   // PAGE MANAGEMENT
+  // All page-transition handlers read from `useDesignStore.getState()` directly
+  // instead of relying on React closure variables (`currentPageId`, `pages`),
+  // which can be stale if the user clicks quickly before React re-renders.
+
   const handleAddPage = useCallback(() => {
     const engine = engineRef.current
     if (!engine) return
-    // Save current page
-    updatePage(currentPageId, { canvasJSON: engine.exportToJSON() })
+    const store = useDesignStore.getState()
+    // Save current page's canvas state into the store
+    store.updatePage(store.currentPageId, { canvasJSON: engine.exportToJSON() })
     const newId = uuidv4()
-    addPage({ id: newId, name: `Page ${pages.length + 1}`, canvasJSON: '' })
-    setCurrentPageId(newId)
+    store.addPage({ id: newId, name: `Page ${store.pages.length + 1}`, canvasJSON: '' })
+    store.setCurrentPageId(newId)
     engine.clearCanvas()
     refreshLayers()
-  }, [currentPageId, pages.length])
+    // Persist immediately so the saved page data isn't lost
+    persistAllPages()
+  }, [persistAllPages])
 
   const handleSelectPage = useCallback((id: string) => {
     const engine = engineRef.current
     if (!engine) return
-    // Save current page
-    updatePage(currentPageId, { canvasJSON: engine.exportToJSON() })
-    setCurrentPageId(id)
-    const page = pages.find(p => p.id === id)
+    const store = useDesignStore.getState()
+    // Don't switch if already on this page
+    if (store.currentPageId === id) return
+    // Save current page's canvas state into the store
+    store.updatePage(store.currentPageId, { canvasJSON: engine.exportToJSON() })
+    store.setCurrentPageId(id)
+    // Read the target page from the FRESH store state (after the updatePage above)
+    const freshPages = useDesignStore.getState().pages
+    const page = freshPages.find(p => p.id === id)
     if (page && page.canvasJSON) {
       engine.loadFromJSON(page.canvasJSON).then(() => {
         refreshLayers()
@@ -1137,17 +1221,34 @@ export default function DesignPage() {
       engine.clearCanvas()
       refreshLayers()
     }
-  }, [currentPageId, pages])
+    // Persist immediately so the saved page data isn't lost
+    persistAllPages()
+  }, [persistAllPages])
 
   const handleDeletePage = useCallback((id: string) => {
-    if (pages.length <= 1) return
-    const remaining = pages.filter(p => p.id !== id)
-    if (currentPageId === id) {
-      // Switch to another page first (saves current canvas), then remove
-      handleSelectPage(remaining[0].id)
+    const store = useDesignStore.getState()
+    if (store.pages.length <= 1) return
+    const engine = engineRef.current
+    if (!engine) return
+    // If deleting the current page, save canvas first and switch to another
+    if (store.currentPageId === id) {
+      store.updatePage(store.currentPageId, { canvasJSON: engine.exportToJSON() })
+      const remaining = store.pages.filter(p => p.id !== id)
+      const switchTo = remaining[0]
+      store.setCurrentPageId(switchTo.id)
+      if (switchTo.canvasJSON) {
+        engine.loadFromJSON(switchTo.canvasJSON).then(() => {
+          refreshLayers()
+          refreshObjectProps()
+        })
+      } else {
+        engine.clearCanvas()
+        refreshLayers()
+      }
     }
-    removePage(id)
-  }, [currentPageId, pages, handleSelectPage])
+    store.removePage(id)
+    persistAllPages()
+  }, [persistAllPages])
 
   const handleRenamePage = useCallback((id: string, name: string) => {
     updatePage(id, { name })
