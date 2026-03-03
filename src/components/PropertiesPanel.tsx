@@ -126,7 +126,6 @@ function NumberInput({
       onChange={(e) => setLocalValue(e.target.value)}
       onKeyDown={(e) => {
         if (e.key === "Enter") {
-          commit(localValue);
           e.currentTarget.blur();
         }
       }}
