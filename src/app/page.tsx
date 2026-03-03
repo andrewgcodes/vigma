@@ -21,6 +21,7 @@ import { v4 as uuidv4 } from 'uuid'
 import type { ToolType } from '@/types/design'
 import WelcomeModal from '@/components/WelcomeModal'
 import MobileGate from '@/components/MobileGate'
+import CropOverlay from '@/components/CropOverlay'
 
 export default function DesignPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -51,7 +52,8 @@ export default function DesignPage() {
   const [canUndo, setCanUndo] = useState(false)
   const [canRedo, setCanRedo] = useState(false)
   const [zoom, setZoom] = useState(1)
-  const [contextMenu, setContextMenu] = useState({ visible: false, x: 0, y: 0, hasSelection: false, multipleSelected: false, isLocked: false })
+  const [contextMenu, setContextMenu] = useState({ visible: false, x: 0, y: 0, hasSelection: false, multipleSelected: false, isLocked: false, isImage: false })
+  const [cropMode, setCropMode] = useState<{ imageRect: { left: number; top: number; width: number; height: number } } | null>(null)
   const [isDrawingShape, setIsDrawingShape] = useState(false)
   const drawStartRef = useRef<{ x: number; y: number } | null>(null)
   const previewObjRef = useRef<any>(null)
@@ -848,6 +850,7 @@ export default function DesignPage() {
       // Capture selection state NOW before Fabric.js changes it
       const active = engine.canvas.getActiveObject()
       const selCount = active ? ((active as any).type === 'activeselection' ? (active as any).getObjects().length : 1) : 0
+      const isImageObj = active ? (active as any).type === 'image' : false
       setContextMenu({
         visible: true,
         x: opt.e.clientX,
@@ -855,6 +858,7 @@ export default function DesignPage() {
         hasSelection: selCount > 0,
         multipleSelected: selCount > 1,
         isLocked: active ? !!(active as any).lockMovementX : false,
+        isImage: isImageObj,
       })
     }
 
@@ -1274,6 +1278,48 @@ export default function DesignPage() {
     if (dataURL) downloadDataURL(dataURL, `selection.${format}`)
   }, [])
 
+  const handleEnterCropMode = useCallback(() => {
+    const engine = engineRef.current
+    if (!engine) return
+    const active = engine.canvas.getActiveObject()
+    if (!active || (active as any).type !== 'image') return
+    // Get the image's bounding rect in screen (viewport) coordinates
+    const bound = active.getBoundingRect()
+    setCropMode({
+      imageRect: {
+        left: bound.left,
+        top: bound.top,
+        width: bound.width,
+        height: bound.height,
+      },
+    })
+  }, [])
+
+  const handleCropApply = useCallback((cropFractions: { left: number, top: number, width: number, height: number }) => {
+    const engine = engineRef.current
+    if (!engine) return
+    const active = engine.canvas.getActiveObject()
+    if (!active || (active as any).type !== 'image') {
+      setCropMode(null)
+      return
+    }
+    // Convert fractions to object-local pixel coordinates for clipPath
+    const objW = active.width ?? 0
+    const objH = active.height ?? 0
+    const clipLeft = cropFractions.left * objW
+    const clipTop = cropFractions.top * objH
+    const clipW = cropFractions.width * objW
+    const clipH = cropFractions.height * objH
+    engine.cropImage({ left: clipLeft - objW / 2, top: clipTop - objH / 2, width: clipW, height: clipH })
+    refreshObjectProps()
+    syncActiveToCollab()
+    setCropMode(null)
+  }, [syncActiveToCollab])
+
+  const handleCropCancel = useCallback(() => {
+    setCropMode(null)
+  }, [])
+
   const handleCropImage = useCallback((crop: { left: number, top: number, width: number, height: number }) => {
     engineRef.current?.cropImage(crop)
     refreshObjectProps()
@@ -1689,7 +1735,7 @@ export default function DesignPage() {
         x={contextMenu.x}
         y={contextMenu.y}
         visible={contextMenu.visible}
-        onClose={() => setContextMenu({ visible: false, x: 0, y: 0, hasSelection: false, multipleSelected: false, isLocked: false })}
+        onClose={() => setContextMenu({ visible: false, x: 0, y: 0, hasSelection: false, multipleSelected: false, isLocked: false, isImage: false })}
         onCopy={() => engineRef.current?.copy()}
         onCut={() => { engineRef.current?.cut().then(() => refreshLayers()) }}
         onPaste={() => { engineRef.current?.paste().then(() => refreshLayers()) }}
@@ -1721,7 +1767,18 @@ export default function DesignPage() {
         hasSelection={contextMenu.hasSelection}
         isLocked={contextMenu.isLocked}
         multipleSelected={contextMenu.multipleSelected}
+        isImage={contextMenu.isImage}
+        onCrop={handleEnterCropMode}
       />
+
+      {/* Crop Overlay */}
+      {cropMode && (
+        <CropOverlay
+          imageRect={cropMode.imageRect}
+          onApply={handleCropApply}
+          onCancel={handleCropCancel}
+        />
+      )}
 
       {/* Welcome modal for first-time visitors */}
       <WelcomeModal />

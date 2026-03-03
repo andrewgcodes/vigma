@@ -5,7 +5,7 @@ import {
   Copy, Clipboard, Scissors, Trash2, Lock, Unlock,
   ArrowUpToLine, ArrowDownToLine, ArrowUp, ArrowDown,
   FlipHorizontal, FlipVertical, Group, Ungroup,
-  Eye, EyeOff, CopyPlus, Combine, Minus, Merge, X
+  Eye, EyeOff, CopyPlus, Combine, Minus, Merge, X, Crop
 } from 'lucide-react'
 
 interface ContextMenuProps {
@@ -34,9 +34,11 @@ interface ContextMenuProps {
   onBooleanExclude?: () => void
   onMask?: () => void
   onRemoveMask?: () => void
+  onCrop?: () => void
   hasSelection: boolean
   isLocked: boolean
   multipleSelected?: boolean
+  isImage?: boolean
 }
 
 export default function ContextMenu({
@@ -45,8 +47,8 @@ export default function ContextMenu({
   onBringToFront, onSendToBack, onBringForward, onSendBackward,
   onGroup, onUngroup, onFlipH, onFlipV, onLock,
   onBooleanUnion, onBooleanSubtract, onBooleanIntersect, onBooleanExclude,
-  onMask, onRemoveMask,
-  hasSelection, isLocked, multipleSelected,
+  onMask, onRemoveMask, onCrop,
+  hasSelection, isLocked, multipleSelected, isImage,
 }: ContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -108,6 +110,12 @@ export default function ContextMenu({
           <Divider />
           <CtxItem icon={<Eye size={14} />} label="Use as Mask" onClick={() => { onMask?.(); onClose() }} />
           <CtxItem icon={<EyeOff size={14} />} label="Remove Mask" onClick={() => { onRemoveMask?.(); onClose() }} />
+          {isImage && (
+            <>
+              <Divider />
+              <CtxItem icon={<Crop size={14} />} label="Crop Image" onClick={() => { onCrop?.(); onClose() }} />
+            </>
+          )}
           <Divider />
           <CtxItem
             icon={isLocked ? <Unlock size={14} /> : <Lock size={14} />}
