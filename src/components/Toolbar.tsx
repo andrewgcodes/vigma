@@ -4,7 +4,7 @@ import React from 'react'
 import {
   MousePointer2, Hand, Square, Circle, Triangle, Type, Pen,
   Pencil, Minus, ArrowRight, Star, Hexagon, Image, Frame,
-  Paintbrush, Eraser, Pipette
+  Paintbrush, Eraser, Pipette, MessageCircle
 } from 'lucide-react'
 import { useDesignStore } from '@/store/useDesignStore'
 import type { ToolType } from '@/types/design'
@@ -34,6 +34,7 @@ const tools: ToolDef[] = [
   { id: 'eraser', icon: <Eraser size={18} />, label: 'Eraser', shortcut: 'E' },
   { id: 'image', icon: <Image size={18} />, label: 'Image' },
   { id: 'eyedropper', icon: <Pipette size={18} />, label: 'Eyedropper', shortcut: 'I' },
+  { id: 'comment', icon: <MessageCircle size={18} />, label: 'Comment', shortcut: 'C' },
 ]
 
 export default function Toolbar() {

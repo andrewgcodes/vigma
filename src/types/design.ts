@@ -16,6 +16,7 @@ export type ToolType =
   | 'eraser'
   | 'image'
   | 'eyedropper'
+  | 'comment'
 
 export type GradientType = 'linear' | 'radial'
 

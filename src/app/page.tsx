@@ -10,8 +10,16 @@ import PagesPanel from '@/components/PagesPanel'
 import PropertiesPanel from '@/components/PropertiesPanel'
 import ContextMenu from '@/components/ContextMenu'
 import Rulers from '@/components/Rulers'
+import CursorOverlay from '@/components/CursorOverlay'
+import CommentPins from '@/components/CommentPins'
+import CommentsPanel from '@/components/CommentsPanel'
+import { CollaborationManager, generateRoomId, getRoomIdFromHash, setRoomIdInHash, clearRoomFromHash } from '@/lib/collaboration'
+import type { Comment, CommentReply, RemoteUser } from '@/lib/collaboration'
+import { getUserIdentity } from '@/lib/userIdentity'
+import type { UserIdentity } from '@/lib/userIdentity'
 import { v4 as uuidv4 } from 'uuid'
 import type { ToolType } from '@/types/design'
+import WelcomeModal from '@/components/WelcomeModal'
 
 export default function DesignPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -47,6 +55,17 @@ export default function DesignPage() {
   const drawStartRef = useRef<{ x: number; y: number } | null>(null)
   const previewObjRef = useRef<any>(null)
   const resizingRef = useRef<{ side: 'left' | 'right'; startX: number; startWidth: number } | null>(null)
+
+  // Collaboration state
+  const [isCollaborating, setIsCollaborating] = useState(false)
+  const [roomId, setRoomId] = useState<string | null>(null)
+  const [remoteUsers, setRemoteUsers] = useState<RemoteUser[]>([])
+  const [comments, setComments] = useState<Comment[]>([])
+  const [showResolved, setShowResolved] = useState(false)
+  const [commentInput, setCommentInput] = useState<{ x: number; y: number; text: string } | null>(null)
+  const collabRef = useRef<CollaborationManager | null>(null)
+  const userRef = useRef<UserIdentity>(getUserIdentity())
+  const syncingFromRemoteCountRef = useRef(0)
 
   // Panel resize handlers
   const handleResizeStart = useCallback((side: 'left' | 'right', e: React.MouseEvent) => {
@@ -147,6 +166,335 @@ export default function DesignPage() {
     }
   }, [])
 
+  // === COLLABORATION ===
+
+  // Sync a single canvas object to Yjs
+  const syncObjectToCollab = useCallback((obj: any) => {
+    const collab = collabRef.current
+    if (!collab || syncingFromRemoteCountRef.current > 0) return
+    if (!obj || !obj.id) return
+    try {
+      const json = JSON.stringify(obj.toJSON(['id', 'name', 'isFrame', 'lockMovementX', 'lockMovementY', 'lockRotation', 'lockScalingX', 'lockScalingY', 'hasControls', 'selectable', 'evented']))
+      collab.syncObjectToYjs(obj.id, json)
+    } catch (e) {
+      console.warn('Failed to sync object to collab', e)
+    }
+  }, [])
+
+  // Sync all canvas objects to Yjs
+  const syncAllObjectsToCollab = useCallback(() => {
+    const collab = collabRef.current
+    const engine = engineRef.current
+    if (!collab || !engine || syncingFromRemoteCountRef.current > 0) return
+    const objects = engine.canvas.getObjects().filter((o: any) => !o.isPreview && !o.isGrid)
+    const items = objects.map((obj: any) => {
+      if (!obj.id) obj.id = uuidv4()
+      return {
+        id: obj.id,
+        json: JSON.stringify(obj.toJSON(['id', 'name', 'isFrame', 'lockMovementX', 'lockMovementY', 'lockRotation', 'lockScalingX', 'lockScalingY', 'hasControls', 'selectable', 'evented'])),
+      }
+    })
+    collab.pushCanvasState(items)
+  }, [])
+
+  // Handle remote object changes from Yjs
+  const handleRemoteObjectChange = useCallback((changes: { added: string[], updated: string[], deleted: string[] }) => {
+    const engine = engineRef.current
+    const collab = collabRef.current
+    if (!engine || !collab) return
+
+    syncingFromRemoteCountRef.current++
+
+    // Handle deletions
+    for (const id of changes.deleted) {
+      const obj = engine.canvas.getObjects().find((o: any) => o.id === id)
+      if (obj) {
+        engine.canvas.remove(obj)
+      }
+    }
+
+    // Handle additions and updates
+    const toProcess = [...changes.added, ...changes.updated]
+    const enlivenPromises: Promise<void>[] = []
+    for (const id of toProcess) {
+      const jsonStr = collab.getObject(id)
+      if (!jsonStr) continue
+      try {
+        const objData = JSON.parse(jsonStr)
+        const existing = engine.canvas.getObjects().find((o: any) => o.id === id)
+        if (existing) {
+          // Update existing object
+          existing.set(objData)
+          existing.setCoords()
+        } else {
+          // Add new object - use fabric.util.enlivenObjects
+          const fabric = require('fabric')
+          const promise = fabric.util.enlivenObjects([objData]).then((objs: any[]) => {
+            if (objs[0]) {
+              objs[0].id = id
+              engine.canvas.add(objs[0])
+              engine.canvas.renderAll()
+              refreshLayers()
+            }
+          })
+          enlivenPromises.push(promise)
+        }
+      } catch (e) {
+        console.warn('Failed to process remote object', id, e)
+      }
+    }
+
+    engine.canvas.renderAll()
+    refreshLayers()
+
+    // Only decrement the counter after all async enlivens complete
+    if (enlivenPromises.length > 0) {
+      Promise.all(enlivenPromises).catch((e) => {
+        console.warn('Failed to enliven remote objects', e)
+      }).finally(() => {
+        syncingFromRemoteCountRef.current--
+      })
+    } else {
+      syncingFromRemoteCountRef.current--
+    }
+  }, [])
+
+  // Initialize collaboration from URL hash
+  useEffect(() => {
+    const hashRoomId = getRoomIdFromHash()
+    if (hashRoomId) {
+      startCollaboration(hashRoomId)
+    }
+
+    const handleHashChange = () => {
+      const newRoomId = getRoomIdFromHash()
+      if (newRoomId && !collabRef.current) {
+        startCollaboration(newRoomId)
+      }
+    }
+    window.addEventListener('hashchange', handleHashChange)
+    return () => {
+      window.removeEventListener('hashchange', handleHashChange)
+      if (collabRef.current) {
+        collabRef.current.disconnect()
+        collabRef.current = null
+      }
+    }
+  }, [])
+
+  // Start collaboration session
+  const startCollaboration = useCallback((rid: string) => {
+    if (collabRef.current) return
+
+    const collab = new CollaborationManager(rid, userRef.current)
+    collabRef.current = collab
+
+    collab.connect({
+      onRemoteObjectChange: handleRemoteObjectChange,
+      onRemoteCommentsChange: () => {
+        if (collabRef.current) {
+          setComments(collabRef.current.getComments())
+        }
+      },
+      onUsersChange: (users) => {
+        setRemoteUsers(users)
+      },
+    })
+
+    setRoomId(rid)
+    setIsCollaborating(true)
+
+    // Wait a moment for initial sync, then push current canvas state if we're the first
+    setTimeout(() => {
+      if (collab.getAllObjects().size === 0) {
+        syncAllObjectsToCollab()
+      }
+      setComments(collab.getComments())
+    }, 1000)
+  }, [handleRemoteObjectChange, syncAllObjectsToCollab])
+
+  // Canvas event listeners for collaboration sync
+  useEffect(() => {
+    const engine = engineRef.current
+    if (!engine || !isCollaborating) return
+
+    const onModified = (opt: any) => {
+      if (syncingFromRemoteCountRef.current > 0) return
+      const target = opt.target
+      if (!target) return
+      if ((target as any).type === 'activeselection') {
+        // Multiple objects selected and moved
+        const objects = (target as any).getObjects()
+        for (const obj of objects) {
+          syncObjectToCollab(obj)
+        }
+      } else {
+        syncObjectToCollab(target)
+      }
+    }
+
+    const onAdded = (opt: any) => {
+      if (syncingFromRemoteCountRef.current > 0) return
+      const target = opt.target
+      if (!target || (target as any).isPreview || (target as any).isGrid) return
+      if (!target.id) target.id = uuidv4()
+      syncObjectToCollab(target)
+    }
+
+    const onRemoved = (opt: any) => {
+      if (syncingFromRemoteCountRef.current > 0) return
+      const target = opt.target
+      if (!target || !target.id || (target as any).isPreview || (target as any).isGrid) return
+      collabRef.current?.removeObjectFromYjs(target.id)
+    }
+
+    const onPathCreated = (opt: any) => {
+      if (syncingFromRemoteCountRef.current > 0) return
+      const path = opt.path
+      if (!path) return
+      if (!path.id) path.id = uuidv4()
+      syncObjectToCollab(path)
+    }
+
+    engine.canvas.on('object:modified', onModified)
+    engine.canvas.on('object:added', onAdded)
+    engine.canvas.on('object:removed', onRemoved)
+    engine.canvas.on('path:created', onPathCreated)
+
+    return () => {
+      engine.canvas.off('object:modified', onModified)
+      engine.canvas.off('object:added', onAdded)
+      engine.canvas.off('object:removed', onRemoved)
+      engine.canvas.off('path:created', onPathCreated)
+    }
+  }, [isCollaborating, syncObjectToCollab])
+
+  // Cursor tracking for collaboration
+  useEffect(() => {
+    const engine = engineRef.current
+    if (!engine || !isCollaborating) return
+
+    const onMouseMove = (opt: any) => {
+      const pointer = engine.canvas.getScenePoint(opt.e)
+      collabRef.current?.updateCursor(pointer.x, pointer.y)
+    }
+
+    const onMouseOut = () => {
+      collabRef.current?.clearCursor()
+    }
+
+    engine.canvas.on('mouse:move', onMouseMove)
+    engine.canvas.on('mouse:out', onMouseOut)
+
+    return () => {
+      engine.canvas.off('mouse:move', onMouseMove)
+      engine.canvas.off('mouse:out', onMouseOut)
+    }
+  }, [isCollaborating])
+
+  // Selection sync for collaboration
+  useEffect(() => {
+    if (isCollaborating && collabRef.current) {
+      collabRef.current.updateSelection(selectedIds)
+    }
+  }, [selectedIds, isCollaborating])
+
+  // === SHARE HANDLER ===
+  const handleShare = useCallback(() => {
+    const rid = generateRoomId()
+    setRoomIdInHash(rid)
+    startCollaboration(rid)
+  }, [startCollaboration])
+
+  // === LEAVE ROOM HANDLER ===
+  const handleLeaveRoom = useCallback(() => {
+    if (collabRef.current) {
+      collabRef.current.disconnect()
+      collabRef.current = null
+    }
+    setIsCollaborating(false)
+    setRoomId(null)
+    setRemoteUsers([])
+    setComments([])
+    clearRoomFromHash()
+  }, [])
+
+  // === COMMENT HANDLERS ===
+  const handleAddComment = useCallback((x: number, y: number, text: string) => {
+    const comment: Comment = {
+      id: uuidv4(),
+      text,
+      author: userRef.current,
+      x,
+      y,
+      timestamp: Date.now(),
+      resolved: false,
+      replies: [],
+    }
+    if (collabRef.current) {
+      collabRef.current.addComment(comment)
+      setComments(collabRef.current.getComments())
+    } else {
+      // Solo mode - store locally
+      setComments(prev => [...prev, comment])
+    }
+  }, [])
+
+  const handleAddReply = useCallback((commentId: string, text: string) => {
+    const reply: CommentReply = {
+      id: uuidv4(),
+      text,
+      author: userRef.current,
+      timestamp: Date.now(),
+    }
+    if (collabRef.current) {
+      collabRef.current.addReply(commentId, reply)
+      setComments(collabRef.current.getComments())
+    } else {
+      setComments(prev => prev.map(c => c.id === commentId ? { ...c, replies: [...c.replies, reply] } : c))
+    }
+  }, [])
+
+  const handleDeleteComment = useCallback((commentId: string) => {
+    if (collabRef.current) {
+      collabRef.current.deleteComment(commentId)
+      setComments(collabRef.current.getComments())
+    } else {
+      setComments(prev => prev.filter(c => c.id !== commentId))
+    }
+  }, [])
+
+  const handleDeleteReply = useCallback((commentId: string, replyId: string) => {
+    if (collabRef.current) {
+      collabRef.current.deleteReply(commentId, replyId)
+      setComments(collabRef.current.getComments())
+    } else {
+      setComments(prev => prev.map(c => c.id === commentId ? { ...c, replies: c.replies.filter(r => r.id !== replyId) } : c))
+    }
+  }, [])
+
+  const handleToggleResolve = useCallback((commentId: string) => {
+    if (collabRef.current) {
+      collabRef.current.toggleResolve(commentId)
+      setComments(collabRef.current.getComments())
+    } else {
+      setComments(prev => prev.map(c => c.id === commentId ? { ...c, resolved: !c.resolved } : c))
+    }
+  }, [])
+
+  const handleScrollToComment = useCallback((comment: Comment) => {
+    const engine = engineRef.current
+    if (!engine) return
+    // Pan canvas to center on comment location
+    const vpt = engine.canvas.viewportTransform
+    if (vpt) {
+      vpt[4] = engine.canvas.getWidth() / 2 - comment.x * vpt[0]
+      vpt[5] = engine.canvas.getHeight() / 2 - comment.y * vpt[3]
+      engine.canvas.setViewportTransform(vpt)
+      engine.canvas.renderAll()
+    }
+  }, [])
+
   // Tool changes
   useEffect(() => {
     const engine = engineRef.current
@@ -212,6 +560,11 @@ export default function DesignPage() {
         setActiveTool('select')
         break
       case 'eyedropper':
+        engine.canvas.defaultCursor = 'crosshair'
+        engine.canvas.selection = false
+        engine.canvas.forEachObject(o => { o.selectable = false; o.evented = false })
+        break
+      case 'comment':
         engine.canvas.defaultCursor = 'crosshair'
         engine.canvas.selection = false
         engine.canvas.forEachObject(o => { o.selectable = false; o.evented = false })
@@ -360,16 +713,26 @@ export default function DesignPage() {
       setActiveTool('select')
     }
 
+    // Comment tool click
+    const handleCommentClick = (opt: any) => {
+      if (activeTool !== 'comment') return
+      if (opt.e.button !== 0) return
+      const pointer = engine.canvas.getScenePoint(opt.e)
+      setCommentInput({ x: pointer.x, y: pointer.y, text: '' })
+    }
+
     engine.canvas.on('mouse:down', handleMouseDown)
     engine.canvas.on('mouse:move', handleMouseMove)
     engine.canvas.on('mouse:up', handleMouseUp)
     engine.canvas.on('mouse:down', handleEyedropper)
+    engine.canvas.on('mouse:down', handleCommentClick)
 
     return () => {
       engine.canvas.off('mouse:down', handleMouseDown)
       engine.canvas.off('mouse:move', handleMouseMove)
       engine.canvas.off('mouse:up', handleMouseUp)
       engine.canvas.off('mouse:down', handleEyedropper)
+      engine.canvas.off('mouse:down', handleCommentClick)
     }
   }, [activeTool, fill])
 
@@ -442,6 +805,7 @@ export default function DesignPage() {
           case 'e': setActiveTool('eraser'); e.preventDefault(); return
           case 'f': setActiveTool('frame'); e.preventDefault(); return
           case 'i': setActiveTool('eyedropper'); e.preventDefault(); return
+          case 'c': setActiveTool('comment'); e.preventDefault(); return
         }
       }
 
@@ -867,6 +1231,11 @@ export default function DesignPage() {
         onSaveProject={handleSaveProject}
         leftPanelOpen={leftPanelOpen}
         rightPanelOpen={rightPanelOpen}
+        isCollaborating={isCollaborating}
+        roomId={roomId}
+        remoteUsers={remoteUsers}
+        onShare={handleShare}
+        onLeaveRoom={handleLeaveRoom}
       />
 
       {/* Left Panel */}
@@ -876,6 +1245,7 @@ export default function DesignPage() {
           <div className="flex border-b border-canvas-border">
             <TabButton active={leftPanelTab === 'layers'} onClick={() => setLeftPanelTab('layers')}>Layers</TabButton>
             <TabButton active={leftPanelTab === 'pages'} onClick={() => setLeftPanelTab('pages')}>Pages</TabButton>
+            <TabButton active={leftPanelTab === 'comments'} onClick={() => setLeftPanelTab('comments')}><span className="flex items-center gap-0.5 whitespace-nowrap">Chat{comments.filter(c => !c.resolved).length > 0 && <span className="text-xxs bg-canvas-accent text-white rounded-full w-4 h-4 flex items-center justify-center">{comments.filter(c => !c.resolved).length}</span>}</span></TabButton>
           </div>
 
           {/* Tab content */}
@@ -922,6 +1292,19 @@ export default function DesignPage() {
                 onAddPage={handleAddPage}
                 onDeletePage={handleDeletePage}
                 onRenamePage={handleRenamePage}
+              />
+            )}
+            {leftPanelTab === 'comments' && (
+              <CommentsPanel
+                comments={comments}
+                user={userRef.current}
+                onAddReply={handleAddReply}
+                onDeleteComment={handleDeleteComment}
+                onDeleteReply={handleDeleteReply}
+                onToggleResolve={handleToggleResolve}
+                onScrollToComment={handleScrollToComment}
+                showResolved={showResolved}
+                onToggleShowResolved={() => setShowResolved(prev => !prev)}
               />
             )}
           </div>
@@ -1002,6 +1385,98 @@ export default function DesignPage() {
         }}
       >
         <canvas ref={canvasRef} />
+
+        {/* Live cursors overlay */}
+        {isCollaborating && (
+          <CursorOverlay
+            users={remoteUsers}
+            zoom={zoom}
+            panX={viewport.panX}
+            panY={viewport.panY}
+          />
+        )}
+
+        {/* Comment pins overlay */}
+        {comments.length > 0 && (
+          <CommentPins
+            comments={comments}
+            user={userRef.current}
+            zoom={zoom}
+            panX={viewport.panX}
+            panY={viewport.panY}
+            onReply={handleAddReply}
+            onDelete={handleDeleteComment}
+            onDeleteReply={handleDeleteReply}
+            onToggleResolve={handleToggleResolve}
+            showResolved={showResolved}
+          />
+        )}
+
+        {/* Comment input popup */}
+        {commentInput && (
+          <div
+            className="absolute z-50"
+            style={{
+              left: commentInput.x * zoom + viewport.panX,
+              top: commentInput.y * zoom + viewport.panY,
+            }}
+          >
+            <div className="bg-white rounded-lg shadow-xl border border-gray-200 p-3 w-64 -translate-x-4 translate-y-2">
+              <div className="flex items-center gap-2 mb-2">
+                <div
+                  className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-bold"
+                  style={{ backgroundColor: userRef.current.color }}
+                >
+                  {userRef.current.name.charAt(0)}
+                </div>
+                <span className="text-xs font-medium text-gray-700">{userRef.current.name}</span>
+              </div>
+              <textarea
+                autoFocus
+                value={commentInput.text}
+                onChange={(e) => setCommentInput(prev => prev ? { ...prev, text: e.target.value } : null)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault()
+                    if (commentInput.text.trim()) {
+                      handleAddComment(commentInput.x, commentInput.y, commentInput.text.trim())
+                      setCommentInput(null)
+                      setActiveTool('select')
+                    }
+                  }
+                  if (e.key === 'Escape') {
+                    setCommentInput(null)
+                    setActiveTool('select')
+                  }
+                }}
+                placeholder="Add a comment..."
+                className="w-full text-xs border border-gray-200 rounded-md px-2 py-1.5 resize-none focus:outline-none focus:ring-1 focus:ring-blue-400 focus:border-blue-400"
+                rows={2}
+              />
+              <div className="flex justify-end gap-1.5 mt-2">
+                <button
+                  onClick={() => { setCommentInput(null); setActiveTool('select') }}
+                  className="text-[10px] px-2 py-1 text-gray-500 hover:text-gray-700 rounded transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    if (commentInput.text.trim()) {
+                      handleAddComment(commentInput.x, commentInput.y, commentInput.text.trim())
+                      setCommentInput(null)
+                      setActiveTool('select')
+                    }
+                  }}
+                  disabled={!commentInput.text.trim()}
+                  className="text-[10px] px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors font-medium"
+                >
+                  Post
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Toolbar */}
@@ -1045,6 +1520,9 @@ export default function DesignPage() {
         isLocked={contextMenu.isLocked}
         multipleSelected={contextMenu.multipleSelected}
       />
+
+      {/* Welcome modal for first-time visitors */}
+      <WelcomeModal />
     </div>
   )
 }

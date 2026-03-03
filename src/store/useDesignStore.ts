@@ -79,8 +79,8 @@ interface DesignState {
   toggleLeftPanel: () => void
   rightPanelOpen: boolean
   toggleRightPanel: () => void
-  leftPanelTab: 'layers' | 'pages' | 'assets'
-  setLeftPanelTab: (tab: 'layers' | 'pages' | 'assets') => void
+  leftPanelTab: 'layers' | 'pages' | 'assets' | 'comments'
+  setLeftPanelTab: (tab: 'layers' | 'pages' | 'assets' | 'comments') => void
   leftPanelWidth: number
   setLeftPanelWidth: (w: number) => void
   rightPanelWidth: number

@@ -395,11 +395,20 @@ export default function PropertiesPanel({
               color={objectProps.stroke || '#000000'}
               onChange={(c) => onStrokeChange(c, objectProps.strokeWidth || 1)}
             />
-            <div className="grid grid-cols-2 gap-2">
-              <PropInput label="Width" value={objectProps.strokeWidth || 0} onChange={(v) => onStrokeChange(objectProps.stroke || '#000000', v)} min={0} />
+            <div className="grid grid-cols-2 gap-2 items-end">
+              <div>
+                <span className="text-xxs text-canvas-text-tertiary">Width</span>
+                <input
+                  type="number"
+                  value={objectProps.strokeWidth || 0}
+                  onChange={(e) => onStrokeChange(objectProps.stroke || '#000000', parseFloat(e.target.value) || 0)}
+                  min={0}
+                  className="w-full text-xs bg-canvas-bg border border-canvas-border rounded-lg px-2 py-1 focus:outline-none focus:border-canvas-accent text-canvas-text mt-0.5"
+                />
+              </div>
               <div>
                 <span className="text-xxs text-canvas-text-tertiary">Position</span>
-                <select value={objectProps.strokePosition || 'center'} onChange={(e) => onStrokePositionChange?.(e.target.value as 'center' | 'inside' | 'outside')} className="w-full text-xs bg-canvas-bg border border-canvas-border rounded-lg px-1.5 py-1 focus:outline-none focus:border-canvas-accent text-canvas-text mt-0.5">
+                <select value={objectProps.strokePosition || 'center'} onChange={(e) => onStrokePositionChange?.(e.target.value as 'center' | 'inside' | 'outside')} className="w-full text-xs bg-canvas-bg border border-canvas-border rounded-lg px-2 py-1 focus:outline-none focus:border-canvas-accent text-canvas-text mt-0.5">
                   <option value="center">Center</option>
                   <option value="inside">Inside</option>
                   <option value="outside">Outside</option>
