@@ -2,7 +2,6 @@ import { create } from 'zustand'
 import type {
   ToolType, FillConfig, StrokeConfig, ShadowConfig, TextStyle,
   BrushSettings, PageData, HistoryEntry, CanvasViewport, ExportSettings,
-  DEFAULT_FILL, DEFAULT_STROKE, DEFAULT_SHADOW, DEFAULT_TEXT_STYLE, DEFAULT_BRUSH,
   LayerItem, GuideLineData,
 } from '@/types/design'
 
