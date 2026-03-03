@@ -8,7 +8,11 @@ import LayersPanel from '@/components/LayersPanel';
 import PropertiesPanel from '@/components/PropertiesPanel';
 import StatusBar from '@/components/StatusBar';
 import Rulers from '@/components/Rulers';
+import ShareModal from '@/components/ShareModal';
+import RemoteCursors from '@/components/RemoteCursors';
 import { useCanvasStore } from '@/store/canvas-store';
+import { connectToRoom } from '@/lib/collab';
+import { useCollabStore } from '@/store/collab-store';
 
 const DesignCanvas = dynamic(() => import('@/components/DesignCanvas'), {
   ssr: false,
@@ -22,9 +26,23 @@ const DesignCanvas = dynamic(() => import('@/components/DesignCanvas'), {
 
 export default function Home() {
   const { showLayers, showProperties } = useCanvasStore();
+  const roomId = useCollabStore((s) => s.roomId);
   const [layersPanelWidth, setLayersPanelWidth] = useState(240);
   const [propertiesPanelWidth, setPropertiesPanelWidth] = useState(260);
   const [showRulers] = useState(true);
+
+  // Auto-join room from URL parameter
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const roomParam = urlParams.get('room');
+    if (roomParam) {
+      // Small delay to let canvas initialize first
+      const timer = setTimeout(() => {
+        connectToRoom(roomParam);
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, []);
 
   const isDraggingLeft = useRef(false);
   const isDraggingRight = useRef(false);
@@ -106,6 +124,8 @@ export default function Home() {
         </div>
       </div>
       <StatusBar />
+      <ShareModal />
+      {roomId && <RemoteCursors />}
     </div>
   );
 }

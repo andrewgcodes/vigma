@@ -4,6 +4,7 @@ import React, { useRef, useEffect, useState } from 'react';
 import { useCanvasStore } from '@/store/canvas-store';
 import { canvasEngine } from '@/lib/canvas-engine';
 import ContextMenu from './ContextMenu';
+import { sendCanvasUpdate, sendCursorMove, getIsReceivingUpdate } from '@/lib/collab';
 
 interface ContextMenuState {
   visible: boolean;
@@ -46,10 +47,18 @@ export default function DesignCanvas() {
       onObjectsChange: () => {
         const objects = canvasEngine.getObjectsList();
         setObjects(objects);
+        // Broadcast canvas changes to collaborators
+        if (!getIsReceivingUpdate()) {
+          sendCanvasUpdate();
+        }
       },
       onZoomChange: (z) => setZoom(z),
       onHistoryPush: (json) => pushHistory({ json, timestamp: Date.now() }),
-      onCursorMove: (x, y) => setCursorPosition(x, y),
+      onCursorMove: (x, y) => {
+        setCursorPosition(x, y);
+        // Send cursor position to collaborators
+        sendCursorMove(x, y);
+      },
       onContextMenu: (x, y, hasTarget) => {
         setContextMenu({ visible: true, x, y, hasTarget });
       },
@@ -58,13 +67,17 @@ export default function DesignCanvas() {
     // Enable middle-click panning
     canvasEngine.enablePanning();
 
-    // Load saved design from localStorage
-    canvasEngine.loadFromLocalStorage().then((loaded) => {
-      if (loaded) {
-        const objects = canvasEngine.getObjectsList();
-        setObjects(objects);
-      }
-    });
+    // Load saved design from localStorage (only if not joining a room)
+    const urlParams = new URLSearchParams(window.location.search);
+    const roomParam = urlParams.get('room');
+    if (!roomParam) {
+      canvasEngine.loadFromLocalStorage().then((loaded) => {
+        if (loaded) {
+          const objects = canvasEngine.getObjectsList();
+          setObjects(objects);
+        }
+      });
+    }
 
     // Force save on page unload
     const handleBeforeUnload = () => {

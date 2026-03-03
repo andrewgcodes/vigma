@@ -30,9 +30,12 @@ import {
   Clipboard,
   Scissors,
   Merge,
+  Share2,
+  Wifi,
 } from 'lucide-react';
 import { useCanvasStore } from '@/store/canvas-store';
 import { canvasEngine } from '@/lib/canvas-engine';
+import { useCollabStore } from '@/store/collab-store';
 
 export default function TopBar() {
   const {
@@ -436,6 +439,9 @@ export default function TopBar() {
           <Upload size={16} />
         </button>
 
+        {/* Collaboration */}
+        <CollabIndicator />
+
         {/* Export */}
         <div className="topbar-dropdown" ref={exportRef}>
           <button
@@ -461,5 +467,43 @@ export default function TopBar() {
         </div>
       </div>
     </div>
+  );
+}
+
+function CollabIndicator() {
+  const { isConnected, roomId, users, setShowShareModal } = useCollabStore();
+
+  return (
+    <>
+      <div className="topbar-divider" />
+      {roomId && isConnected && (
+        <div className="collab-avatars">
+          {users.slice(0, 5).map((u) => (
+            <div
+              key={u.id}
+              className="collab-avatar"
+              style={{ backgroundColor: u.color }}
+              title={u.name}
+            >
+              {u.name[0].toUpperCase()}
+            </div>
+          ))}
+          {users.length > 5 && (
+            <div className="collab-avatar collab-avatar-more">
+              +{users.length - 5}
+            </div>
+          )}
+          <div className="collab-status-dot" />
+        </div>
+      )}
+      <button
+        className={`topbar-btn ${roomId ? 'collab-active' : ''}`}
+        onClick={() => setShowShareModal(true)}
+        title="Share & Collaborate"
+      >
+        {roomId ? <Wifi size={16} /> : <Share2 size={16} />}
+        <span>{roomId ? 'Live' : 'Share'}</span>
+      </button>
+    </>
   );
 }
