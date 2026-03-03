@@ -5,7 +5,7 @@ import {
   Undo2, Redo2, ZoomIn, ZoomOut, Maximize2,
   Download, Upload, Menu, Grid3X3, Ruler, Magnet,
   LayoutDashboard, PanelLeft, PanelRight, RotateCcw,
-  Save, FileJson, FileImage, FileCode, Info, Share2, Users, Copy, Check
+  Save, FileJson, FileImage, FileCode, Info, Share2, Users, Copy, Check, LogOut
 } from 'lucide-react'
 import type { RemoteUser } from '@/lib/collaboration'
 
@@ -261,6 +261,14 @@ export default function TopBar({
             >
               {copied ? <Check size={12} /> : <Copy size={12} />}
               {copied ? 'Copied!' : 'Copy Link'}
+            </button>
+            <button
+              onClick={onLeaveRoom}
+              className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
+              title="Leave collaboration room"
+            >
+              <LogOut size={12} />
+              Leave
             </button>
           </div>
         ) : (

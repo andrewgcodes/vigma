@@ -402,6 +402,19 @@ export default function DesignPage() {
     startCollaboration(rid)
   }, [startCollaboration])
 
+  // === LEAVE ROOM HANDLER ===
+  const handleLeaveRoom = useCallback(() => {
+    if (collabRef.current) {
+      collabRef.current.disconnect()
+      collabRef.current = null
+    }
+    setIsCollaborating(false)
+    setRoomId(null)
+    setRemoteUsers([])
+    setComments([])
+    clearRoomFromHash()
+  }, [])
+
   // === COMMENT HANDLERS ===
   const handleAddComment = useCallback((x: number, y: number, text: string) => {
     const comment: Comment = {
@@ -1218,6 +1231,7 @@ export default function DesignPage() {
         roomId={roomId}
         remoteUsers={remoteUsers}
         onShare={handleShare}
+        onLeaveRoom={handleLeaveRoom}
       />
 
       {/* Left Panel */}
