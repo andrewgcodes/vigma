@@ -1556,8 +1556,6 @@ export default function DesignPage() {
             onBlurChange={handleBlurChange}
             onInnerShadowChange={handleInnerShadowChange}
             onExportSelected={handleExportSelected}
-            onCropImage={handleCropImage}
-            onResetCrop={handleResetCrop}
             onFlatten={handleFlatten}
           />
           {/* Resize handle */}

@@ -9,7 +9,7 @@ import {
   AlignStartHorizontal, AlignCenterHorizontal, AlignEndHorizontal,
   ArrowUpToLine, ArrowDownToLine, ArrowUp, ArrowDown,
   Trash2, Copy, Clipboard, Scissors, Lock, Unlock,
-  Sun, Moon, Layers, Download, Crop, Sparkles,
+  Sun, Moon, Layers, Download, Sparkles,
   Square
 } from 'lucide-react'
 import ColorPicker from './ColorPicker'
@@ -46,8 +46,6 @@ interface PropertiesPanelProps {
   onBlurChange?: (blur: number) => void
   onInnerShadowChange?: (config: { color: string, blur: number, offsetX: number, offsetY: number }) => void
   onExportSelected?: (format: string, scale: number) => void
-  onCropImage?: (crop: { left: number, top: number, width: number, height: number }) => void
-  onResetCrop?: () => void
   onFlatten?: () => void
 }
 
@@ -98,8 +96,6 @@ export default function PropertiesPanel({
   onBlurChange,
   onInnerShadowChange,
   onExportSelected,
-  onCropImage,
-  onResetCrop,
   onFlatten,
 }: PropertiesPanelProps) {
   const [shadowEnabled, setShadowEnabled] = useState(false)
@@ -480,10 +476,6 @@ export default function PropertiesPanel({
         {isImage && (
           <Section title="Image">
             <div className="space-y-2">
-              <button onClick={() => { const w = objectProps.width || 200; const h = objectProps.height || 200; onCropImage?.({ left: -w * 0.125, top: -h * 0.125, width: w * 0.75, height: h * 0.75 }) }} className="flex items-center gap-2 w-full px-2 py-1.5 rounded-lg border text-xs bg-canvas-bg border-canvas-border text-canvas-text-secondary hover:bg-canvas-hover transition-colors">
-                <Crop size={14} /> Crop Image
-              </button>
-              <button onClick={() => onResetCrop?.()} className="flex items-center gap-2 w-full px-2 py-1.5 rounded-lg border text-xs bg-canvas-bg border-canvas-border text-canvas-text-secondary hover:bg-canvas-hover transition-colors">Reset Crop</button>
               <button onClick={() => onFlatten?.()} className="flex items-center gap-2 w-full px-2 py-1.5 rounded-lg border text-xs bg-canvas-bg border-canvas-border text-canvas-text-secondary hover:bg-canvas-hover transition-colors">
                 <Sparkles size={14} /> Flatten / Rasterize
               </button>

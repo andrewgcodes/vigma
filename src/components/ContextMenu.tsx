@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useRef } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import {
   Copy, Clipboard, Scissors, Trash2, Lock, Unlock,
   ArrowUpToLine, ArrowDownToLine, ArrowUp, ArrowDown,
@@ -49,6 +49,7 @@ export default function ContextMenu({
   hasSelection, isLocked, multipleSelected,
 }: ContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null)
+  const [adjustedPos, setAdjustedPos] = useState({ x: 0, y: 0 })
 
   useEffect(() => {
     if (!visible) return
@@ -61,17 +62,22 @@ export default function ContextMenu({
     return () => document.removeEventListener('mousedown', handler)
   }, [visible, onClose])
 
-  if (!visible) return null
+  // Measure actual menu height and adjust position after render
+  useEffect(() => {
+    if (!visible || !menuRef.current) return
+    const menuRect = menuRef.current.getBoundingClientRect()
+    const adjustedX = Math.min(x, window.innerWidth - menuRect.width - 8)
+    const adjustedY = Math.min(y, window.innerHeight - menuRect.height - 8)
+    setAdjustedPos({ x: Math.max(0, adjustedX), y: Math.max(0, adjustedY) })
+  }, [visible, x, y, hasSelection, multipleSelected, isLocked])
 
-  // Adjust position so menu doesn't go off screen
-  const adjustedX = Math.min(x, window.innerWidth - 200)
-  const adjustedY = Math.min(y, window.innerHeight - 400)
+  if (!visible) return null
 
   return (
     <div
       ref={menuRef}
       className="context-menu fixed z-[100] bg-white rounded-xl shadow-panel-lg py-1 w-52 border border-canvas-border/50"
-      style={{ left: adjustedX, top: adjustedY }}
+      style={{ left: adjustedPos.x, top: adjustedPos.y }}
     >
       {hasSelection && (
         <>
