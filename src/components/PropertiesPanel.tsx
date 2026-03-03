@@ -56,10 +56,16 @@ export default function PropertiesPanel() {
   const [sizeW, setSizeW] = useState(0);
   const [sizeH, setSizeH] = useState(0);
   const [angle, setAngle] = useState(0);
+  const [showTransform, setShowTransform] = useState(true);
   const [showFill, setShowFill] = useState(true);
   const [showStroke, setShowStroke] = useState(true);
   const [showShadow, setShowShadow] = useState(false);
   const [showTypography, setShowTypography] = useState(true);
+  const [showGradient, setShowGradient] = useState(false);
+  const [gradientType, setGradientType] = useState<'linear' | 'radial'>('linear');
+  const [gradientAngle, setGradientAngle] = useState(0);
+  const [gradientColor1, setGradientColor1] = useState('#6366f1');
+  const [gradientColor2, setGradientColor2] = useState('#ec4899');
 
   const syncProps = useCallback(() => {
     const props = canvasEngine.getSelectedObjectProperties();
@@ -134,71 +140,77 @@ export default function PropertiesPanel() {
         <div className="panel-content">
           {/* Position & Size */}
           <div className="prop-section">
-            <div className="prop-section-header" onClick={() => {}}>
+            <div
+              className="prop-section-header clickable"
+              onClick={() => setShowTransform(!showTransform)}
+            >
               <span>Transform</span>
+              {showTransform ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
             </div>
-            <div className="prop-grid">
-              <div className="prop-field">
-                <label>X</label>
-                <input
-                  type="number"
-                  value={posX}
-                  onChange={(e) => {
-                    const v = parseInt(e.target.value) || 0;
-                    setPosX(v);
-                    canvasEngine.setSelectedPosition(v, posY);
-                  }}
-                />
+            {showTransform && (
+              <div className="prop-grid">
+                <div className="prop-field">
+                  <label>X</label>
+                  <input
+                    type="number"
+                    value={posX}
+                    onChange={(e) => {
+                      const v = parseInt(e.target.value) || 0;
+                      setPosX(v);
+                      canvasEngine.setSelectedPosition(v, posY);
+                    }}
+                  />
+                </div>
+                <div className="prop-field">
+                  <label>Y</label>
+                  <input
+                    type="number"
+                    value={posY}
+                    onChange={(e) => {
+                      const v = parseInt(e.target.value) || 0;
+                      setPosY(v);
+                      canvasEngine.setSelectedPosition(posX, v);
+                    }}
+                  />
+                </div>
+                <div className="prop-field">
+                  <label>W</label>
+                  <input
+                    type="number"
+                    value={sizeW}
+                    onChange={(e) => {
+                      const v = parseInt(e.target.value) || 0;
+                      setSizeW(v);
+                      canvasEngine.setSelectedSize(v, sizeH);
+                    }}
+                  />
+                </div>
+                <div className="prop-field">
+                  <label>H</label>
+                  <input
+                    type="number"
+                    value={sizeH}
+                    onChange={(e) => {
+                      const v = parseInt(e.target.value) || 0;
+                      setSizeH(v);
+                      canvasEngine.setSelectedSize(sizeW, v);
+                    }}
+                  />
+                </div>
+                <div className="prop-field">
+                  <label><RotateCcw size={12} /></label>
+                  <input
+                    type="number"
+                    value={angle}
+                    onChange={(e) => {
+                      const v = parseInt(e.target.value) || 0;
+                      setAngle(v);
+                      canvasEngine.setSelectedAngle(v);
+                    }}
+                  />
+                </div>
               </div>
-              <div className="prop-field">
-                <label>Y</label>
-                <input
-                  type="number"
-                  value={posY}
-                  onChange={(e) => {
-                    const v = parseInt(e.target.value) || 0;
-                    setPosY(v);
-                    canvasEngine.setSelectedPosition(posX, v);
-                  }}
-                />
-              </div>
-              <div className="prop-field">
-                <label>W</label>
-                <input
-                  type="number"
-                  value={sizeW}
-                  onChange={(e) => {
-                    const v = parseInt(e.target.value) || 0;
-                    setSizeW(v);
-                    canvasEngine.setSelectedSize(v, sizeH);
-                  }}
-                />
-              </div>
-              <div className="prop-field">
-                <label>H</label>
-                <input
-                  type="number"
-                  value={sizeH}
-                  onChange={(e) => {
-                    const v = parseInt(e.target.value) || 0;
-                    setSizeH(v);
-                    canvasEngine.setSelectedSize(sizeW, v);
-                  }}
-                />
-              </div>
-              <div className="prop-field">
-                <label><RotateCcw size={12} /></label>
-                <input
-                  type="number"
-                  value={angle}
-                  onChange={(e) => {
-                    const v = parseInt(e.target.value) || 0;
-                    setAngle(v);
-                    canvasEngine.setSelectedAngle(v);
-                  }}
-                />
-              </div>
-            </div>
+            )}
           </div>
 
           {/* Fill */}
@@ -415,6 +427,72 @@ export default function PropertiesPanel() {
                     </div>
                   </>
                 )}
+              </>
+            )}
+          </div>
+
+          {/* Gradient */}
+          <div className="prop-section">
+            <div
+              className="prop-section-header clickable"
+              onClick={() => setShowGradient(!showGradient)}
+            >
+              <span>Gradient</span>
+              {showGradient ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            </div>
+            {showGradient && (
+              <>
+                <div className="prop-row button-row">
+                  <button
+                    className={`icon-btn ${gradientType === 'linear' ? 'active' : ''}`}
+                    onClick={() => setGradientType('linear')}
+                  >
+                    Linear
+                  </button>
+                  <button
+                    className={`icon-btn ${gradientType === 'radial' ? 'active' : ''}`}
+                    onClick={() => setGradientType('radial')}
+                  >
+                    Radial
+                  </button>
+                </div>
+                <div className="prop-row">
+                  <ColorPicker
+                    color={gradientColor1}
+                    onChange={(c) => setGradientColor1(c)}
+                    label="Start"
+                  />
+                  <ColorPicker
+                    color={gradientColor2}
+                    onChange={(c) => setGradientColor2(c)}
+                    label="End"
+                  />
+                </div>
+                {gradientType === 'linear' && (
+                  <div className="prop-field full-width">
+                    <label>Angle</label>
+                    <input
+                      type="range"
+                      min={0}
+                      max={360}
+                      value={gradientAngle}
+                      onChange={(e) => setGradientAngle(parseInt(e.target.value))}
+                    />
+                    <span className="range-value">{gradientAngle}&deg;</span>
+                  </div>
+                )}
+                <button
+                  className="apply-gradient-btn"
+                  onClick={() => {
+                    canvasEngine.setSelectedGradient(
+                      gradientType,
+                      [{ offset: 0, color: gradientColor1 }, { offset: 1, color: gradientColor2 }],
+                      gradientAngle
+                    );
+                  }}
+                >
+                  Apply Gradient
+                </button>
               </>
             )}
           </div>

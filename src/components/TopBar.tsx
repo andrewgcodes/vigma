@@ -42,6 +42,8 @@ export default function TopBar() {
     showProperties, toggleProperties,
     history, historyIndex, undo, redo,
     selectedObjectIds,
+    gridSize, setGridSize,
+    canvasBackground, setCanvasBackground,
   } = useCanvasStore();
 
   const [showExportMenu, setShowExportMenu] = useState(false);
@@ -347,6 +349,33 @@ export default function TopBar() {
               <button onClick={() => { toggleSnapToGrid(); setShowViewMenu(false); }}>
                 <Magnet size={14} /> {snapToGrid ? 'Disable Snap' : 'Enable Snap'}
               </button>
+              <div className="dropdown-divider" />
+              <div className="dropdown-field">
+                <label>Grid Size</label>
+                <select
+                  value={gridSize}
+                  onChange={(e) => setGridSize(parseInt(e.target.value))}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <option value={10}>10px</option>
+                  <option value={20}>20px</option>
+                  <option value={40}>40px</option>
+                  <option value={50}>50px</option>
+                  <option value={100}>100px</option>
+                </select>
+              </div>
+              <div className="dropdown-field">
+                <label>Background</label>
+                <input
+                  type="color"
+                  value={canvasBackground}
+                  onChange={(e) => {
+                    setCanvasBackground(e.target.value);
+                    canvasEngine.setCanvasBackground(e.target.value);
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                />
+              </div>
               <div className="dropdown-divider" />
               <button onClick={() => { toggleLayers(); setShowViewMenu(false); }}>
                 <Layers size={14} /> {showLayers ? 'Hide Layers' : 'Show Layers'}

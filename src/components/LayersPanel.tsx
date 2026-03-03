@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
   Eye,
   EyeOff,
@@ -16,6 +16,7 @@ import {
   PenLine,
   Frame,
   FolderOpen,
+  GripVertical,
 } from 'lucide-react';
 import { useCanvasStore } from '@/store/canvas-store';
 import { canvasEngine } from '@/lib/canvas-engine';
@@ -46,6 +47,11 @@ const typeIcons: Record<string, React.ReactNode> = {
 export default function LayersPanel() {
   const { selectedObjectIds, showLayers } = useCanvasStore();
   const [layers, setLayers] = useState<LayerItem[]>([]);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const editInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -53,6 +59,50 @@ export default function LayersPanel() {
       setLayers(objects);
     }, 200);
     return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    if (editingId && editInputRef.current) {
+      editInputRef.current.focus();
+      editInputRef.current.select();
+    }
+  }, [editingId]);
+
+  const handleDoubleClick = useCallback((layer: LayerItem) => {
+    setEditingId(layer.id);
+    setEditName(layer.name);
+  }, []);
+
+  const handleRenameSubmit = useCallback(() => {
+    if (editingId && editName.trim()) {
+      canvasEngine.renameObject(editingId, editName.trim());
+    }
+    setEditingId(null);
+  }, [editingId, editName]);
+
+  const handleDragStart = useCallback((e: React.DragEvent, id: string) => {
+    setDragId(id);
+    e.dataTransfer.effectAllowed = 'move';
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverIndex(index);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent, targetIndex: number) => {
+    e.preventDefault();
+    if (dragId) {
+      canvasEngine.moveLayerTo(dragId, targetIndex);
+    }
+    setDragId(null);
+    setDragOverIndex(null);
+  }, [dragId]);
+
+  const handleDragEnd = useCallback(() => {
+    setDragId(null);
+    setDragOverIndex(null);
   }, []);
 
   if (!showLayers) return null;
@@ -69,16 +119,41 @@ export default function LayersPanel() {
             <p>No layers yet</p>
           </div>
         ) : (
-          layers.map((layer) => (
+          layers.map((layer, index) => (
             <div
               key={layer.id}
-              className={`layer-item ${selectedObjectIds.includes(layer.id) ? 'selected' : ''}`}
+              className={`layer-item ${selectedObjectIds.includes(layer.id) ? 'selected' : ''} ${dragId === layer.id ? 'dragging' : ''} ${dragOverIndex === index ? 'drag-over' : ''}`}
               onClick={() => canvasEngine.selectObjectById(layer.id)}
+              onDoubleClick={() => handleDoubleClick(layer)}
+              draggable
+              onDragStart={(e) => handleDragStart(e, layer.id)}
+              onDragOver={(e) => handleDragOver(e, index)}
+              onDrop={(e) => handleDrop(e, index)}
+              onDragEnd={handleDragEnd}
             >
+              <span className="layer-drag-handle">
+                <GripVertical size={12} />
+              </span>
               <span className="layer-icon">
                 {typeIcons[layer.type] || <Square size={14} />}
               </span>
-              <span className="layer-name">{layer.name}</span>
+              {editingId === layer.id ? (
+                <input
+                  ref={editInputRef}
+                  className="layer-rename-input"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  onBlur={handleRenameSubmit}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleRenameSubmit();
+                    if (e.key === 'Escape') setEditingId(null);
+                    e.stopPropagation();
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                />
+              ) : (
+                <span className="layer-name">{layer.name}</span>
+              )}
               <div className="layer-actions">
                 <button
                   className="layer-action-btn"

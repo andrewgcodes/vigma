@@ -4,7 +4,7 @@ import React from 'react';
 import { useCanvasStore } from '@/store/canvas-store';
 
 export default function StatusBar() {
-  const { zoom, selectedObjectIds, objects } = useCanvasStore();
+  const { zoom, selectedObjectIds, objects, cursorX, cursorY } = useCanvasStore();
 
   return (
     <div className="statusbar">
@@ -19,6 +19,9 @@ export default function StatusBar() {
         )}
       </div>
       <div className="statusbar-right">
+        <span className="status-item cursor-pos">
+          X: {cursorX} &nbsp; Y: {cursorY}
+        </span>
         <span className="status-item">{Math.round(zoom * 100)}%</span>
       </div>
     </div>

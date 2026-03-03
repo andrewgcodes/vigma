@@ -82,6 +82,11 @@ interface CanvasStore {
   setShadowOffsetX: (x: number) => void;
   shadowOffsetY: number;
   setShadowOffsetY: (y: number) => void;
+
+  // Cursor position
+  cursorX: number;
+  cursorY: number;
+  setCursorPosition: (x: number, y: number) => void;
 }
 
 export const useCanvasStore = create<CanvasStore>((set, get) => ({
@@ -180,4 +185,9 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   setShadowOffsetX: (x) => set({ shadowOffsetX: x }),
   shadowOffsetY: 4,
   setShadowOffsetY: (y) => set({ shadowOffsetY: y }),
+
+  // Cursor position
+  cursorX: 0,
+  cursorY: 0,
+  setCursorPosition: (x, y) => set({ cursorX: x, cursorY: y }),
 }));

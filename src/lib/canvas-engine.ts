@@ -10,9 +10,23 @@ export class CanvasEngine {
   private onSelectionChange?: (ids: string[]) => void;
   private onObjectsChange?: () => void;
   private onZoomChange?: (zoom: number) => void;
+  private onCursorMove?: (x: number, y: number) => void;
   private historyPaused = false;
   private onHistoryPush?: (json: string) => void;
   private _restoring: Promise<void> | null = null;
+
+  // Drag-to-create state
+  private drawingShape: fabric.FabricObject | null = null;
+  private drawOrigin: { x: number; y: number } | null = null;
+  private drawingTool: string | null = null;
+  private drawShapeOptions: Record<string, unknown> = {};
+
+  // Snap to grid
+  private snapEnabled = false;
+  private snapGridSize = 20;
+
+  // Context menu
+  private onContextMenu?: (x: number, y: number, hasTarget: boolean) => void;
 
   init(
     canvasElement: HTMLCanvasElement,
@@ -21,6 +35,8 @@ export class CanvasEngine {
       onObjectsChange?: () => void;
       onZoomChange?: (zoom: number) => void;
       onHistoryPush?: (json: string) => void;
+      onCursorMove?: (x: number, y: number) => void;
+      onContextMenu?: (x: number, y: number, hasTarget: boolean) => void;
     }
   ) {
     this.canvas = new fabric.Canvas(canvasElement, {
@@ -38,6 +54,8 @@ export class CanvasEngine {
     this.onObjectsChange = options.onObjectsChange;
     this.onZoomChange = options.onZoomChange;
     this.onHistoryPush = options.onHistoryPush;
+    this.onCursorMove = options.onCursorMove;
+    this.onContextMenu = options.onContextMenu;
 
     this.setupEventListeners();
     this.saveHistory();
@@ -51,13 +69,11 @@ export class CanvasEngine {
     this.canvas.on('selection:created', (e) => {
       const ids = e.selected?.map((o) => (o as fabric.FabricObject & { id?: string }).id || '').filter(Boolean) || [];
       this.onSelectionChange?.(ids);
-      this.syncSelectedProperties();
     });
 
     this.canvas.on('selection:updated', (e) => {
       const ids = e.selected?.map((o) => (o as fabric.FabricObject & { id?: string }).id || '').filter(Boolean) || [];
       this.onSelectionChange?.(ids);
-      this.syncSelectedProperties();
     });
 
     this.canvas.on('selection:cleared', () => {
@@ -95,10 +111,27 @@ export class CanvasEngine {
       opt.e.preventDefault();
       opt.e.stopPropagation();
     });
-  }
 
-  private syncSelectedProperties() {
-    // Will be called externally to sync selected object properties to the store
+    // Track cursor position
+    this.canvas.on('mouse:move', (opt) => {
+      const pointer = this.canvas!.getScenePoint(opt.e);
+      this.onCursorMove?.(Math.round(pointer.x), Math.round(pointer.y));
+    });
+
+    // Right-click context menu
+    this.canvas.on('mouse:down', (opt) => {
+      const e = opt.e as MouseEvent;
+      if (e.button === 2) {
+        e.preventDefault();
+        e.stopPropagation();
+        const hasTarget = !!opt.target;
+        if (opt.target) {
+          this.canvas!.setActiveObject(opt.target);
+          this.canvas!.requestRenderAll();
+        }
+        this.onContextMenu?.(e.clientX, e.clientY, hasTarget);
+      }
+    });
   }
 
   enablePanning() {
@@ -218,7 +251,177 @@ export class CanvasEngine {
     this.canvas.isDrawingMode = false;
   }
 
-  // Shape creation
+  // Snap to grid helpers
+  setSnapEnabled(enabled: boolean) {
+    this.snapEnabled = enabled;
+  }
+
+  setSnapGridSize(size: number) {
+    this.snapGridSize = size;
+  }
+
+  private snapValue(val: number): number {
+    if (!this.snapEnabled) return val;
+    return Math.round(val / this.snapGridSize) * this.snapGridSize;
+  }
+
+  // Drag-to-create: start drawing a shape
+  startDragCreate(tool: string, e: MouseEvent, shapeOptions: Record<string, unknown>) {
+    if (!this.canvas) return;
+    const pointer = this.canvas.getScenePoint(e);
+    const x = this.snapValue(pointer.x);
+    const y = this.snapValue(pointer.y);
+    this.drawOrigin = { x, y };
+    this.drawingTool = tool;
+    this.drawShapeOptions = shapeOptions;
+
+    this.historyPaused = true;
+
+    switch (tool) {
+      case 'rectangle': {
+        const rect = new fabric.Rect({
+          left: x, top: y, width: 1, height: 1,
+          fill: shapeOptions.fill as string,
+          stroke: shapeOptions.stroke as string,
+          strokeWidth: shapeOptions.strokeWidth as number,
+          opacity: shapeOptions.opacity as number,
+          rx: (shapeOptions.rx as number) || 0,
+          ry: (shapeOptions.ry as number) || 0,
+        });
+        this.setObjectId(rect);
+        this.canvas.add(rect);
+        this.drawingShape = rect;
+        break;
+      }
+      case 'ellipse': {
+        const ellipse = new fabric.Ellipse({
+          left: x, top: y, rx: 0.5, ry: 0.5,
+          fill: shapeOptions.fill as string,
+          stroke: shapeOptions.stroke as string,
+          strokeWidth: shapeOptions.strokeWidth as number,
+          opacity: shapeOptions.opacity as number,
+        });
+        this.setObjectId(ellipse);
+        this.canvas.add(ellipse);
+        this.drawingShape = ellipse;
+        break;
+      }
+      case 'triangle': {
+        const tri = new fabric.Triangle({
+          left: x, top: y, width: 1, height: 1,
+          fill: shapeOptions.fill as string,
+          stroke: shapeOptions.stroke as string,
+          strokeWidth: shapeOptions.strokeWidth as number,
+          opacity: shapeOptions.opacity as number,
+        });
+        this.setObjectId(tri);
+        this.canvas.add(tri);
+        this.drawingShape = tri;
+        break;
+      }
+      case 'line': {
+        const line = new fabric.Line([x, y, x, y], {
+          stroke: (shapeOptions.stroke as string) || '#000000',
+          strokeWidth: (shapeOptions.strokeWidth as number) || 2,
+          opacity: shapeOptions.opacity as number,
+        });
+        this.setObjectId(line);
+        this.canvas.add(line);
+        this.drawingShape = line;
+        break;
+      }
+      case 'frame': {
+        const frame = new fabric.Rect({
+          left: x, top: y, width: 1, height: 1,
+          fill: '#ffffff', stroke: '#e5e7eb', strokeWidth: 1,
+          rx: 0, ry: 0,
+        });
+        const labelObj = frame as fabric.FabricObject & { customName?: string; customType?: string };
+        this.setObjectId(frame);
+        labelObj.customName = `Frame ${(this.canvas.getObjects().length || 0) + 1}`;
+        labelObj.customType = 'frame';
+        this.canvas.add(frame);
+        this.drawingShape = frame;
+        break;
+      }
+    }
+    this.canvas.requestRenderAll();
+  }
+
+  updateDragCreate(e: MouseEvent) {
+    if (!this.canvas || !this.drawingShape || !this.drawOrigin) return;
+    const pointer = this.canvas.getScenePoint(e);
+    const px = this.snapValue(pointer.x);
+    const py = this.snapValue(pointer.y);
+    const ox = this.drawOrigin.x;
+    const oy = this.drawOrigin.y;
+
+    const left = Math.min(ox, px);
+    const top = Math.min(oy, py);
+    const w = Math.abs(px - ox);
+    const h = Math.abs(py - oy);
+
+    if (this.drawingTool === 'line') {
+      (this.drawingShape as fabric.Line).set({ x1: ox, y1: oy, x2: px, y2: py });
+    } else if (this.drawingTool === 'ellipse') {
+      (this.drawingShape as fabric.Ellipse).set({ left, top, rx: w / 2, ry: h / 2 });
+    } else {
+      this.drawingShape.set({ left, top, width: Math.max(w, 1), height: Math.max(h, 1) });
+    }
+    this.drawingShape.setCoords();
+    this.canvas.requestRenderAll();
+  }
+
+  finishDragCreate(): fabric.FabricObject | null {
+    if (!this.canvas || !this.drawingShape) {
+      this.historyPaused = false;
+      return null;
+    }
+    const shape = this.drawingShape;
+    // If shape is too small (just a click), give it default dimensions
+    const w = shape.width || 0;
+    const h = shape.height || 0;
+    if (this.drawingTool !== 'line' && w < 5 && h < 5) {
+      // Treat as a click — set reasonable defaults
+      if (this.drawingTool === 'ellipse') {
+        (shape as fabric.Ellipse).set({ rx: 60, ry: 40 });
+      } else if (this.drawingTool === 'frame') {
+        shape.set({ width: 375, height: 667 });
+      } else {
+        shape.set({ width: 150, height: 100 });
+      }
+      shape.setCoords();
+    }
+
+    this.canvas.setActiveObject(shape);
+    this.canvas.requestRenderAll();
+
+    this.drawingShape = null;
+    this.drawOrigin = null;
+    this.drawingTool = null;
+    this.drawShapeOptions = {};
+    this.historyPaused = false;
+    this.saveHistory();
+    this.onObjectsChange?.();
+    return shape;
+  }
+
+  cancelDragCreate() {
+    if (this.drawingShape && this.canvas) {
+      this.canvas.remove(this.drawingShape);
+    }
+    this.drawingShape = null;
+    this.drawOrigin = null;
+    this.drawingTool = null;
+    this.drawShapeOptions = {};
+    this.historyPaused = false;
+  }
+
+  isDragCreating(): boolean {
+    return this.drawingShape !== null;
+  }
+
+  // Shape creation (click-to-place fallback)
   addRectangle(options: {
     fill: string;
     stroke: string;
@@ -484,6 +687,61 @@ export class CanvasEngine {
     }
   }
 
+  // Nudge selected objects
+  nudgeSelected(dx: number, dy: number) {
+    if (!this.canvas) return;
+    const active = this.canvas.getActiveObjects();
+    if (active.length === 0) return;
+    active.forEach((obj) => {
+      obj.set({
+        left: this.snapValue((obj.left || 0) + dx),
+        top: this.snapValue((obj.top || 0) + dy),
+      });
+      obj.setCoords();
+    });
+    this.canvas.requestRenderAll();
+    this.saveHistory();
+  }
+
+  // Rename object
+  renameObject(id: string, name: string) {
+    if (!this.canvas) return;
+    const obj = this.canvas.getObjects().find(
+      (o) => (o as fabric.FabricObject & { id?: string }).id === id
+    );
+    if (obj) {
+      (obj as fabric.FabricObject & { customName?: string }).customName = name;
+      this.onObjectsChange?.();
+    }
+  }
+
+  // Move layer order
+  moveLayerTo(id: string, targetIndex: number) {
+    if (!this.canvas) return;
+    const objects = this.canvas.getObjects();
+    const obj = objects.find(
+      (o) => (o as fabric.FabricObject & { id?: string }).id === id
+    );
+    if (!obj) return;
+
+    // Calculate actual canvas index (layers panel shows reversed, skip grid objects)
+    const nonGridObjects = objects.filter(
+      (o) => (o as fabric.FabricObject & { customType?: string }).customType !== 'grid'
+    );
+    const reversedIndex = nonGridObjects.length - 1 - targetIndex;
+    const gridCount = objects.length - nonGridObjects.length;
+    const canvasIndex = Math.max(gridCount, Math.min(objects.length - 1, reversedIndex + gridCount));
+
+    // Remove and re-insert at target position
+    this.canvas.remove(obj);
+    const allObjs = this.canvas.getObjects();
+    const insertAt = Math.min(canvasIndex, allObjs.length);
+    this.canvas.insertAt(insertAt, obj);
+    this.canvas.requestRenderAll();
+    this.saveHistory();
+    this.onObjectsChange?.();
+  }
+
   // Object manipulation
   deleteSelected() {
     if (!this.canvas) return;
@@ -716,6 +974,7 @@ export class CanvasEngine {
       obj.set({ fill: color });
     });
     this.canvas.requestRenderAll();
+    this.saveHistory();
   }
 
   setSelectedStroke(color: string) {
@@ -725,6 +984,7 @@ export class CanvasEngine {
       obj.set({ stroke: color });
     });
     this.canvas.requestRenderAll();
+    this.saveHistory();
   }
 
   setSelectedStrokeWidth(width: number) {
@@ -734,6 +994,7 @@ export class CanvasEngine {
       obj.set({ strokeWidth: width });
     });
     this.canvas.requestRenderAll();
+    this.saveHistory();
   }
 
   setSelectedOpacity(opacity: number) {
@@ -743,6 +1004,7 @@ export class CanvasEngine {
       obj.set({ opacity });
     });
     this.canvas.requestRenderAll();
+    this.saveHistory();
   }
 
   setSelectedCornerRadius(radius: number) {
@@ -754,6 +1016,7 @@ export class CanvasEngine {
       }
     });
     this.canvas.requestRenderAll();
+    this.saveHistory();
   }
 
   setSelectedShadow(shadow: {
@@ -779,6 +1042,7 @@ export class CanvasEngine {
       }
     });
     this.canvas.requestRenderAll();
+    this.saveHistory();
   }
 
   setSelectedFontSize(size: number) {
@@ -790,6 +1054,7 @@ export class CanvasEngine {
       }
     });
     this.canvas.requestRenderAll();
+    this.saveHistory();
   }
 
   setSelectedFontFamily(family: string) {
@@ -801,6 +1066,7 @@ export class CanvasEngine {
       }
     });
     this.canvas.requestRenderAll();
+    this.saveHistory();
   }
 
   setSelectedFontWeight(weight: string) {
@@ -812,6 +1078,7 @@ export class CanvasEngine {
       }
     });
     this.canvas.requestRenderAll();
+    this.saveHistory();
   }
 
   setSelectedFontStyle(style: string) {
@@ -823,6 +1090,7 @@ export class CanvasEngine {
       }
     });
     this.canvas.requestRenderAll();
+    this.saveHistory();
   }
 
   setSelectedTextAlign(align: string) {
@@ -834,6 +1102,7 @@ export class CanvasEngine {
       }
     });
     this.canvas.requestRenderAll();
+    this.saveHistory();
   }
 
   // Gradient support
