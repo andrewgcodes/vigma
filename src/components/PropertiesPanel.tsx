@@ -658,13 +658,27 @@ export default function PropertiesPanel() {
                 <div className="prop-row button-row">
                   <button
                     className={`icon-btn ${gradientType === 'linear' ? 'active' : ''}`}
-                    onClick={() => setGradientType('linear')}
+                    onClick={() => {
+                      setGradientType('linear');
+                      canvasEngine.setSelectedGradient(
+                        'linear',
+                        [{ offset: 0, color: gradientColor1 }, { offset: 1, color: gradientColor2 }],
+                        gradientAngle
+                      );
+                    }}
                   >
                     Linear
                   </button>
                   <button
                     className={`icon-btn ${gradientType === 'radial' ? 'active' : ''}`}
-                    onClick={() => setGradientType('radial')}
+                    onClick={() => {
+                      setGradientType('radial');
+                      canvasEngine.setSelectedGradient(
+                        'radial',
+                        [{ offset: 0, color: gradientColor1 }, { offset: 1, color: gradientColor2 }],
+                        gradientAngle
+                      );
+                    }}
                   >
                     Radial
                   </button>
@@ -672,12 +686,26 @@ export default function PropertiesPanel() {
                 <div className="prop-row">
                   <ColorPicker
                     color={gradientColor1}
-                    onChange={(c) => setGradientColor1(c)}
+                    onChange={(c) => {
+                      setGradientColor1(c);
+                      canvasEngine.setSelectedGradient(
+                        gradientType,
+                        [{ offset: 0, color: c }, { offset: 1, color: gradientColor2 }],
+                        gradientAngle
+                      );
+                    }}
                     label="Start"
                   />
                   <ColorPicker
                     color={gradientColor2}
-                    onChange={(c) => setGradientColor2(c)}
+                    onChange={(c) => {
+                      setGradientColor2(c);
+                      canvasEngine.setSelectedGradient(
+                        gradientType,
+                        [{ offset: 0, color: gradientColor1 }, { offset: 1, color: c }],
+                        gradientAngle
+                      );
+                    }}
                     label="End"
                   />
                 </div>
@@ -689,23 +717,19 @@ export default function PropertiesPanel() {
                       min={0}
                       max={360}
                       value={gradientAngle}
-                      onChange={(e) => setGradientAngle(parseInt(e.target.value))}
+                      onChange={(e) => {
+                        const v = parseInt(e.target.value);
+                        setGradientAngle(v);
+                        canvasEngine.setSelectedGradient(
+                          gradientType,
+                          [{ offset: 0, color: gradientColor1 }, { offset: 1, color: gradientColor2 }],
+                          v
+                        );
+                      }}
                     />
                     <span className="range-value">{gradientAngle}&deg;</span>
                   </div>
                 )}
-                <button
-                  className="apply-gradient-btn"
-                  onClick={() => {
-                    canvasEngine.setSelectedGradient(
-                      gradientType,
-                      [{ offset: 0, color: gradientColor1 }, { offset: 1, color: gradientColor2 }],
-                      gradientAngle
-                    );
-                  }}
-                >
-                  Apply Gradient
-                </button>
               </>
             )}
           </div>
