@@ -58,6 +58,20 @@ export default function DesignCanvas() {
     // Enable middle-click panning
     canvasEngine.enablePanning();
 
+    // Load saved design from localStorage
+    canvasEngine.loadFromLocalStorage().then((loaded) => {
+      if (loaded) {
+        const objects = canvasEngine.getObjectsList();
+        setObjects(objects);
+      }
+    });
+
+    // Force save on page unload
+    const handleBeforeUnload = () => {
+      canvasEngine.saveToLocalStorage();
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
     const handleResize = () => {
       if (containerRef.current) {
         canvasEngine.resize(
@@ -72,6 +86,7 @@ export default function DesignCanvas() {
 
     return () => {
       window.removeEventListener('resize', handleResize);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
       canvasEngine.destroy();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps

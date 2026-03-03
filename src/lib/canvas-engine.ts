@@ -1307,11 +1307,71 @@ export class CanvasEngine {
     this.canvas.requestRenderAll();
   }
 
+  // LocalStorage persistence
+  private static STORAGE_KEY = 'vigma_canvas_data';
+  private saveTimeout: ReturnType<typeof setTimeout> | null = null;
+
+  saveToLocalStorage() {
+    if (!this.canvas) return;
+    // Debounce saves to avoid excessive writes
+    if (this.saveTimeout) clearTimeout(this.saveTimeout);
+    this.saveTimeout = setTimeout(() => {
+      if (!this.canvas) return;
+      try {
+        const json = JSON.stringify((this.canvas as unknown as { toJSON(props: string[]): object }).toJSON(['id', 'customType', 'customName']));
+        const vpt = this.canvas.viewportTransform;
+        const data = JSON.stringify({
+          canvas: json,
+          zoom: this.canvas.getZoom(),
+          viewportTransform: vpt ? Array.from(vpt) : null,
+        });
+        localStorage.setItem(CanvasEngine.STORAGE_KEY, data);
+      } catch (err) {
+        console.warn('Failed to save to localStorage:', err);
+      }
+    }, 500);
+  }
+
+  async loadFromLocalStorage(): Promise<boolean> {
+    if (!this.canvas) return false;
+    try {
+      const raw = localStorage.getItem(CanvasEngine.STORAGE_KEY);
+      if (!raw) return false;
+      const data = JSON.parse(raw);
+      if (!data.canvas) return false;
+
+      this.historyPaused = true;
+      const parsed = JSON.parse(data.canvas);
+      await this.canvas.loadFromJSON(parsed);
+
+      // Restore viewport
+      if (data.viewportTransform) {
+        const vpt = data.viewportTransform as number[];
+        this.canvas.setViewportTransform(vpt as fabric.TMat2D);
+        this.onZoomChange?.(data.zoom || 1);
+      }
+
+      this.canvas.requestRenderAll();
+      this.historyPaused = false;
+      this.saveHistory();
+      return true;
+    } catch (err) {
+      console.warn('Failed to load from localStorage:', err);
+      return false;
+    }
+  }
+
+  clearLocalStorage() {
+    localStorage.removeItem(CanvasEngine.STORAGE_KEY);
+  }
+
   // History
   saveHistory() {
     if (!this.canvas || this.historyPaused) return;
     const json = JSON.stringify((this.canvas as unknown as { toJSON(props: string[]): object }).toJSON(['id', 'customType', 'customName']));
     this.onHistoryPush?.(json);
+    // Also persist to localStorage
+    this.saveToLocalStorage();
   }
 
   async restoreFromHistory(json: string) {
