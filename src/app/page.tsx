@@ -10,6 +10,7 @@ import StatusBar from '@/components/StatusBar';
 import Rulers from '@/components/Rulers';
 import ShareModal from '@/components/ShareModal';
 import RemoteCursors from '@/components/RemoteCursors';
+import CanvasComments from '@/components/CanvasComments';
 import { useCanvasStore } from '@/store/canvas-store';
 import { connectToRoom } from '@/lib/collab';
 import { useCollabStore } from '@/store/collab-store';
@@ -126,6 +127,7 @@ export default function Home() {
       <StatusBar />
       <ShareModal />
       {roomId && <RemoteCursors />}
+      {roomId && <CanvasComments />}
     </div>
   );
 }

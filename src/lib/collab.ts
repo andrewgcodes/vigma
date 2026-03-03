@@ -1,6 +1,6 @@
 'use client';
 
-import { useCollabStore } from '@/store/collab-store';
+import { useCollabStore, CanvasComment } from '@/store/collab-store';
 import { canvasEngine } from '@/lib/canvas-engine';
 import { useCanvasStore } from '@/store/canvas-store';
 
@@ -23,30 +23,32 @@ export async function createRoom(): Promise<string> {
 }
 
 export function connectToRoom(roomId: string) {
-  const store = useCollabStore.getState();
+  // Always read fresh state from the store
+  const currentState = useCollabStore.getState();
 
   // Don't reconnect if already connected to same room
-  if (ws && ws.readyState === WebSocket.OPEN && store.roomId === roomId) {
+  if (ws && ws.readyState === WebSocket.OPEN && currentState.roomId === roomId) {
     return;
   }
 
   // Close existing connection
   disconnectFromRoom();
 
-  store.setRoomId(roomId);
+  useCollabStore.getState().setRoomId(roomId);
 
   ws = new WebSocket(`${WS_BASE}/ws/${roomId}`);
 
   ws.onopen = () => {
-    store.setIsConnected(true);
+    useCollabStore.getState().setIsConnected(true);
   };
 
   ws.onclose = () => {
-    store.setIsConnected(false);
+    useCollabStore.getState().setIsConnected(false);
     // Auto-reconnect after 2 seconds
-    if (store.roomId) {
+    const currentRoomId = useCollabStore.getState().roomId;
+    if (currentRoomId) {
       setTimeout(() => {
-        if (store.roomId === roomId) {
+        if (useCollabStore.getState().roomId === roomId) {
           connectToRoom(roomId);
         }
       }, 2000);
@@ -93,6 +95,9 @@ function handleMessage(msg: Record<string, unknown>) {
       store.setUserName(msg.user_name as string);
       store.setUserColor(msg.user_color as string);
       store.setUsers(msg.users as { id: string; name: string; color: string }[]);
+      if (msg.comments) {
+        store.setComments(msg.comments as CanvasComment[]);
+      }
       // Send current canvas state to the room
       sendCanvasUpdate();
       break;
@@ -134,6 +139,24 @@ function handleMessage(msg: Record<string, unknown>) {
     case 'user_left':
       store.setUsers(msg.users as { id: string; name: string; color: string }[]);
       store.removeCursor(msg.user_id as string);
+      break;
+
+    case 'comment_added':
+      store.addComment(msg.comment as CanvasComment);
+      break;
+
+    case 'comment_deleted':
+      store.removeComment(
+        msg.comment_id as string,
+        msg.deleted_reply_ids as string[] | undefined
+      );
+      break;
+
+    case 'comment_resolved':
+      store.resolveComment(
+        msg.comment_id as string,
+        msg.resolved as boolean
+      );
       break;
   }
 }
@@ -183,6 +206,34 @@ export function sendNameChange(name: string) {
 
 export function isInRoom(): boolean {
   return useCollabStore.getState().roomId !== null;
+}
+
+export function sendComment(text: string, x: number, y: number, parentId?: string) {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  ws.send(JSON.stringify({
+    type: 'add_comment',
+    text,
+    x,
+    y,
+    parent_id: parentId || null,
+  }));
+}
+
+export function sendDeleteComment(commentId: string) {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  ws.send(JSON.stringify({
+    type: 'delete_comment',
+    comment_id: commentId,
+  }));
+}
+
+export function sendResolveComment(commentId: string, resolved: boolean) {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  ws.send(JSON.stringify({
+    type: 'resolve_comment',
+    comment_id: commentId,
+    resolved,
+  }));
 }
 
 export function getRoomShareUrl(roomId: string): string {

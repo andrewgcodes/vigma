@@ -32,6 +32,7 @@ import {
   Merge,
   Share2,
   Wifi,
+  MessageCircle,
 } from 'lucide-react';
 import { useCanvasStore } from '@/store/canvas-store';
 import { canvasEngine } from '@/lib/canvas-engine';
@@ -471,30 +472,43 @@ export default function TopBar() {
 }
 
 function CollabIndicator() {
-  const { isConnected, roomId, users, setShowShareModal } = useCollabStore();
+  const { isConnected, roomId, users, setShowShareModal, isCommentMode, setIsCommentMode, comments } = useCollabStore();
+  const unresolvedCount = comments.filter((c) => !c.parent_id && !c.resolved).length;
 
   return (
     <>
       <div className="topbar-divider" />
       {roomId && isConnected && (
-        <div className="collab-avatars">
-          {users.slice(0, 5).map((u) => (
-            <div
-              key={u.id}
-              className="collab-avatar"
-              style={{ backgroundColor: u.color }}
-              title={u.name}
-            >
-              {u.name[0].toUpperCase()}
-            </div>
-          ))}
-          {users.length > 5 && (
-            <div className="collab-avatar collab-avatar-more">
-              +{users.length - 5}
-            </div>
-          )}
-          <div className="collab-status-dot" />
-        </div>
+        <>
+          <div className="collab-avatars">
+            {users.slice(0, 5).map((u) => (
+              <div
+                key={u.id}
+                className="collab-avatar"
+                style={{ backgroundColor: u.color }}
+                title={u.name}
+              >
+                {u.name[0].toUpperCase()}
+              </div>
+            ))}
+            {users.length > 5 && (
+              <div className="collab-avatar collab-avatar-more">
+                +{users.length - 5}
+              </div>
+            )}
+            <div className="collab-status-dot" />
+          </div>
+          <button
+            className={`topbar-btn ${isCommentMode ? 'collab-active' : ''}`}
+            onClick={() => setIsCommentMode(!isCommentMode)}
+            title="Add Comment (C)"
+          >
+            <MessageCircle size={16} />
+            {unresolvedCount > 0 && (
+              <span className="comment-badge">{unresolvedCount}</span>
+            )}
+          </button>
+        </>
       )}
       <button
         className={`topbar-btn ${roomId ? 'collab-active' : ''}`}
