@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'Vigma — Design Tool',
+  title: 'Vigma - Built by Devin',
   description: 'A sleek, minimalist design tool for creating frontends, components, images, and logos.',
 }
 
