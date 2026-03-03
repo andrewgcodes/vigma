@@ -55,6 +55,8 @@ export default function DesignPage() {
   const [contextMenu, setContextMenu] = useState({ visible: false, x: 0, y: 0, hasSelection: false, multipleSelected: false, isLocked: false })
   const [isDrawingShape, setIsDrawingShape] = useState(false)
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved' | 'just-saved'>('saved')
+  const [largeImageWarning, setLargeImageWarning] = useState<string | null>(null)
+  const largeImageWarningTimerRef = useRef<NodeJS.Timeout | null>(null)
   const saveStatusTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const drawStartRef = useRef<{ x: number; y: number } | null>(null)
   const previewObjRef = useRef<any>(null)
@@ -923,6 +925,9 @@ export default function DesignPage() {
         input.onchange = async (e) => {
           const file = (e.target as HTMLInputElement).files?.[0]
           if (file && engine) {
+            if (file.size > 3 * 1024 * 1024) {
+              showLargeImageWarning(file.name, file.size)
+            }
             await engine.addImageFromFile(file)
             refreshLayers()
             setActiveTool('select')
@@ -1457,9 +1462,25 @@ export default function DesignPage() {
     })
   }, [persistAllPages])
 
+  // Show a dismissible warning when the user uploads a large image (>3MB).
+  // Large base64-encoded images can affect multiplayer sync performance and
+  // may exceed browser storage limits in some edge cases.
+  const showLargeImageWarning = useCallback((fileName: string, fileSize: number) => {
+    const sizeMB = (fileSize / (1024 * 1024)).toFixed(1)
+    setLargeImageWarning(
+      `"${fileName}" is ${sizeMB} MB. Large images may affect performance, especially in multiplayer. Vigma will try its best to save and sync it.`
+    )
+    // Auto-dismiss after 8 seconds
+    if (largeImageWarningTimerRef.current) clearTimeout(largeImageWarningTimerRef.current)
+    largeImageWarningTimerRef.current = setTimeout(() => setLargeImageWarning(null), 8000)
+  }, [])
+
   const handleImportImage = useCallback(async (file: File) => {
     const engine = engineRef.current
     if (!engine) return
+    if (file.size > 3 * 1024 * 1024) {
+      showLargeImageWarning(file.name, file.size)
+    }
     await engine.addImageFromFile(file)
     refreshLayers()
   }, [])
@@ -1691,6 +1712,9 @@ export default function DesignPage() {
         for (let i = 0; i < files.length; i++) {
           const file = files[i]
           if (file.type.startsWith('image/')) {
+            if (file.size > 3 * 1024 * 1024) {
+              showLargeImageWarning(file.name, file.size)
+            }
             await engine.addImageFromFile(file)
           }
         }
@@ -1712,6 +1736,27 @@ export default function DesignPage() {
 
   return (
     <MobileGate>
+    {/* Large Image Upload Warning Toast */}
+    {largeImageWarning && (
+      <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[9999] max-w-lg w-full mx-4 animate-in fade-in slide-in-from-top-2">
+        <div className="bg-amber-50 border border-amber-200 rounded-xl shadow-lg px-4 py-3 flex items-start gap-3">
+          <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+            <svg className="w-4 h-4 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+            </svg>
+          </div>
+          <p className="text-sm text-amber-800 flex-1">{largeImageWarning}</p>
+          <button
+            onClick={() => setLargeImageWarning(null)}
+            className="text-amber-400 hover:text-amber-600 transition-colors flex-shrink-0"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    )}
     {/* Share Beta Warning Modal */}
     {showShareWarning && (
       <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm">
