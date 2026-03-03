@@ -1379,6 +1379,12 @@ export class CanvasEngine {
     return active.toSVG()
   }
 
+  exportSelectedToJPG(scale: number = 2, quality: number = 0.92): string | null {
+    const active = this.canvas.getActiveObject()
+    if (!active) return null
+    return active.toDataURL({ format: 'jpeg', quality, multiplier: scale } as any)
+  }
+
   // EYEDROPPER
   getColorAtPoint(x: number, y: number): string {
     const ctx = this.canvas.getContext()
