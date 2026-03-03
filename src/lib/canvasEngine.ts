@@ -11,6 +11,7 @@ export class CanvasEngine {
   private gridLines: FabricObject[] = []
   private guidelines: FabricObject[] = []
   private snapThreshold = 5
+  private snapHandler: ((e: any) => void) | null = null
   private onSelectionChange?: (ids: string[]) => void
   private onObjectModified?: () => void
   private onHistoryChange?: (canUndo: boolean, canRedo: boolean) => void
@@ -824,14 +825,23 @@ export class CanvasEngine {
 
   // SNAP TO GRID
   enableSnapToGrid(size: number = 10) {
-    this.canvas.on('object:moving', (e: any) => {
+    this.disableSnapToGrid()
+    this.snapHandler = (e: any) => {
       const obj = e.target
       if (!obj) return
       obj.set({
         left: Math.round(obj.left / size) * size,
         top: Math.round(obj.top / size) * size,
       })
-    })
+    }
+    this.canvas.on('object:moving', this.snapHandler)
+  }
+
+  disableSnapToGrid() {
+    if (this.snapHandler) {
+      this.canvas.off('object:moving', this.snapHandler)
+      this.snapHandler = null
+    }
   }
 
   // PROPERTY SETTERS

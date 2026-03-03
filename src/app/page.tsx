@@ -268,6 +268,7 @@ export default function DesignPage() {
     if (!engine) return
 
     const handleContextMenu = (opt: any) => {
+      if (opt.e.button !== 2) return
       opt.e.preventDefault()
       opt.e.stopPropagation()
       setContextMenu({
@@ -277,11 +278,10 @@ export default function DesignPage() {
       })
     }
 
-    engine.canvas.on('mouse:down', (opt: any) => {
-      if (opt.e.button === 2) {
-        handleContextMenu(opt)
-      }
-    })
+    engine.canvas.on('mouse:down', handleContextMenu)
+    return () => {
+      engine.canvas.off('mouse:down', handleContextMenu)
+    }
   }, [])
 
   // Drawing path created -> refresh layers
@@ -440,6 +440,11 @@ export default function DesignPage() {
     if (!engine) return
     if (snapToGrid) {
       engine.enableSnapToGrid(gridSize)
+    } else {
+      engine.disableSnapToGrid()
+    }
+    return () => {
+      engine.disableSnapToGrid()
     }
   }, [snapToGrid, gridSize])
 
