@@ -28,6 +28,8 @@ export default function DesignPage() {
     leftPanelOpen, toggleLeftPanel,
     rightPanelOpen, toggleRightPanel,
     leftPanelTab, setLeftPanelTab,
+    leftPanelWidth, setLeftPanelWidth,
+    rightPanelWidth, setRightPanelWidth,
     showGrid, toggleGrid,
     showRulers, toggleRulers,
     snapToGrid, toggleSnapToGrid,
@@ -43,6 +45,35 @@ export default function DesignPage() {
   const [contextMenu, setContextMenu] = useState({ visible: false, x: 0, y: 0, hasSelection: false, multipleSelected: false, isLocked: false })
   const [isDrawingShape, setIsDrawingShape] = useState(false)
   const drawStartRef = useRef<{ x: number; y: number } | null>(null)
+  const resizingRef = useRef<{ side: 'left' | 'right'; startX: number; startWidth: number } | null>(null)
+
+  // Panel resize handlers
+  const handleResizeStart = useCallback((side: 'left' | 'right', e: React.MouseEvent) => {
+    e.preventDefault()
+    const startWidth = side === 'left' ? leftPanelWidth : rightPanelWidth
+    resizingRef.current = { side, startX: e.clientX, startWidth }
+
+    const handleMouseMove = (ev: MouseEvent) => {
+      if (!resizingRef.current) return
+      const delta = ev.clientX - resizingRef.current.startX
+      if (resizingRef.current.side === 'left') {
+        setLeftPanelWidth(resizingRef.current.startWidth + delta)
+      } else {
+        setRightPanelWidth(resizingRef.current.startWidth - delta)
+      }
+    }
+    const handleMouseUp = () => {
+      resizingRef.current = null
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+  }, [leftPanelWidth, rightPanelWidth, setLeftPanelWidth, setRightPanelWidth])
 
   // Initialize canvas engine
   useEffect(() => {
@@ -765,7 +796,7 @@ export default function DesignPage() {
 
       {/* Left Panel */}
       {leftPanelOpen && (
-        <div className="fixed left-0 top-11 bottom-0 w-60 bg-white/95 backdrop-blur-xl border-r border-canvas-border z-40 flex flex-col panel-slide-in">
+        <div className="fixed left-0 top-11 bottom-0 bg-white/95 backdrop-blur-xl border-r border-canvas-border z-40 flex flex-col panel-slide-in" style={{ width: leftPanelWidth }}>
           {/* Tab buttons */}
           <div className="flex border-b border-canvas-border">
             <TabButton active={leftPanelTab === 'layers'} onClick={() => setLeftPanelTab('layers')}>Layers</TabButton>
@@ -819,12 +850,17 @@ export default function DesignPage() {
               />
             )}
           </div>
+          {/* Resize handle */}
+          <div
+            className="absolute top-0 bottom-0 right-0 w-1 cursor-col-resize hover:bg-canvas-accent/30 active:bg-canvas-accent/50 transition-colors z-50"
+            onMouseDown={(e) => handleResizeStart('left', e)}
+          />
         </div>
       )}
 
       {/* Right Panel */}
       {rightPanelOpen && (
-        <div className="fixed right-0 top-11 bottom-0 w-64 bg-white/95 backdrop-blur-xl border-l border-canvas-border z-40 overflow-hidden">
+        <div className="fixed right-0 top-11 bottom-0 bg-white/95 backdrop-blur-xl border-l border-canvas-border z-40 overflow-hidden" style={{ width: rightPanelWidth }}>
           <PropertiesPanel
             objectProps={objectProps}
             onPropertyChange={(prop, value) => {
@@ -864,6 +900,11 @@ export default function DesignPage() {
             onResetCrop={handleResetCrop}
             onFlatten={handleFlatten}
           />
+          {/* Resize handle */}
+          <div
+            className="absolute top-0 bottom-0 left-0 w-1 cursor-col-resize hover:bg-canvas-accent/30 active:bg-canvas-accent/50 transition-colors z-50"
+            onMouseDown={(e) => handleResizeStart('right', e)}
+          />
         </div>
       )}
 
@@ -873,7 +914,7 @@ export default function DesignPage() {
         panX={viewport.panX}
         panY={viewport.panY}
         showRulers={showRulers}
-        leftOffset={leftPanelOpen ? 240 : 0}
+        leftOffset={leftPanelOpen ? leftPanelWidth : 0}
         topOffset={44}
       />
 
@@ -881,8 +922,8 @@ export default function DesignPage() {
       <div
         className="absolute inset-0 pt-11"
         style={{
-          left: leftPanelOpen ? 240 : 0,
-          right: rightPanelOpen ? 256 : 0,
+          left: leftPanelOpen ? leftPanelWidth : 0,
+          right: rightPanelOpen ? rightPanelWidth : 0,
         }}
       >
         <canvas ref={canvasRef} />

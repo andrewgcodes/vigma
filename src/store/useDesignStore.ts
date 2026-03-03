@@ -81,6 +81,10 @@ interface DesignState {
   toggleRightPanel: () => void
   leftPanelTab: 'layers' | 'pages' | 'assets'
   setLeftPanelTab: (tab: 'layers' | 'pages' | 'assets') => void
+  leftPanelWidth: number
+  setLeftPanelWidth: (w: number) => void
+  rightPanelWidth: number
+  setRightPanelWidth: (w: number) => void
 
   // Object properties from selection
   selectedObjectProps: Record<string, any>
@@ -187,6 +191,10 @@ export const useDesignStore = create<DesignState>((set) => ({
   toggleRightPanel: () => set((s) => ({ rightPanelOpen: !s.rightPanelOpen })),
   leftPanelTab: 'layers',
   setLeftPanelTab: (tab) => set({ leftPanelTab: tab }),
+  leftPanelWidth: 240,
+  setLeftPanelWidth: (w) => set({ leftPanelWidth: Math.max(180, Math.min(480, w)) }),
+  rightPanelWidth: 256,
+  setRightPanelWidth: (w) => set({ rightPanelWidth: Math.max(200, Math.min(500, w)) }),
 
   selectedObjectProps: {},
   setSelectedObjectProps: (props) => set({ selectedObjectProps: props }),

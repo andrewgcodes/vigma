@@ -2,6 +2,7 @@
 
 import React, { useState, useCallback } from 'react'
 import { HexColorPicker, HexColorInput } from 'react-colorful'
+import { Pipette } from 'lucide-react'
 
 interface ColorPickerProps {
   color: string
@@ -22,6 +23,23 @@ export default function ColorPicker({ color, onChange, label }: ColorPickerProps
   const handlePresetClick = useCallback((preset: string) => {
     onChange(preset)
   }, [onChange])
+
+  const handleEyedropper = useCallback(async () => {
+    // Use the browser's native EyeDropper API if available
+    if ('EyeDropper' in window) {
+      try {
+        const eyeDropper = new (window as any).EyeDropper()
+        const result = await eyeDropper.open()
+        if (result?.sRGBHex) {
+          onChange(result.sRGBHex)
+        }
+      } catch {
+        // User cancelled or API not supported
+      }
+    }
+  }, [onChange])
+
+  const hasEyeDropperAPI = typeof window !== 'undefined' && 'EyeDropper' in window
 
   return (
     <div className="relative">
@@ -45,6 +63,15 @@ export default function ColorPicker({ color, onChange, label }: ColorPickerProps
           <div className="absolute top-full mt-2 left-0 z-50 bg-white rounded-xl shadow-panel-lg p-3 w-56">
             <HexColorPicker color={color} onChange={onChange} />
             <div className="mt-2 flex items-center gap-2">
+              {hasEyeDropperAPI && (
+                <button
+                  onClick={handleEyedropper}
+                  className="p-1.5 rounded-lg border border-canvas-border hover:bg-canvas-bg hover:border-canvas-text-tertiary transition-colors"
+                  title="Pick color from screen"
+                >
+                  <Pipette size={14} className="text-canvas-text-secondary" />
+                </button>
+              )}
               <span className="text-xs text-canvas-text-secondary">#</span>
               <HexColorInput
                 color={color}
