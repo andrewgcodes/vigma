@@ -157,6 +157,26 @@ export default function DesignPage() {
       // would cause old room objects to bleed into the new room.
       const loadSaved = async () => {
         if (getRoomIdFromHash()) return // joining a room — skip localStorage load
+
+        // Helper: attempt to load canvas JSON with retry.
+        // Fabric.js can throw "Cannot read properties of undefined (reading 'clearRect')"
+        // if the canvas element isn't fully ready on the first attempt.
+        const tryLoadJSON = async (json: string, retries = 2): Promise<boolean> => {
+          for (let attempt = 0; attempt <= retries; attempt++) {
+            try {
+              await engine.loadFromJSON(json)
+              return true
+            } catch (loadErr) {
+              console.warn(`loadFromJSON attempt ${attempt + 1} failed:`, loadErr)
+              if (attempt < retries) {
+                // Wait briefly for the canvas to finish initializing
+                await new Promise(r => setTimeout(r, 100))
+              }
+            }
+          }
+          return false
+        }
+
         try {
           const savedPages = localStorage.getItem('vigma-pages')
           if (savedPages) {
@@ -196,7 +216,7 @@ export default function DesignPage() {
               // Load the current page's canvas
               const currentPage = parsed.pages.find((p: any) => p.id === targetPageId)
               if (currentPage && currentPage.canvasJSON) {
-                await engine.loadFromJSON(currentPage.canvasJSON)
+                await tryLoadJSON(currentPage.canvasJSON)
               }
               // Restore viewport (zoom/pan) from saved state
               if (parsed.viewport) {
@@ -215,14 +235,20 @@ export default function DesignPage() {
           // Fallback: try loading legacy single-page format
           const saved = localStorage.getItem('vigma-project')
           if (saved) {
-            await engine.loadFromJSON(saved)
+            await tryLoadJSON(saved)
             refreshLayers()
           }
         } catch (e) {
-          // If saved data is corrupt or incompatible, clear it
-          console.warn('Failed to load saved project, clearing localStorage', e)
-          localStorage.removeItem('vigma-pages')
-          localStorage.removeItem('vigma-project')
+          // Only clear localStorage for genuine data corruption (JSON parse errors).
+          // Do NOT clear for transient canvas errors (e.g. clearRect) — the saved
+          // data is still valid and will load fine on the next page load.
+          if (e instanceof SyntaxError) {
+            console.warn('Saved project data is corrupt, clearing localStorage', e)
+            localStorage.removeItem('vigma-pages')
+            localStorage.removeItem('vigma-project')
+          } else {
+            console.warn('Failed to load saved project (data preserved in localStorage)', e)
+          }
         }
       }
       loadSaved()
@@ -1318,8 +1344,31 @@ export default function DesignPage() {
       localStorage.setItem('vigma-pages', JSON.stringify(pagesData))
       // Legacy single-page key for backward compat
       localStorage.setItem('vigma-project', engine.exportToJSON())
-    } catch (e) {
-      console.warn('Failed to persist pages', e)
+    } catch (e: any) {
+      // Detect localStorage quota exceeded (common with large base64 images).
+      // When this happens, try saving without the legacy key to free space.
+      if (e?.name === 'QuotaExceededError' || e?.code === 22 || e?.code === 1014) {
+        console.warn('localStorage quota exceeded — removing legacy key and retrying', e)
+        try {
+          localStorage.removeItem('vigma-project') // free space by dropping legacy key
+          const store = useDesignStore.getState()
+          store.updatePage(store.currentPageId, { canvasJSON: engine.exportToJSON() })
+          const vpt = engine.canvas.viewportTransform
+          const currentViewport = vpt
+            ? { zoom: engine.canvas.getZoom(), panX: vpt[4], panY: vpt[5] }
+            : { zoom: 1, panX: 0, panY: 0 }
+          const pagesData = {
+            pages: useDesignStore.getState().pages,
+            currentPageId: store.currentPageId,
+            viewport: currentViewport,
+          }
+          localStorage.setItem('vigma-pages', JSON.stringify(pagesData))
+        } catch (retryErr) {
+          console.warn('Failed to persist even after freeing space — data too large for localStorage', retryErr)
+        }
+      } else {
+        console.warn('Failed to persist pages', e)
+      }
     }
   }, [])
 
