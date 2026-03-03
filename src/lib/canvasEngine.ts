@@ -14,6 +14,10 @@ export class CanvasEngine {
   private guidelines: FabricObject[] = []
   private snapThreshold = 5
   private snapHandler: ((e: any) => void) | null = null
+  private smartGuideHandler: ((e: any) => void) | null = null
+  private smartGuideRenderHandler: (() => void) | null = null
+  private activeGuideLines: { orientation: 'h' | 'v'; position: number; start: number; end: number }[] = []
+  private smartGuidesEnabled = true
   private onSelectionChange?: (ids: string[]) => void
   private onObjectModified?: () => void
   private onHistoryChange?: (canUndo: boolean, canRedo: boolean) => void
@@ -47,6 +51,7 @@ export class CanvasEngine {
 
     this.setupEventListeners()
     this.setupCustomControls()
+    this.enableSmartGuides()
     this.saveHistory()
   }
 
@@ -893,6 +898,204 @@ export class CanvasEngine {
       this.canvas.off('object:moving', this.snapHandler)
       this.snapHandler = null
     }
+  }
+
+  // SMART ALIGNMENT GUIDES
+  enableSmartGuides() {
+    this.disableSmartGuides()
+    this.smartGuidesEnabled = true
+    const threshold = this.snapThreshold
+
+    this.smartGuideHandler = (e: any) => {
+      const target = e.target
+      if (!target || (target as any).isGrid || (target as any).isPreview) return
+
+      // Get moving object's bounding edges (in scene coordinates)
+      const bound = target.getBoundingRect()
+      const zoom = this.canvas.getZoom()
+      const vpt = this.canvas.viewportTransform || [1, 0, 0, 1, 0, 0]
+
+      // Convert bounding rect from viewport coords to scene coords
+      const tLeft = (bound.left - vpt[4]) / zoom
+      const tTop = (bound.top - vpt[5]) / zoom
+      const tWidth = bound.width / zoom
+      const tHeight = bound.height / zoom
+      const tRight = tLeft + tWidth
+      const tBottom = tTop + tHeight
+      const tCenterX = tLeft + tWidth / 2
+      const tCenterY = tTop + tHeight / 2
+
+      const newGuides: { orientation: 'h' | 'v'; position: number; start: number; end: number }[] = []
+      let snapDx = 0
+      let snapDy = 0
+      let snappedX = false
+      let snappedY = false
+
+      // Compare against all other objects
+      const objects = this.canvas.getObjects().filter(o => {
+        if (o === target) return false
+        if ((o as any).isGrid || (o as any).isPreview) return false
+        // Skip objects inside an ActiveSelection
+        if (target instanceof ActiveSelection && (target as ActiveSelection).getObjects().includes(o)) return false
+        return true
+      })
+
+      for (const obj of objects) {
+        const oBound = obj.getBoundingRect()
+        const oLeft = (oBound.left - vpt[4]) / zoom
+        const oTop = (oBound.top - vpt[5]) / zoom
+        const oWidth = oBound.width / zoom
+        const oHeight = oBound.height / zoom
+        const oRight = oLeft + oWidth
+        const oBottom = oTop + oHeight
+        const oCenterX = oLeft + oWidth / 2
+        const oCenterY = oTop + oHeight / 2
+
+        // Vertical alignment checks (snap X position)
+        if (!snappedX) {
+          // Left to left
+          if (Math.abs(tLeft - oLeft) < threshold) {
+            snapDx = oLeft - tLeft
+            snappedX = true
+            newGuides.push({ orientation: 'v', position: oLeft, start: Math.min(tTop, oTop) - 20, end: Math.max(tBottom, oBottom) + 20 })
+          }
+          // Right to right
+          else if (Math.abs(tRight - oRight) < threshold) {
+            snapDx = oRight - tRight
+            snappedX = true
+            newGuides.push({ orientation: 'v', position: oRight, start: Math.min(tTop, oTop) - 20, end: Math.max(tBottom, oBottom) + 20 })
+          }
+          // Left to right
+          else if (Math.abs(tLeft - oRight) < threshold) {
+            snapDx = oRight - tLeft
+            snappedX = true
+            newGuides.push({ orientation: 'v', position: oRight, start: Math.min(tTop, oTop) - 20, end: Math.max(tBottom, oBottom) + 20 })
+          }
+          // Right to left
+          else if (Math.abs(tRight - oLeft) < threshold) {
+            snapDx = oLeft - tRight
+            snappedX = true
+            newGuides.push({ orientation: 'v', position: oLeft, start: Math.min(tTop, oTop) - 20, end: Math.max(tBottom, oBottom) + 20 })
+          }
+          // Center to center (vertical)
+          else if (Math.abs(tCenterX - oCenterX) < threshold) {
+            snapDx = oCenterX - tCenterX
+            snappedX = true
+            newGuides.push({ orientation: 'v', position: oCenterX, start: Math.min(tTop, oTop) - 20, end: Math.max(tBottom, oBottom) + 20 })
+          }
+        }
+
+        // Horizontal alignment checks (snap Y position)
+        if (!snappedY) {
+          // Top to top
+          if (Math.abs(tTop - oTop) < threshold) {
+            snapDy = oTop - tTop
+            snappedY = true
+            newGuides.push({ orientation: 'h', position: oTop, start: Math.min(tLeft, oLeft) - 20, end: Math.max(tRight, oRight) + 20 })
+          }
+          // Bottom to bottom
+          else if (Math.abs(tBottom - oBottom) < threshold) {
+            snapDy = oBottom - tBottom
+            snappedY = true
+            newGuides.push({ orientation: 'h', position: oBottom, start: Math.min(tLeft, oLeft) - 20, end: Math.max(tRight, oRight) + 20 })
+          }
+          // Top to bottom
+          else if (Math.abs(tTop - oBottom) < threshold) {
+            snapDy = oBottom - tTop
+            snappedY = true
+            newGuides.push({ orientation: 'h', position: oBottom, start: Math.min(tLeft, oLeft) - 20, end: Math.max(tRight, oRight) + 20 })
+          }
+          // Bottom to top
+          else if (Math.abs(tBottom - oTop) < threshold) {
+            snapDy = oTop - tBottom
+            snappedY = true
+            newGuides.push({ orientation: 'h', position: oTop, start: Math.min(tLeft, oLeft) - 20, end: Math.max(tRight, oRight) + 20 })
+          }
+          // Center to center (horizontal)
+          else if (Math.abs(tCenterY - oCenterY) < threshold) {
+            snapDy = oCenterY - tCenterY
+            snappedY = true
+            newGuides.push({ orientation: 'h', position: oCenterY, start: Math.min(tLeft, oLeft) - 20, end: Math.max(tRight, oRight) + 20 })
+          }
+        }
+
+        if (snappedX && snappedY) break
+      }
+
+      // Apply snap
+      if (snapDx !== 0 || snapDy !== 0) {
+        target.set({
+          left: (target.left ?? 0) + snapDx,
+          top: (target.top ?? 0) + snapDy,
+        })
+        target.setCoords()
+      }
+
+      this.activeGuideLines = newGuides
+      this.canvas.requestRenderAll()
+    }
+
+    // Render guide lines as an overlay (after:render)
+    this.smartGuideRenderHandler = () => {
+      if (this.activeGuideLines.length === 0) return
+      const ctx = this.canvas.getSelectionContext()
+      const zoom = this.canvas.getZoom()
+      const vpt = this.canvas.viewportTransform || [1, 0, 0, 1, 0, 0]
+
+      ctx.save()
+      ctx.strokeStyle = '#ff2d55'
+      ctx.lineWidth = 1
+      ctx.setLineDash([4, 4])
+
+      for (const guide of this.activeGuideLines) {
+        ctx.beginPath()
+        if (guide.orientation === 'v') {
+          const screenX = guide.position * zoom + vpt[4]
+          const startY = guide.start * zoom + vpt[5]
+          const endY = guide.end * zoom + vpt[5]
+          ctx.moveTo(screenX, startY)
+          ctx.lineTo(screenX, endY)
+        } else {
+          const screenY = guide.position * zoom + vpt[5]
+          const startX = guide.start * zoom + vpt[4]
+          const endX = guide.end * zoom + vpt[4]
+          ctx.moveTo(startX, screenY)
+          ctx.lineTo(endX, screenY)
+        }
+        ctx.stroke()
+      }
+      ctx.restore()
+    }
+
+    this.canvas.on('object:moving', this.smartGuideHandler)
+    this.canvas.on('after:render', this.smartGuideRenderHandler)
+
+    // Clear guides when object is released
+    const clearGuides = () => {
+      this.activeGuideLines = []
+      this.canvas.requestRenderAll()
+    }
+    this.canvas.on('mouse:up', clearGuides)
+    // Store reference to clean up later
+    ;(this as any)._smartGuideClearHandler = clearGuides
+  }
+
+  disableSmartGuides() {
+    this.smartGuidesEnabled = false
+    if (this.smartGuideHandler) {
+      this.canvas.off('object:moving', this.smartGuideHandler)
+      this.smartGuideHandler = null
+    }
+    if (this.smartGuideRenderHandler) {
+      this.canvas.off('after:render', this.smartGuideRenderHandler)
+      this.smartGuideRenderHandler = null
+    }
+    if ((this as any)._smartGuideClearHandler) {
+      this.canvas.off('mouse:up', (this as any)._smartGuideClearHandler)
+      ;(this as any)._smartGuideClearHandler = null
+    }
+    this.activeGuideLines = []
+    this.canvas.requestRenderAll()
   }
 
   // PROPERTY SETTERS
