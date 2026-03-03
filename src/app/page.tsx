@@ -137,21 +137,67 @@ export default function DesignPage() {
     }
     window.addEventListener('resize', handleResize)
 
-    // Load saved project from localStorage
-    const loadSaved = async () => {
-      try {
-        const saved = localStorage.getItem('vigma-project')
-        if (saved) {
-          await engine.loadFromJSON(saved)
-          refreshLayers()
+      // Load saved project from localStorage (supports multi-page persistence)
+      const loadSaved = async () => {
+        try {
+          const savedPages = localStorage.getItem('vigma-pages')
+          if (savedPages) {
+            const parsed = JSON.parse(savedPages)
+            if (parsed.pages && Array.isArray(parsed.pages) && parsed.pages.length > 0) {
+              // Restore all pages into the store
+              // Clear existing pages and load saved ones
+              const store = useDesignStore.getState()
+              // Remove default pages
+              for (const p of store.pages) {
+                if (!parsed.pages.find((sp: any) => sp.id === p.id)) {
+                  store.removePage(p.id)
+                }
+              }
+              // Add/update saved pages
+              for (const savedPage of parsed.pages) {
+                const existing = store.pages.find(p => p.id === savedPage.id)
+                if (existing) {
+                  store.updatePage(savedPage.id, { name: savedPage.name, canvasJSON: savedPage.canvasJSON })
+                } else {
+                  store.addPage(savedPage)
+                }
+              }
+              // Remove any default pages that weren't in the saved data
+              const savedIds = new Set(parsed.pages.map((p: any) => p.id))
+              for (const p of useDesignStore.getState().pages) {
+                if (!savedIds.has(p.id)) {
+                  // Only remove if there will still be pages left
+                  if (useDesignStore.getState().pages.length > 1) {
+                    store.removePage(p.id)
+                  }
+                }
+              }
+              // Set the current page
+              const targetPageId = parsed.currentPageId || parsed.pages[0].id
+              store.setCurrentPageId(targetPageId)
+              // Load the current page's canvas
+              const currentPage = parsed.pages.find((p: any) => p.id === targetPageId)
+              if (currentPage && currentPage.canvasJSON) {
+                await engine.loadFromJSON(currentPage.canvasJSON)
+              }
+              refreshLayers()
+              return
+            }
+          }
+          // Fallback: try loading legacy single-page format
+          const saved = localStorage.getItem('vigma-project')
+          if (saved) {
+            await engine.loadFromJSON(saved)
+            refreshLayers()
+          }
+        } catch (e) {
+          // If saved data is corrupt or incompatible, clear it
+          console.warn('Failed to load saved project, clearing localStorage', e)
+          localStorage.removeItem('vigma-pages')
+          localStorage.removeItem('vigma-project')
         }
-      } catch (e) {
-        // If saved data is corrupt or incompatible, clear it
-        console.warn('Failed to load saved project, clearing localStorage', e)
-        localStorage.removeItem('vigma-project')
       }
-    }
-    loadSaved()
+      loadSaved()
 
     return () => {
       window.removeEventListener('resize', handleResize)
@@ -1027,12 +1073,21 @@ export default function DesignPage() {
     }
   }, [snapToGrid, gridSize])
 
-  // SAVE PROJECT
+  // SAVE PROJECT (saves all pages)
   const handleSaveProject = useCallback(() => {
     const engine = engineRef.current
     if (!engine) return
-    const json = engine.exportToJSON()
-    localStorage.setItem('vigma-project', json)
+    const store = useDesignStore.getState()
+    // Update the current page's canvasJSON with the live canvas state
+    store.updatePage(store.currentPageId, { canvasJSON: engine.exportToJSON() })
+    // Save all pages to localStorage
+    const pagesData = {
+      pages: useDesignStore.getState().pages,
+      currentPageId: store.currentPageId,
+    }
+    localStorage.setItem('vigma-pages', JSON.stringify(pagesData))
+    // Also save legacy format for backward compatibility
+    localStorage.setItem('vigma-project', engine.exportToJSON())
   }, [])
 
   // Auto-save every 1 second (aggressive save to prevent data loss)
@@ -1041,8 +1096,17 @@ export default function DesignPage() {
       const engine = engineRef.current
       if (!engine) return
       try {
-        const json = engine.exportToJSON()
-        localStorage.setItem('vigma-project', json)
+        const store = useDesignStore.getState()
+        // Update the current page's canvasJSON with the live canvas state
+        store.updatePage(store.currentPageId, { canvasJSON: engine.exportToJSON() })
+        // Save all pages to localStorage
+        const pagesData = {
+          pages: useDesignStore.getState().pages,
+          currentPageId: store.currentPageId,
+        }
+        localStorage.setItem('vigma-pages', JSON.stringify(pagesData))
+        // Also save legacy format for backward compatibility
+        localStorage.setItem('vigma-project', engine.exportToJSON())
       } catch (e) {}
     }, 1000)
     return () => clearInterval(interval)
