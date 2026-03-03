@@ -313,6 +313,9 @@ export default function DesignPage() {
     // This ensures we don't push empty state before persisted data loads
     await collab.waitForSync(3000)
 
+    // Guard: if user left the room or component unmounted during sync, bail out
+    if (collabRef.current !== collab) return
+
     // After persistence sync, check if the room has objects
     // Only push local canvas state if the room is truly empty
     if (collab.getAllObjects().size === 0) {
