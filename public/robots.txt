@@ -1,0 +1,5 @@
+# Vigma - https://vigma.io
+User-agent: *
+Allow: /
+
+Sitemap: https://vigma.io/sitemap.xml
