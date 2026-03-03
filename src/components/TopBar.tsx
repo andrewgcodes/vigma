@@ -123,8 +123,8 @@ export default function TopBar({
             <span className="text-white text-xs font-bold">V</span>
           </div>
           <span className="text-sm font-semibold text-canvas-text tracking-tight">Vigma</span>
-          {/* Save status indicator */}
-          <div className={`flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-medium transition-all duration-300 ${
+          {/* Save status indicator — fixed width to prevent layout shift */}
+          <div className={`flex items-center justify-center gap-1 w-[70px] px-1.5 py-0.5 rounded-md text-[10px] font-medium transition-colors duration-300 ${
             saveStatus === 'just-saved'
               ? 'text-green-600 bg-green-50'
               : saveStatus === 'saving'
