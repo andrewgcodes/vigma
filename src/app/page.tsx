@@ -361,8 +361,12 @@ export default function DesignPage() {
 
     // Clean up tracked IDs only after ALL async operations complete
     if (enlivenPromises.length > 0) {
-      Promise.all(enlivenPromises).catch((e) => {
-        console.warn('Failed to enliven remote objects', e)
+      Promise.allSettled(enlivenPromises).then((results) => {
+        for (const r of results) {
+          if (r.status === 'rejected') {
+            console.warn('Failed to enliven remote object', r.reason)
+          }
+        }
       }).finally(() => {
         for (const id of processingIds) {
           remoteObjectIdsRef.current.delete(id)
@@ -453,13 +457,13 @@ export default function DesignPage() {
           }
         })
 
-      const remoteOnlyIds = collab.reconcileCanvasState(localObjects)
+      const { remoteOnlyIds, overlappingIds } = collab.reconcileCanvasState(localObjects)
 
-      // Add remote-only objects to the canvas
-      if (remoteOnlyIds.length > 0) {
+      // Add remote-only objects and update overlapping ones on the canvas
+      if (remoteOnlyIds.length > 0 || overlappingIds.length > 0) {
         handleRemoteObjectChange({
           added: remoteOnlyIds,
-          updated: [],
+          updated: overlappingIds,
           deleted: [],
         })
       }

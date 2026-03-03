@@ -681,8 +681,10 @@ describe('CollaborationManager.reconcileCanvasState integration', () => {
       }
     })
     const remoteOnlyIds: string[] = []
+    const overlappingIds: string[] = []
     remoteIds.forEach(id => {
       if (!localIds.has(id)) remoteOnlyIds.push(id)
+      else overlappingIds.push(id)
     })
 
     // 3 total objects: shared (remote version), remote-only, local-only
@@ -691,5 +693,7 @@ describe('CollaborationManager.reconcileCanvasState integration', () => {
     expect(objectsMap.has('remote-only')).toBe(true)
     expect(objectsMap.has('local-only')).toBe(true)
     expect(remoteOnlyIds).toEqual(['remote-only'])
+    // Overlapping IDs should be returned so caller can update canvas to match remote
+    expect(overlappingIds).toEqual(['shared'])
   })
 })

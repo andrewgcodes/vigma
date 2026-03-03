@@ -277,7 +277,7 @@ export class CollaborationManager {
    *  - Objects in both → remote version is kept (it was there first)
    *  This prevents race conditions during initial sync where WebRTC peers
    *  may deliver objects while IndexedDB is still loading. */
-  reconcileCanvasState(localObjects: Array<{ id: string; json: string }>): string[] {
+  reconcileCanvasState(localObjects: Array<{ id: string; json: string }>): { remoteOnlyIds: string[]; overlappingIds: string[] } {
     this.isSyncingLocal = true
     const remoteIds = new Set(Array.from(this.objectsMap.keys()))
     const localIds = new Set(localObjects.map(o => o.id))
@@ -296,13 +296,17 @@ export class CollaborationManager {
     this.isSyncingLocal = false
 
     // Return IDs of remote objects not in local (caller needs to add to canvas)
+    // and IDs of overlapping objects (caller needs to update canvas to match remote)
     const remoteOnlyIds: string[] = []
+    const overlappingIds: string[] = []
     remoteIds.forEach(id => {
       if (!localIds.has(id)) {
         remoteOnlyIds.push(id)
+      } else {
+        overlappingIds.push(id)
       }
     })
-    return remoteOnlyIds
+    return { remoteOnlyIds, overlappingIds }
   }
 
   // === CURSOR / PRESENCE ===
