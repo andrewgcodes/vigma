@@ -495,8 +495,8 @@ export class CanvasEngine {
   ungroupSelected() {
     const active = this.canvas.getActiveObject()
     if (!active || !(active instanceof Group)) return
-    const items = active.getObjects()
-    active.destroy()
+    const items = active.getObjects().slice()
+    // In Fabric.js v6, Group doesn't have destroy(). Just remove the group from canvas.
     this.canvas.remove(active)
     items.forEach(item => {
       this.canvas.add(item)
