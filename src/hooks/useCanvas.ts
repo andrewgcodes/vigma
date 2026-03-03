@@ -710,8 +710,8 @@ export function useCanvas() {
     clipboardRef.current = clones;
   }, []);
 
-  const cutSelected = useCallback(() => {
-    copySelected();
+  const cutSelected = useCallback(async () => {
+    await copySelected();
     deleteSelected();
   }, [copySelected, deleteSelected]);
 
@@ -816,37 +816,35 @@ export function useCanvas() {
     if (!activeObj || !(activeObj instanceof fabric.Group)) return;
 
     const items = (activeObj as fabric.Group).getObjects();
-    // Use the group's transform matrix to compute absolute positions
-    const groupTransform = activeObj.calcTransformMatrix();
+
+    // Children's left/top are relative to group center
+    // Group center = group.left + group.width*scaleX/2, group.top + group.height*scaleY/2
+    const groupCenterX = (activeObj.left ?? 0) + ((activeObj.width ?? 0) * (activeObj.scaleX ?? 1)) / 2;
+    const groupCenterY = (activeObj.top ?? 0) + ((activeObj.height ?? 0) * (activeObj.scaleY ?? 1)) / 2;
+
+    // Compute absolute positions for each child before removing the group
+    const itemPositions = items.map((item) => ({
+      item,
+      left: groupCenterX + (item.left ?? 0),
+      top: groupCenterY + (item.top ?? 0),
+    }));
+
+    // Remove the group from canvas
     canvas.remove(activeObj);
-    const newObjects: fabric.FabricObject[] = [];
-    items.forEach((item) => {
-      // Calculate absolute position using the group's transform matrix
-      const itemTransform = item.calcTransformMatrix();
-      // Multiply group transform by item transform to get absolute transform
-      const absoluteTransform = fabric.util.multiplyTransformMatrices(
-        groupTransform,
-        itemTransform
-      );
-      // Decompose the absolute transform to get position, scale, rotation
-      const decomposed = fabric.util.qrDecompose(absoluteTransform);
-      item.set({
-        left: decomposed.translateX,
-        top: decomposed.translateY,
-        scaleX: decomposed.scaleX,
-        scaleY: decomposed.scaleY,
-        angle: decomposed.angle,
-        flipX: false,
-        flipY: false,
-      });
+    canvas.discardActiveObject();
+
+    // Remove all children from the group to clear their parent reference
+    // Without this, items still reference the old group as parent and
+    // calcTransformMatrix() during rendering applies the group transform again
+    (activeObj as fabric.Group).removeAll();
+
+    itemPositions.forEach(({ item, left, top }) => {
+      item.set({ left, top });
       item.setCoords();
       canvas.add(item);
-      newObjects.push(item);
     });
-    if (newObjects.length > 0) {
-      const sel = new fabric.ActiveSelection(newObjects, { canvas });
-      canvas.setActiveObject(sel);
-    }
+
+    // Do NOT create an ActiveSelection here — it re-adjusts children positions
     canvas.requestRenderAll();
     saveHistory();
     syncLayers();
