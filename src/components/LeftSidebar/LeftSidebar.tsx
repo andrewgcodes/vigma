@@ -150,7 +150,6 @@ export default function LeftSidebar() {
       canvas.discardActiveObject();
       canvas.requestRenderAll();
       window.dispatchEvent(new CustomEvent('vigma:update-layers'));
-      window.dispatchEvent(new CustomEvent('vigma:save-history'));
     }
   }, [state.pages, state.activePageId, canvasRef, dispatch]);
 

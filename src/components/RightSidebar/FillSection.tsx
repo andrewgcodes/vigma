@@ -26,13 +26,10 @@ export default function FillSection({ obj }: FillSectionProps) {
     window.dispatchEvent(new CustomEvent('vigma:save-history'));
   };
 
-  const handleColorChange = (color: string, opacity?: number) => {
+  const handleColorChange = (color: string, _opacity?: number) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     obj.set({ fill: color });
-    if (opacity !== undefined) {
-      obj.set({ opacity: opacity / 100 });
-    }
     canvas.requestRenderAll();
     window.dispatchEvent(new CustomEvent('vigma:save-history'));
   };
