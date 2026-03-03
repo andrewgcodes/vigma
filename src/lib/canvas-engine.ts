@@ -907,14 +907,16 @@ export class CanvasEngine {
 
   async importFromJSON(json: string) {
     if (!this.canvas) return;
+    this.historyPaused = true;
     try {
       const parsed = JSON.parse(json);
       await this.canvas.loadFromJSON(parsed);
       this.canvas.requestRenderAll();
-      this.saveHistory();
     } catch (err) {
       console.error('Failed to import JSON:', err);
     }
+    this.historyPaused = false;
+    this.saveHistory();
   }
 
   // Grid
