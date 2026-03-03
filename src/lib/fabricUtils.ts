@@ -211,10 +211,12 @@ export function addImageToCanvas(
   canvas: fabric.Canvas,
   file: File
 ): Promise<void> {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const reader = new FileReader();
+    reader.onerror = () => reject(reader.error);
     reader.onload = (e) => {
       const imgElement = new Image();
+      imgElement.onerror = () => reject(new Error('Failed to load image'));
       imgElement.onload = () => {
         const img = new fabric.FabricImage(imgElement, {
           left: 100,
@@ -295,6 +297,7 @@ export function loadCanvasFromJSON(canvas: fabric.Canvas, file: File): Promise<v
         reject(err);
       }
     };
+    reader.onerror = () => reject(reader.error);
     reader.readAsText(file);
   });
 }
