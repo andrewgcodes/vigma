@@ -120,9 +120,17 @@ export class CanvasEngine {
   }
 
   // HISTORY
+  private serializeCanvas(extraProps: string[] = []): string {
+    const props = ['id', 'name', 'selectable', 'evented', 'lockMovementX', 'lockMovementY', 'lockRotation', 'lockScalingX', 'lockScalingY', 'hasControls', 'visible', 'rx', 'ry', 'isFrame', 'isGrid', ...extraProps]
+    const data = this.canvas.toJSON(props)
+    // Filter out grid lines from serialization
+    data.objects = (data.objects || []).filter((o: any) => !o.isGrid)
+    return JSON.stringify(data)
+  }
+
   saveHistory() {
     if (this.isLoadingHistory) return
-    const json = JSON.stringify(this.canvas.toJSON(['id', 'name', 'selectable', 'evented', 'lockMovementX', 'lockMovementY', 'lockRotation', 'lockScalingX', 'lockScalingY', 'hasControls', 'visible', 'rx', 'ry', 'isFrame']))
+    const json = this.serializeCanvas()
     if (this.historyIndex < this.history.length - 1) {
       this.history = this.history.slice(0, this.historyIndex + 1)
     }
@@ -1215,7 +1223,7 @@ export class CanvasEngine {
   }
 
   exportToJSON(): string {
-    return JSON.stringify(this.canvas.toJSON(['id', 'name', 'selectable', 'evented', 'lockMovementX', 'lockMovementY', 'lockRotation', 'lockScalingX', 'lockScalingY', 'hasControls', 'visible', 'rx', 'ry', 'isFrame', 'globalCompositeOperation', 'paintFirst', 'strokeUniform']))
+    return this.serializeCanvas(['globalCompositeOperation', 'paintFirst', 'strokeUniform'])
   }
 
   async loadFromJSON(json: string) {
