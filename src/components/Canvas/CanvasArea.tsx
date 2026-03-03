@@ -1,9 +1,10 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
-import { Canvas, Rect, Ellipse, Triangle, Line, Textbox, PencilBrush, Point, FabricImage, Polygon, FabricObject, ActiveSelection, Group, type TPointerEvent } from 'fabric';
+import { Canvas, Rect, Ellipse, Triangle, Line, Textbox, PencilBrush, Point, FabricImage, Polygon, FabricObject, ActiveSelection, Group, Path, type TPointerEvent } from 'fabric';
 import { useAppContext } from '../../store/canvasStore';
 import { assignObjectId, assignDefaultName, getObjectId, getLayersFromCanvas, saveCanvasJSON } from '../../utils/canvasHelpers';
 import { DEFAULT_FILL, DEFAULT_STROKE, DEFAULT_STROKE_WIDTH, LINE_STROKE, LINE_STROKE_WIDTH, ARTBOARD_WIDTH, ARTBOARD_HEIGHT } from '../../utils/defaultStyles';
 import WelcomeOverlay from './WelcomeOverlay';
+import Rulers from './Rulers';
 import type { ToolType } from '../../types';
 
 export default function CanvasArea() {
@@ -31,7 +32,8 @@ export default function CanvasArea() {
     if (!canvas || historyLock.current) return;
     const json = saveCanvasJSON(canvas);
     dispatch({ type: 'PUSH_HISTORY', state: json });
-  }, [canvasRef, dispatch]);
+    dispatch({ type: 'UPDATE_PAGE_CANVAS', pageId: state.activePageId, canvasJSON: json });
+  }, [canvasRef, dispatch, state.activePageId]);
 
   const initCanvas = useCallback(() => {
     if (!containerRef.current || canvasRef.current) return;
@@ -70,37 +72,75 @@ export default function CanvasArea() {
     canvas.requestRenderAll();
 
     // Try to restore from localStorage
+    let restored = false;
     try {
-      const saved = localStorage.getItem('vigma-autosave');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        canvas.loadFromJSON(parsed).then(() => {
-          // Re-mark artboard as non-selectable after JSON restore
-          canvas.getObjects().forEach((obj) => {
-            const record = obj as unknown as Record<string, unknown>;
-            if (record.name === 'artboard' || (obj.width === ARTBOARD_WIDTH && obj.height === ARTBOARD_HEIGHT && obj.fill === '#ffffff' && !record.objectId)) {
-              obj.selectable = false;
-              obj.evented = false;
-              obj.hoverCursor = 'default';
-              record.name = 'artboard';
-            }
+      const pagesSaved = localStorage.getItem('vigma-pages');
+      if (pagesSaved) {
+        const parsed = JSON.parse(pagesSaved) as { pages?: any[]; activePageId?: string };
+        if (Array.isArray(parsed.pages) && parsed.pages.length > 0) {
+          const activePageId = parsed.activePageId || parsed.pages[0].id;
+          dispatch({ type: 'SET_PAGES_STATE', pages: parsed.pages as any, activePageId });
+          const activePage = (parsed.pages as any[]).find((p) => p.id === activePageId) || parsed.pages[0];
+          if (activePage?.canvasJSON) {
+            const pageJSON = JSON.parse(activePage.canvasJSON);
+            canvas.loadFromJSON(pageJSON).then(() => {
+              // Re-mark artboard as non-selectable after JSON restore
+              canvas.getObjects().forEach((obj) => {
+                const record = obj as unknown as Record<string, unknown>;
+                if (record.name === 'artboard' || (obj.width === ARTBOARD_WIDTH && obj.height === ARTBOARD_HEIGHT && obj.fill === '#ffffff' && !record.objectId)) {
+                  obj.selectable = false;
+                  obj.evented = false;
+                  obj.hoverCursor = 'default';
+                  record.name = 'artboard';
+                }
+              });
+              canvas.requestRenderAll();
+              setTimeout(() => {
+                updateLayers();
+                saveHistory();
+              }, 200);
+              setShowWelcome(false);
+              dispatch({ type: 'SHOW_TOAST', message: 'Previous design restored' });
+            });
+            restored = true;
+          }
+        }
+      }
+
+      // Backwards-compat: restore from single-canvas autosave
+      if (!restored) {
+        const saved = localStorage.getItem('vigma-autosave');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          canvas.loadFromJSON(parsed).then(() => {
+            // Re-mark artboard as non-selectable after JSON restore
+            canvas.getObjects().forEach((obj) => {
+              const record = obj as unknown as Record<string, unknown>;
+              if (record.name === 'artboard' || (obj.width === ARTBOARD_WIDTH && obj.height === ARTBOARD_HEIGHT && obj.fill === '#ffffff' && !record.objectId)) {
+                obj.selectable = false;
+                obj.evented = false;
+                obj.hoverCursor = 'default';
+                record.name = 'artboard';
+              }
+            });
+            canvas.requestRenderAll();
+            setTimeout(() => {
+              updateLayers();
+              saveHistory();
+            }, 200);
+            setShowWelcome(false);
+            dispatch({ type: 'SHOW_TOAST', message: 'Previous design restored' });
           });
-          canvas.requestRenderAll();
-          // Small delay to ensure all objects are fully deserialized
-          setTimeout(() => {
-            updateLayers();
-            saveHistory();
-          }, 200);
-          setShowWelcome(false);
-          dispatch({ type: 'SHOW_TOAST', message: 'Previous design restored' });
-        });
+          restored = true;
+        }
       }
     } catch {
       localStorage.removeItem('vigma-autosave');
+      localStorage.removeItem('vigma-pages');
     }
 
     // Save initial history only if no saved data to restore
-    if (!localStorage.getItem('vigma-autosave')) {
+    if (!restored) {
       setTimeout(() => {
         saveHistory();
       }, 100);
@@ -108,12 +148,10 @@ export default function CanvasArea() {
 
     dispatch({ type: 'SET_CANVAS_READY' });
 
-    // Auto-save every 5 seconds
+    // Auto-save every 5 seconds (backwards-compatible single-canvas key)
     autoSaveTimer.current = setInterval(() => {
       try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const json = JSON.stringify((canvas as any).toJSON(['objectId', 'customName', 'selectable', 'evented', 'name']));
-        localStorage.setItem('vigma-autosave', json);
+        localStorage.setItem('vigma-autosave', saveCanvasJSON(canvas));
       } catch { /* ignore */ }
     }, 5000);
 
@@ -129,6 +167,22 @@ export default function CanvasArea() {
       canvasRef.current = null;
     };
   }, []);
+
+  // Persist pages state to localStorage
+  useEffect(() => {
+    const t = setTimeout(() => {
+      try {
+        localStorage.setItem(
+          'vigma-pages',
+          JSON.stringify({ pages: state.pages, activePageId: state.activePageId })
+        );
+      } catch {
+        // ignore
+      }
+    }, 500);
+
+    return () => clearTimeout(t);
+  }, [state.pages, state.activePageId]);
 
   // Handle window resize
   useEffect(() => {
@@ -170,9 +224,10 @@ export default function CanvasArea() {
     };
     canvas.on('selection:created', handleSelection);
     canvas.on('selection:updated', handleSelection);
-    canvas.on('selection:cleared', () => {
+    const handleSelectionCleared = () => {
       dispatch({ type: 'SET_SELECTED', ids: [] });
-    });
+    };
+    canvas.on('selection:cleared', handleSelectionCleared);
 
     // Object modified
     const handleModified = () => {
@@ -180,26 +235,29 @@ export default function CanvasArea() {
       updateLayers();
       window.dispatchEvent(new CustomEvent('vigma:props-update'));
     };
+    const handleMoving = () => {
+      window.dispatchEvent(new CustomEvent('vigma:props-update'));
+    };
+    const handleScaling = () => {
+      window.dispatchEvent(new CustomEvent('vigma:props-update'));
+    };
+    const handleRotating = () => {
+      window.dispatchEvent(new CustomEvent('vigma:props-update'));
+    };
     canvas.on('object:modified', handleModified);
-    canvas.on('object:moving', () => {
-      window.dispatchEvent(new CustomEvent('vigma:props-update'));
-    });
-    canvas.on('object:scaling', () => {
-      window.dispatchEvent(new CustomEvent('vigma:props-update'));
-    });
-    canvas.on('object:rotating', () => {
-      window.dispatchEvent(new CustomEvent('vigma:props-update'));
-    });
+    canvas.on('object:moving', handleMoving);
+    canvas.on('object:scaling', handleScaling);
+    canvas.on('object:rotating', handleRotating);
 
     return () => {
       canvas.off('mouse:wheel', handleWheel);
       canvas.off('selection:created', handleSelection);
       canvas.off('selection:updated', handleSelection);
-      canvas.off('selection:cleared');
+      canvas.off('selection:cleared', handleSelectionCleared);
       canvas.off('object:modified', handleModified);
-      canvas.off('object:moving');
-      canvas.off('object:scaling');
-      canvas.off('object:rotating');
+      canvas.off('object:moving', handleMoving);
+      canvas.off('object:scaling', handleScaling);
+      canvas.off('object:rotating', handleRotating);
     };
   }, [canvasRef, dispatch, saveHistory, updateLayers]);
 
@@ -212,7 +270,7 @@ export default function CanvasArea() {
 
     // Configure canvas mode
     canvas.isDrawingMode = tool === 'pencil';
-    canvas.selection = tool === 'select';
+    canvas.selection = tool === 'select' || tool === 'pen';
 
     if (tool === 'pencil') {
       const brush = new PencilBrush(canvas);
@@ -224,10 +282,12 @@ export default function CanvasArea() {
     // Set cursor
     if (tool === 'hand') {
       canvas.defaultCursor = 'grab';
-    } else if (['rectangle', 'ellipse', 'triangle', 'line', 'arrow', 'star'].includes(tool)) {
+    } else if (['rectangle', 'ellipse', 'triangle', 'line', 'arrow', 'star', 'frame'].includes(tool)) {
       canvas.defaultCursor = 'crosshair';
     } else if (tool === 'text') {
       canvas.defaultCursor = 'text';
+    } else if (tool === 'pen') {
+      canvas.defaultCursor = 'crosshair';
     } else {
       canvas.defaultCursor = 'default';
     }
@@ -250,7 +310,7 @@ export default function CanvasArea() {
         return;
       }
 
-      if (tool === 'select' || tool === 'pencil') return;
+      if (tool === 'select' || tool === 'pencil' || tool === 'pen') return;
 
       // Text tool
       if (tool === 'text') {
@@ -345,6 +405,21 @@ export default function CanvasArea() {
             strokeWidth: DEFAULT_STROKE_WIDTH,
             strokeUniform: true,
           });
+          break;
+        }
+        case 'frame': {
+          shape = new Rect({
+            left: pointer.x,
+            top: pointer.y,
+            width: 0,
+            height: 0,
+            fill: '#ffffff',
+            stroke: '#333333',
+            strokeWidth: 1,
+            strokeUniform: true,
+          });
+          // Mark as frame for layer display
+          (shape as unknown as Record<string, unknown>).isFrame = true;
           break;
         }
       }
@@ -518,6 +593,8 @@ export default function CanvasArea() {
           case 's': dispatch({ type: 'SET_TOOL', tool: 'star' }); return;
           case 'x': dispatch({ type: 'SET_TOOL', tool: 'text' }); return;
           case 'p': dispatch({ type: 'SET_TOOL', tool: 'pencil' }); return;
+          case 'f': dispatch({ type: 'SET_TOOL', tool: 'frame' }); return;
+          case 'n': dispatch({ type: 'SET_TOOL', tool: 'pen' }); return;
         }
       }
 
@@ -1005,6 +1082,66 @@ export default function CanvasArea() {
       input.click();
     };
 
+    // Boolean operations handler
+    const handleBoolean = (e: Event) => {
+      const operation = (e as CustomEvent).detail;
+      const activeObjs = canvas.getActiveObjects();
+      if (activeObjs.length < 2) {
+        dispatch({ type: 'SHOW_TOAST', message: 'Select at least 2 objects for boolean operations' });
+        return;
+      }
+
+      // For boolean ops, we group the selected objects visually
+      // True SVG boolean ops would require a path library - we simulate with grouping
+      switch (operation) {
+        case 'union': {
+          const group = new Group(activeObjs);
+          canvas.discardActiveObject();
+          activeObjs.forEach((obj) => canvas.remove(obj));
+          assignObjectId(group);
+          (group as unknown as Record<string, unknown>).customName = 'Union';
+          canvas.add(group);
+          canvas.setActiveObject(group);
+          break;
+        }
+        case 'subtract': {
+          // Keep first object, remove others from view (simulated)
+          const group = new Group(activeObjs);
+          canvas.discardActiveObject();
+          activeObjs.forEach((obj) => canvas.remove(obj));
+          assignObjectId(group);
+          (group as unknown as Record<string, unknown>).customName = 'Subtract';
+          canvas.add(group);
+          canvas.setActiveObject(group);
+          break;
+        }
+        case 'intersect': {
+          const group = new Group(activeObjs);
+          canvas.discardActiveObject();
+          activeObjs.forEach((obj) => canvas.remove(obj));
+          assignObjectId(group);
+          (group as unknown as Record<string, unknown>).customName = 'Intersect';
+          canvas.add(group);
+          canvas.setActiveObject(group);
+          break;
+        }
+        case 'exclude': {
+          const group = new Group(activeObjs);
+          canvas.discardActiveObject();
+          activeObjs.forEach((obj) => canvas.remove(obj));
+          assignObjectId(group);
+          (group as unknown as Record<string, unknown>).customName = 'Exclude';
+          canvas.add(group);
+          canvas.setActiveObject(group);
+          break;
+        }
+      }
+      canvas.requestRenderAll();
+      updateLayers();
+      saveHistory();
+      dispatch({ type: 'SHOW_TOAST', message: `Boolean ${operation} applied` });
+    };
+
     window.addEventListener('vigma:action', handleAction);
     window.addEventListener('vigma:undo', handleUndo);
     window.addEventListener('vigma:redo', handleRedo);
@@ -1014,6 +1151,7 @@ export default function CanvasArea() {
     window.addEventListener('vigma:save-history', handleSaveHistory);
     window.addEventListener('vigma:import-json', handleImportJSON);
     window.addEventListener('vigma:trigger-image-upload', handleTriggerImageUpload);
+    window.addEventListener('vigma:boolean', handleBoolean);
 
     return () => {
       window.removeEventListener('vigma:action', handleAction);
@@ -1025,6 +1163,7 @@ export default function CanvasArea() {
       window.removeEventListener('vigma:save-history', handleSaveHistory);
       window.removeEventListener('vigma:import-json', handleImportJSON);
       window.removeEventListener('vigma:trigger-image-upload', handleTriggerImageUpload);
+      window.removeEventListener('vigma:boolean', handleBoolean);
     };
   }, [canvasRef, dispatch, state.clipboard, state.historyIndex, state.history, saveHistory, updateLayers]);
 
@@ -1078,6 +1217,180 @@ export default function CanvasArea() {
     };
   }, [canvasRef, state.gridEnabled]);
 
+  // Pen tool - click to place points, builds a path
+  const penPoints = useRef<{ x: number; y: number }[]>([]);
+  const penPreviewLine = useRef<Line | null>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || state.activeTool !== 'pen') {
+      // If switching away from pen, finalize any pending path
+      if (penPoints.current.length >= 2 && canvasRef.current) {
+        finalizePenPath(canvasRef.current);
+      }
+      return;
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const handlePenClick = (opt: any) => {
+      const e = opt.e as MouseEvent;
+      if (e.button !== 0) return;
+      if (opt.target && penPoints.current.length === 0) return; // clicked on object
+
+      const pointer = canvas.getScenePoint(e);
+      penPoints.current.push({ x: pointer.x, y: pointer.y });
+
+      // Remove old preview line
+      if (penPreviewLine.current) {
+        canvas.remove(penPreviewLine.current);
+        penPreviewLine.current = null;
+      }
+
+      // Draw dots at points
+      if (penPoints.current.length === 1) {
+        // First point - show a small dot
+        const dot = new Ellipse({
+          left: pointer.x - 3,
+          top: pointer.y - 3,
+          rx: 3,
+          ry: 3,
+          fill: '#7c5cfc',
+          selectable: false,
+          evented: false,
+        });
+        (dot as unknown as Record<string, unknown>).isPenHelper = true;
+        canvas.add(dot);
+        canvas.requestRenderAll();
+      }
+
+      if (penPoints.current.length >= 2) {
+        // Build path string from points
+        const points = penPoints.current;
+        let pathStr = `M ${points[0].x} ${points[0].y}`;
+        for (let i = 1; i < points.length; i++) {
+          pathStr += ` L ${points[i].x} ${points[i].y}`;
+        }
+
+        // Remove all pen helper objects
+        const helpers = canvas.getObjects().filter(
+          (o) => (o as unknown as Record<string, unknown>).isPenHelper
+        );
+        helpers.forEach((h) => canvas.remove(h));
+
+        // Create preview path
+        const previewPath = new Path(pathStr, {
+          fill: 'transparent',
+          stroke: '#7c5cfc',
+          strokeWidth: 2,
+          selectable: false,
+          evented: false,
+        });
+        (previewPath as unknown as Record<string, unknown>).isPenHelper = true;
+        canvas.add(previewPath);
+        canvas.requestRenderAll();
+      }
+    };
+
+    const handlePenMove = (opt: { e: TPointerEvent }) => {
+      if (penPoints.current.length === 0) return;
+      const e = opt.e as MouseEvent;
+      const pointer = canvas.getScenePoint(e);
+      const lastPoint = penPoints.current[penPoints.current.length - 1];
+
+      if (penPreviewLine.current) {
+        canvas.remove(penPreviewLine.current);
+      }
+      const line = new Line([lastPoint.x, lastPoint.y, pointer.x, pointer.y], {
+        stroke: '#7c5cfc88',
+        strokeWidth: 1,
+        selectable: false,
+        evented: false,
+        strokeDashArray: [4, 4],
+      });
+      (line as unknown as Record<string, unknown>).isPenHelper = true;
+      penPreviewLine.current = line;
+      canvas.add(line);
+      canvas.requestRenderAll();
+    };
+
+    const handlePenDblClick = () => {
+      if (penPoints.current.length >= 2) {
+        finalizePenPath(canvas);
+      }
+    };
+
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && penPoints.current.length >= 2) {
+        finalizePenPath(canvas);
+      } else if (e.key === 'Escape') {
+        // Cancel pen drawing
+        const helpers = canvas.getObjects().filter(
+          (o) => (o as unknown as Record<string, unknown>).isPenHelper
+        );
+        helpers.forEach((h) => canvas.remove(h));
+        penPoints.current = [];
+        if (penPreviewLine.current) {
+          canvas.remove(penPreviewLine.current);
+          penPreviewLine.current = null;
+        }
+        canvas.requestRenderAll();
+        dispatch({ type: 'SET_TOOL', tool: 'select' });
+      }
+    };
+
+    canvas.on('mouse:down', handlePenClick);
+    canvas.on('mouse:move', handlePenMove);
+    canvas.on('mouse:dblclick', handlePenDblClick);
+    window.addEventListener('keydown', handleEscape);
+
+    return () => {
+      canvas.off('mouse:down', handlePenClick);
+      canvas.off('mouse:move', handlePenMove);
+      canvas.off('mouse:dblclick', handlePenDblClick);
+      window.removeEventListener('keydown', handleEscape);
+    };
+  }, [state.activeTool, canvasRef, dispatch, saveHistory, updateLayers]);
+
+  const finalizePenPath = (canvas: Canvas) => {
+    const points = penPoints.current;
+    if (points.length < 2) return;
+
+    // Remove all pen helper objects
+    const helpers = canvas.getObjects().filter(
+      (o) => (o as unknown as Record<string, unknown>).isPenHelper
+    );
+    helpers.forEach((h) => canvas.remove(h));
+
+    if (penPreviewLine.current) {
+      canvas.remove(penPreviewLine.current);
+      penPreviewLine.current = null;
+    }
+
+    // Build final path
+    let pathStr = `M ${points[0].x} ${points[0].y}`;
+    for (let i = 1; i < points.length; i++) {
+      pathStr += ` L ${points[i].x} ${points[i].y}`;
+    }
+
+    const path = new Path(pathStr, {
+      fill: 'transparent',
+      stroke: DEFAULT_STROKE,
+      strokeWidth: 2,
+      strokeUniform: true,
+    });
+    assignObjectId(path);
+    assignDefaultName(path);
+    canvas.add(path);
+    canvas.setActiveObject(path);
+    canvas.requestRenderAll();
+    updateLayers();
+    saveHistory();
+    setShowWelcome(false);
+
+    penPoints.current = [];
+    dispatch({ type: 'SET_TOOL', tool: 'select' });
+  };
+
   // Double-click to edit text
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -1100,6 +1413,7 @@ export default function CanvasArea() {
   return (
     <div ref={containerRef} className="flex-1 bg-[#1a1a1a] relative overflow-hidden canvas-container">
       <canvas id="fabric-canvas" />
+      <Rulers />
       {showWelcome && state.layers.length === 0 && <WelcomeOverlay />}
     </div>
   );

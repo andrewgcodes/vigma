@@ -2,6 +2,7 @@ import { useRef } from 'react';
 import {
   PenTool, MousePointer2, Hand, Square, Circle, Triangle as TriangleIcon,
   Minus, ArrowUpRight, Star, Type, Pencil, Image, Undo2, Redo2, Download,
+  Frame, Spline, SquaresUnite, SquaresSubtract, SquaresIntersect, SquaresExclude,
 } from 'lucide-react';
 import ToolButton from './ToolButton';
 import ZoomControls from './ZoomControls';
@@ -11,6 +12,10 @@ import type { ToolType } from '../../types';
 const tools: { type: ToolType; icon: React.ReactNode; shortcut: string; label: string }[] = [
   { type: 'select', icon: <MousePointer2 size={20} />, shortcut: 'V', label: 'Select' },
   { type: 'hand', icon: <Hand size={20} />, shortcut: 'H', label: 'Hand' },
+];
+
+const frameTools: { type: ToolType; icon: React.ReactNode; shortcut: string; label: string }[] = [
+  { type: 'frame', icon: <Frame size={20} />, shortcut: 'F', label: 'Frame' },
 ];
 
 const shapeTools: { type: ToolType; icon: React.ReactNode; shortcut: string; label: string }[] = [
@@ -25,6 +30,7 @@ const shapeTools: { type: ToolType; icon: React.ReactNode; shortcut: string; lab
 const drawTools: { type: ToolType; icon: React.ReactNode; shortcut: string; label: string }[] = [
   { type: 'text', icon: <Type size={20} />, shortcut: 'X', label: 'Text' },
   { type: 'pencil', icon: <Pencil size={20} />, shortcut: 'P', label: 'Pencil' },
+  { type: 'pen', icon: <Spline size={20} />, shortcut: 'N', label: 'Pen' },
 ];
 
 function Separator() {
@@ -73,6 +79,16 @@ export default function Toolbar() {
           />
         ))}
         <Separator />
+        {frameTools.map((t) => (
+          <ToolButton
+            key={t.type}
+            icon={t.icon}
+            tooltip={`${t.label} (${t.shortcut})`}
+            active={state.activeTool === t.type}
+            onClick={() => dispatch({ type: 'SET_TOOL', tool: t.type })}
+          />
+        ))}
+        <Separator />
         {shapeTools.map((t) => (
           <ToolButton
             key={t.type}
@@ -104,6 +120,27 @@ export default function Toolbar() {
           accept=".png,.jpg,.jpeg,.svg,.webp"
           className="hidden"
           onChange={handleFileChange}
+        />
+        <Separator />
+        <ToolButton
+          icon={<SquaresUnite size={16} />}
+          tooltip="Union"
+          onClick={() => window.dispatchEvent(new CustomEvent('vigma:boolean', { detail: 'union' }))}
+        />
+        <ToolButton
+          icon={<SquaresSubtract size={16} />}
+          tooltip="Subtract"
+          onClick={() => window.dispatchEvent(new CustomEvent('vigma:boolean', { detail: 'subtract' }))}
+        />
+        <ToolButton
+          icon={<SquaresIntersect size={16} />}
+          tooltip="Intersect"
+          onClick={() => window.dispatchEvent(new CustomEvent('vigma:boolean', { detail: 'intersect' }))}
+        />
+        <ToolButton
+          icon={<SquaresExclude size={16} />}
+          tooltip="Exclude"
+          onClick={() => window.dispatchEvent(new CustomEvent('vigma:boolean', { detail: 'exclude' }))}
         />
         <Separator />
         <ToolButton

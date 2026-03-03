@@ -1,6 +1,7 @@
 export type ToolType =
   | 'select'
   | 'hand'
+  | 'frame'
   | 'rectangle'
   | 'ellipse'
   | 'triangle'
@@ -8,7 +9,8 @@ export type ToolType =
   | 'arrow'
   | 'star'
   | 'text'
-  | 'pencil';
+  | 'pencil'
+  | 'pen';
 
 export interface SerializedObject {
   [key: string]: unknown;
@@ -20,7 +22,17 @@ export interface LayerInfo {
   type: string;
   visible: boolean;
   locked: boolean;
+  children?: LayerInfo[];
+  expanded?: boolean;
 }
+
+export interface PageInfo {
+  id: string;
+  name: string;
+  canvasJSON: string | null;
+}
+
+export type RightSidebarTab = 'design' | 'prototype';
 
 export interface AppState {
   activeTool: ToolType;
@@ -33,9 +45,12 @@ export interface AppState {
   canvasReady: boolean;
   leftSidebarOpen: boolean;
   rightSidebarOpen: boolean;
+  rightSidebarTab: RightSidebarTab;
   showExportModal: boolean;
   toastMessage: string | null;
   layers: LayerInfo[];
+  pages: PageInfo[];
+  activePageId: string;
 }
 
 export type AppAction =
@@ -55,4 +70,11 @@ export type AppAction =
   | { type: 'HIDE_TOAST' }
   | { type: 'SET_CANVAS_READY' }
   | { type: 'SET_LAYERS'; layers: LayerInfo[] }
-  | { type: 'SET_HISTORY'; history: string[]; historyIndex: number };
+  | { type: 'SET_HISTORY'; history: string[]; historyIndex: number }
+  | { type: 'SET_RIGHT_SIDEBAR_TAB'; tab: RightSidebarTab }
+  | { type: 'ADD_PAGE'; page: PageInfo }
+  | { type: 'SET_ACTIVE_PAGE'; pageId: string }
+  | { type: 'RENAME_PAGE'; pageId: string; name: string }
+  | { type: 'DELETE_PAGE'; pageId: string }
+  | { type: 'UPDATE_PAGE_CANVAS'; pageId: string; canvasJSON: string }
+  | { type: 'SET_PAGES_STATE'; pages: PageInfo[]; activePageId: string };

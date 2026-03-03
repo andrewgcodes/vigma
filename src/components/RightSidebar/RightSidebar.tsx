@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
 import { PanelRightClose, PanelRightOpen } from 'lucide-react';
+import AlignmentSection from './AlignmentSection';
 import TransformSection from './TransformSection';
 import FillSection from './FillSection';
 import StrokeSection from './StrokeSection';
 import OpacitySection from './OpacitySection';
 import CornerRadiusSection from './CornerRadiusSection';
-import ShadowSection from './ShadowSection';
+import EffectsSection from './EffectsSection';
 import TextSection from './TextSection';
+import ExportSection from './ExportSection';
 import ActionsSection from './ActionsSection';
 import { useAppContext } from '../../store/canvasStore';
 import { findObjectById } from '../../utils/canvasHelpers';
@@ -60,17 +62,48 @@ export default function RightSidebar() {
 
   return (
     <div className="w-70 bg-[#252525] border-l border-[#3c3c3c] flex flex-col shrink-0">
-      <div className="h-9 flex items-center justify-between px-3">
-        <span className="text-[#a0a0a0] text-xs font-semibold uppercase tracking-wider">Properties</span>
+      {/* Design / Prototype Tabs */}
+      <div className="flex items-center border-b border-[#3c3c3c]">
         <button
-          className="text-[#a0a0a0] hover:text-white cursor-pointer"
+          className={`flex-1 h-9 text-xs font-semibold uppercase tracking-wider transition-colors cursor-pointer ${
+            state.rightSidebarTab === 'design'
+              ? 'text-white border-b-2 border-[#7c5cfc]'
+              : 'text-[#a0a0a0] hover:text-white'
+          }`}
+          onClick={() => dispatch({ type: 'SET_RIGHT_SIDEBAR_TAB', tab: 'design' })}
+        >
+          Design
+        </button>
+        <button
+          className={`flex-1 h-9 text-xs font-semibold uppercase tracking-wider transition-colors cursor-pointer ${
+            state.rightSidebarTab === 'prototype'
+              ? 'text-white border-b-2 border-[#7c5cfc]'
+              : 'text-[#a0a0a0] hover:text-white'
+          }`}
+          onClick={() => dispatch({ type: 'SET_RIGHT_SIDEBAR_TAB', tab: 'prototype' })}
+        >
+          Prototype
+        </button>
+        <button
+          className="text-[#a0a0a0] hover:text-white cursor-pointer px-2"
           onClick={() => dispatch({ type: 'TOGGLE_RIGHT_SIDEBAR' })}
         >
           <PanelRightClose size={14} />
         </button>
       </div>
       <div className="flex-1 overflow-y-auto">
-        {!selectedObj ? (
+        {state.rightSidebarTab === 'prototype' ? (
+          <div className="flex items-center justify-center h-full px-4">
+            <div className="text-center">
+              <p className="text-[#666666] text-[13px] italic">
+                Prototype interactions
+              </p>
+              <p className="text-[#555555] text-[11px] mt-2">
+                Select an element and add interactions to create prototypes
+              </p>
+            </div>
+          </div>
+        ) : !selectedObj ? (
           <div className="flex items-center justify-center h-full px-4">
             <p className="text-[#666666] text-[13px] italic text-center">
               Select an element to edit its properties
@@ -78,11 +111,21 @@ export default function RightSidebar() {
           </div>
         ) : (
           <>
+            <AlignmentSection obj={selectedObj} />
+            <div className="border-t border-[#3c3c3c]" />
             <TransformSection obj={selectedObj} />
             <div className="border-t border-[#3c3c3c]" />
+            {isText && (
+              <>
+                <TextSection obj={selectedObj as unknown as Textbox} />
+                <div className="border-t border-[#3c3c3c]" />
+              </>
+            )}
             {!isLine && <FillSection obj={selectedObj} />}
             {!isLine && <div className="border-t border-[#3c3c3c]" />}
             <StrokeSection obj={selectedObj} />
+            <div className="border-t border-[#3c3c3c]" />
+            <EffectsSection obj={selectedObj} />
             <div className="border-t border-[#3c3c3c]" />
             <OpacitySection obj={selectedObj} />
             <div className="border-t border-[#3c3c3c]" />
@@ -92,14 +135,8 @@ export default function RightSidebar() {
                 <div className="border-t border-[#3c3c3c]" />
               </>
             )}
-            <ShadowSection obj={selectedObj} />
+            <ExportSection obj={selectedObj} />
             <div className="border-t border-[#3c3c3c]" />
-            {isText && (
-              <>
-                <TextSection obj={selectedObj as unknown as Textbox} />
-                <div className="border-t border-[#3c3c3c]" />
-              </>
-            )}
             <ActionsSection />
           </>
         )}

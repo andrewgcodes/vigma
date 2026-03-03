@@ -32,18 +32,9 @@ export function setObjectName(obj: FabricObject, name: string): void {
 }
 
 export function getLayersFromCanvas(canvas: Canvas): LayerInfo[] {
-  const objects = canvas.getObjects().filter(
-    (obj) => {
-      const record = obj as unknown as Record<string, unknown>;
-      // Exclude the artboard background
-      if (record.name === 'artboard') return false;
-      // The artboard is already filtered by name check above
-      // Do not filter locked user objects (selectable === false)
-      return true;
-    }
-  );
-  return objects.map((obj) => {
+  const buildLayer = (obj: FabricObject): LayerInfo => {
     const record = obj as unknown as Record<string, unknown>;
+
     // Ensure objects have IDs and names (especially after JSON restore)
     if (!record.objectId) {
       assignObjectId(obj);
@@ -51,23 +42,72 @@ export function getLayersFromCanvas(canvas: Canvas): LayerInfo[] {
     if (!record.customName) {
       assignDefaultName(obj);
     }
+
+    const isFrame = Boolean(record.isFrame);
+    const type = isFrame ? 'frame' : (obj.type || 'object');
+
+    let children: LayerInfo[] | undefined;
+    if (obj.type === 'group') {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const groupChildren: FabricObject[] = ((obj as any)._objects as FabricObject[]) || [];
+      if (groupChildren.length > 0) {
+        children = groupChildren.map(buildLayer).reverse();
+      }
+    }
+
     return {
       id: getObjectId(obj),
       name: getObjectName(obj),
-      type: obj.type || 'object',
+      type,
       visible: obj.visible !== false,
       locked: !obj.selectable,
+      children,
+      expanded: true,
     };
-  }).reverse();
+  };
+
+  const objects = canvas
+    .getObjects()
+    .filter((obj) => {
+      const record = obj as unknown as Record<string, unknown>;
+      // Exclude the artboard background
+      if (record.name === 'artboard') return false;
+      // Exclude pen helper objects if any leaked
+      if (record.isPenHelper) return false;
+      return true;
+    });
+
+  return objects.map((obj) => buildLayer(obj)).reverse();
 }
 
 export function findObjectById(canvas: Canvas, id: string): FabricObject | undefined {
-  return canvas.getObjects().find((obj) => getObjectId(obj) === id);
+  const search = (objs: FabricObject[]): FabricObject | undefined => {
+    for (const obj of objs) {
+      if (getObjectId(obj) === id) return obj;
+      if (obj.type === 'group') {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const children: FabricObject[] = ((obj as any)._objects as FabricObject[]) || [];
+        const found = search(children);
+        if (found) return found;
+      }
+    }
+    return undefined;
+  };
+
+  return search(canvas.getObjects());
 }
 
 export function saveCanvasJSON(canvas: Canvas): string {
   return JSON.stringify(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (canvas as any).toJSON(['objectId', 'customName', 'selectable', 'evented', 'name'])
+    (canvas as any).toJSON([
+      'objectId',
+      'customName',
+      'selectable',
+      'evented',
+      'name',
+      'isFrame',
+      'isPenHelper',
+    ])
   );
 }

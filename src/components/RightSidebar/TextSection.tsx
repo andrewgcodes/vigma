@@ -77,7 +77,10 @@ export default function TextSection({ obj }: TextSectionProps) {
           <ColorPicker color={fillColor} onChange={(c) => update({ fill: c })} />
           <span className="text-xs text-[#a0a0a0]">Text Color</span>
         </div>
-        <NumberInput label="Line Height" value={obj.lineHeight || 1.2} onChange={(v) => update({ lineHeight: v })} min={0.5} max={3} step={0.1} />
+        <div className="grid grid-cols-2 gap-2">
+          <NumberInput label="Line Height" value={obj.lineHeight || 1.2} onChange={(v) => update({ lineHeight: v })} min={0.5} max={3} step={0.1} />
+          <NumberInput label="Letter Spacing" value={obj.charSpacing ? obj.charSpacing / 10 : 0} onChange={(v) => update({ charSpacing: v * 10 })} min={-20} max={100} step={1} />
+        </div>
       </div>
     </div>
   );

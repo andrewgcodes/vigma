@@ -120,7 +120,7 @@ export default function ColorPicker({ color, opacity = 100, onChange }: ColorPic
   const handleHexChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     setHexInput(val);
-    if (/^#[0-9a-fA-F]{6}$/.test(val)) {
+    if (/^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(val)) {
       const newHsv = hexToHSV(val);
       setHsv(newHsv);
       onChange(val, localOpacity);
@@ -182,7 +182,7 @@ export default function ColorPicker({ color, opacity = 100, onChange }: ColorPic
               onChange={handleHexChange}
               onKeyDown={(e) => e.stopPropagation()}
               className="bg-[#1e1e1e] border border-[#3c3c3c] text-white text-xs h-7 rounded px-1.5 flex-1 focus:border-[#7c5cfc] focus:outline-none"
-              maxLength={7}
+              maxLength={9}
             />
             <div className="flex items-center gap-1">
               <input

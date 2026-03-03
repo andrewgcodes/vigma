@@ -2,6 +2,8 @@ import { createContext, useContext } from 'react';
 import type { AppState, AppAction } from '../types';
 import type { Canvas } from 'fabric';
 
+const defaultPageId = 'page-1';
+
 export const initialState: AppState = {
   activeTool: 'select',
   selectedObjectIds: [],
@@ -13,9 +15,12 @@ export const initialState: AppState = {
   canvasReady: false,
   leftSidebarOpen: true,
   rightSidebarOpen: true,
+  rightSidebarTab: 'design',
   showExportModal: false,
   toastMessage: null,
   layers: [],
+  pages: [{ id: defaultPageId, name: 'Page 1', canvasJSON: null }],
+  activePageId: defaultPageId,
 };
 
 export function appReducer(state: AppState, action: AppAction): AppState {
@@ -66,6 +71,38 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, canvasReady: true };
     case 'SET_LAYERS':
       return { ...state, layers: action.layers };
+    case 'SET_RIGHT_SIDEBAR_TAB':
+      return { ...state, rightSidebarTab: action.tab };
+    case 'ADD_PAGE':
+      return { ...state, pages: [...state.pages, action.page] };
+    case 'SET_ACTIVE_PAGE':
+      return { ...state, activePageId: action.pageId };
+    case 'RENAME_PAGE':
+      return {
+        ...state,
+        pages: state.pages.map((p) =>
+          p.id === action.pageId ? { ...p, name: action.name } : p
+        ),
+      };
+    case 'DELETE_PAGE':
+      if (state.pages.length <= 1) return state;
+      return {
+        ...state,
+        pages: state.pages.filter((p) => p.id !== action.pageId),
+        activePageId:
+          state.activePageId === action.pageId
+            ? state.pages.find((p) => p.id !== action.pageId)!.id
+            : state.activePageId,
+      };
+    case 'UPDATE_PAGE_CANVAS':
+      return {
+        ...state,
+        pages: state.pages.map((p) =>
+          p.id === action.pageId ? { ...p, canvasJSON: action.canvasJSON } : p
+        ),
+      };
+    case 'SET_PAGES_STATE':
+      return { ...state, pages: action.pages, activePageId: action.activePageId };
     default:
       return state;
   }
