@@ -297,10 +297,23 @@ export function useCanvas() {
 
     const group = activeObj as fabric.Group;
     const items = group.getObjects();
-    const groupLeft = group.left || 0;
-    const groupTop = group.top || 0;
+    const groupTransform = group.calcTransformMatrix();
     canvas.remove(group);
     items.forEach((item) => {
+      // Transform item coordinates from group-local to canvas-world space
+      const itemTransform = item.calcTransformMatrix();
+      const fullTransform = fabric.util.multiplyTransformMatrices(groupTransform, itemTransform);
+      const decomposed = fabric.util.qrDecompose(fullTransform);
+      item.set({
+        left: decomposed.translateX,
+        top: decomposed.translateY,
+        scaleX: decomposed.scaleX,
+        scaleY: decomposed.scaleY,
+        angle: decomposed.angle,
+        skewX: decomposed.skewX,
+        skewY: decomposed.skewY,
+      });
+      item.setCoords();
       canvas.add(item);
     });
     canvas.renderAll();

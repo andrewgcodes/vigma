@@ -628,14 +628,14 @@ export default function DesignCanvas() {
       const files = e.dataTransfer?.files;
       if (files && files.length > 0) {
         Array.from(files).forEach((file) => {
-          if (file.type.startsWith('image/')) {
-            importImage(file);
-          } else if (file.name.endsWith('.svg')) {
+          if (file.type === 'image/svg+xml' || file.name.endsWith('.svg')) {
             const reader = new FileReader();
             reader.onload = (ev) => {
               importSVG(ev.target?.result as string);
             };
             reader.readAsText(file);
+          } else if (file.type.startsWith('image/')) {
+            importImage(file);
           } else if (file.name.endsWith('.json')) {
             const reader = new FileReader();
             reader.onload = (ev) => {

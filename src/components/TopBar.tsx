@@ -51,20 +51,20 @@ export default function TopBar({
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.type.startsWith('image/')) {
+    if (file.type === 'image/svg+xml' || file.name.endsWith('.svg')) {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const svg = ev.target?.result as string;
+        onImportSVG(svg);
+      };
+      reader.readAsText(file);
+    } else if (file.type.startsWith('image/')) {
       onImportImage(file);
     } else if (file.name.endsWith('.json')) {
       const reader = new FileReader();
       reader.onload = (ev) => {
         const json = ev.target?.result as string;
         onImportJSON(json);
-      };
-      reader.readAsText(file);
-    } else if (file.name.endsWith('.svg')) {
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        const svg = ev.target?.result as string;
-        onImportSVG(svg);
       };
       reader.readAsText(file);
     }
