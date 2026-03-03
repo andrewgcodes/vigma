@@ -732,9 +732,16 @@ export class CanvasEngine {
       this.setZoom(1)
       return
     }
-    const group = new Group(objects)
-    const bound = group.getBoundingRect()
-    group.destroy()
+    // Compute bounding rect of all objects without creating a temporary group
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+    for (const obj of objects) {
+      const br = obj.getBoundingRect()
+      minX = Math.min(minX, br.left)
+      minY = Math.min(minY, br.top)
+      maxX = Math.max(maxX, br.left + br.width)
+      maxY = Math.max(maxY, br.top + br.height)
+    }
+    const bound = { left: minX, top: minY, width: maxX - minX, height: maxY - minY }
 
     const canvasW = this.canvas.getWidth()
     const canvasH = this.canvas.getHeight()
