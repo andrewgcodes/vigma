@@ -574,6 +574,9 @@ export default function DesignPage() {
         remoteObjectCount = await collab.waitForContent(1500)
       }
 
+      // Guard: if user left the room during waitForContent, bail out
+      if (collabRef.current !== collab) return
+
       if (remoteObjectCount > 0) {
         // JOINING an existing room — clear any stale local objects first,
         // then pull all remote objects onto the canvas.
