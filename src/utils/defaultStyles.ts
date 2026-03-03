@@ -1,4 +1,5 @@
-export const DEFAULT_FILL = '#7c5cfccc';
+export const DEFAULT_FILL = '#7c5cfc';
+export const DEFAULT_OPACITY = 0.8;
 export const DEFAULT_STROKE = '#5a3fd6';
 export const DEFAULT_STROKE_WIDTH = 1;
 export const LINE_STROKE = '#ffffff';

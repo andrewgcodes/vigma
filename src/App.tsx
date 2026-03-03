@@ -1,6 +1,7 @@
 import React, { useRef, useState, useCallback } from 'react';
 import { AppProvider } from './store/canvasStore';
 import Toolbar from './components/Toolbar/Toolbar';
+import FloatingToolbar from './components/Toolbar/FloatingToolbar';
 import LeftSidebar from './components/LeftSidebar/LeftSidebar';
 import RightSidebar from './components/RightSidebar/RightSidebar';
 import CanvasArea, { CanvasAreaHandle } from './components/Canvas/CanvasArea';
@@ -46,8 +47,9 @@ function AppContent() {
           onAddRectangle={() => canvasAreaRef.current?.addRectangleAtRandom()}
           onContextMenu={(e, id) => {
             e.preventDefault();
-            // Layer context menu is handled by layers panel itself
           }}
+          onSwitchPage={(pageId) => canvasAreaRef.current?.switchPage(pageId)}
+          onToggleExpand={(id) => canvasAreaRef.current?.toggleExpand(id)}
         />
         <CanvasArea
           ref={canvasAreaRef}
@@ -64,6 +66,11 @@ function AppContent() {
           onSendToBack={() => canvasAreaRef.current?.sendToBack()}
           onGroup={() => canvasAreaRef.current?.groupSelected()}
           onUngroup={() => canvasAreaRef.current?.ungroupSelected()}
+          onAlign={(alignment) => canvasAreaRef.current?.alignObjects(alignment)}
+          onMakeComponent={() => canvasAreaRef.current?.makeComponent()}
+        />
+        <FloatingToolbar
+          onImageUpload={() => canvasAreaRef.current?.triggerImageUpload()}
         />
       </div>
       <ExportModal canvas={canvasAreaRef.current?.getCanvas() ?? null} />

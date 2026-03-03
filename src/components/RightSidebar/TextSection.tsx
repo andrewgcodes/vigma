@@ -12,18 +12,20 @@ interface TextSectionProps {
   textAlign: string;
   fill: string;
   lineHeight: number;
+  charSpacing: number;
   onFontFamilyChange: (value: string) => void;
   onFontSizeChange: (value: number) => void;
   onFontWeightChange: (value: string) => void;
   onTextAlignChange: (value: string) => void;
   onFillChange: (value: string) => void;
   onLineHeightChange: (value: number) => void;
+  onCharSpacingChange: (value: number) => void;
 }
 
 export default function TextSection({
-  fontFamily, fontSize, fontWeight, textAlign, fill, lineHeight,
+  fontFamily, fontSize, fontWeight, textAlign, fill, lineHeight, charSpacing,
   onFontFamilyChange, onFontSizeChange, onFontWeightChange,
-  onTextAlignChange, onFillChange, onLineHeightChange,
+  onTextAlignChange, onFillChange, onLineHeightChange, onCharSpacingChange,
 }: TextSectionProps) {
   return (
     <div>
@@ -78,7 +80,10 @@ export default function TextSection({
           <span className="text-xs text-[#a0a0a0]">Color</span>
           <ColorPicker color={fill} onChange={(c) => onFillChange(c)} />
         </div>
-        <NumberInput label="Line H" value={lineHeight} onChange={onLineHeightChange} min={0.5} max={3} step={0.1} />
+        <div className="grid grid-cols-2 gap-2">
+          <NumberInput label="Line H" value={lineHeight} onChange={onLineHeightChange} min={0.5} max={3} step={0.1} />
+          <NumberInput label="Letter" value={charSpacing} onChange={onCharSpacingChange} min={-200} max={1000} step={10} />
+        </div>
       </div>
     </div>
   );

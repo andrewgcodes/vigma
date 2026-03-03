@@ -2,12 +2,13 @@ import React, { useRef, useEffect, useState, useCallback, forwardRef, useImperat
 import {
   Canvas, Rect, Ellipse, Triangle, Line, Textbox, PencilBrush,
   FabricObject, Point, Polygon, FabricImage, Group, Shadow, ActiveSelection,
+  Path,
 } from 'fabric';
 import { v4 as uuidv4 } from 'uuid';
 import { useAppContext } from '../../store/canvasStore';
 import { ToolType, ContextMenuOption, LayerInfo } from '../../types';
 import {
-  DEFAULT_FILL, DEFAULT_STROKE, DEFAULT_STROKE_WIDTH,
+  DEFAULT_FILL, DEFAULT_OPACITY, DEFAULT_STROKE, DEFAULT_STROKE_WIDTH,
   LINE_STROKE, LINE_STROKE_WIDTH, ARTBOARD_WIDTH, ARTBOARD_HEIGHT,
   GRID_SIZE, GRID_COLOR, PRIMARY_COLOR,
 } from '../../utils/defaultStyles';
@@ -58,6 +59,11 @@ export interface CanvasAreaHandle {
   zoomToFit: () => void;
   performUndo: () => void;
   performRedo: () => void;
+  alignObjects: (alignment: string) => void;
+  switchPage: (pageId: string) => void;
+  makeComponent: () => void;
+  createInstance: () => void;
+  toggleExpand: (id: string) => void;
 }
 
 interface CanvasAreaProps {
@@ -71,7 +77,7 @@ const CanvasArea = forwardRef<CanvasAreaHandle, CanvasAreaProps>(({ onLayersChan
   const containerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const jsonInputRef = useRef<HTMLInputElement>(null);
-  const { state, dispatch, setTool, setZoom, pushHistory, setSelected, showToast, setClipboard } = useAppContext();
+  const { state, dispatch, setTool, setZoom, pushHistory, setSelected, showToast, setClipboard, savePageState } = useAppContext();
   const [showWelcome, setShowWelcome] = useState(true);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; options: ContextMenuOption[] } | null>(null);
 
@@ -82,6 +88,9 @@ const CanvasArea = forwardRef<CanvasAreaHandle, CanvasAreaProps>(({ onLayersChan
   const spaceHeldRef = useRef(false);
   const lastPosRef = useRef({ x: 0, y: 0 });
   const prevToolRef = useRef<ToolType>('select');
+  const penPointsRef = useRef<{ x: number; y: number }[]>([]);
+  const penPreviewRef = useRef<FabricObject | null>(null);
+  const expandedLayersRef = useRef<Set<string>>(new Set());
   const historyPauseRef = useRef(false);
   const historyRef = useRef(state.history);
   const historyIndexRef = useRef(state.historyIndex);
@@ -285,6 +294,12 @@ const CanvasArea = forwardRef<CanvasAreaHandle, CanvasAreaProps>(({ onLayersChan
     } else if (tool === 'text') {
       canvas.defaultCursor = 'text';
       canvas.selection = false;
+    } else if (tool === 'frame') {
+      canvas.defaultCursor = 'crosshair';
+      canvas.selection = false;
+    } else if (tool === 'pen') {
+      canvas.defaultCursor = 'crosshair';
+      canvas.selection = false;
     } else if (tool === 'select') {
       canvas.defaultCursor = 'default';
       canvas.forEachObject((obj) => {
@@ -350,6 +365,106 @@ const CanvasArea = forwardRef<CanvasAreaHandle, CanvasAreaProps>(({ onLayersChan
         saveHistory();
         notifyLayersChanged();
         setTool('select');
+        return;
+      }
+
+      // Frame tool
+      if (tool === 'frame') {
+        isDrawingRef.current = true;
+        drawStartRef.current = { x: pointer.x, y: pointer.y };
+        const frame = new Rect({
+          left: pointer.x,
+          top: pointer.y,
+          width: 0,
+          height: 0,
+          fill: '#ffffff',
+          stroke: '#cccccc',
+          strokeWidth: 1,
+          rx: 0,
+          ry: 0,
+        });
+        assignCustomProps(frame, 'frame');
+        canvas.add(frame);
+        activeShapeRef.current = frame;
+        canvas.requestRenderAll();
+        setShowWelcome(false);
+        return;
+      }
+
+      // Pen tool - click to add points
+      if (tool === 'pen') {
+        const points = penPointsRef.current;
+        const newPoint = { x: pointer.x, y: pointer.y };
+
+        // Check if closing the path (clicking near first point)
+        if (points.length > 2) {
+          const first = points[0];
+          const dist = Math.sqrt((newPoint.x - first.x) ** 2 + (newPoint.y - first.y) ** 2);
+          if (dist < 10) {
+            // Close path
+            const pathStr = points.reduce((acc, p, i) => {
+              return acc + (i === 0 ? `M ${p.x} ${p.y}` : ` L ${p.x} ${p.y}`);
+            }, '') + ' Z';
+            if (penPreviewRef.current) {
+              canvas.remove(penPreviewRef.current);
+            }
+            const path = new Path(pathStr, {
+              fill: DEFAULT_FILL,
+              stroke: DEFAULT_STROKE,
+              strokeWidth: DEFAULT_STROKE_WIDTH,
+              opacity: DEFAULT_OPACITY,
+            });
+            assignCustomProps(path, 'pen');
+            canvas.add(path);
+            canvas.setActiveObject(path);
+            canvas.requestRenderAll();
+            penPointsRef.current = [];
+            penPreviewRef.current = null;
+            setShowWelcome(false);
+            saveHistory();
+            notifyLayersChanged();
+            setTool('select');
+            return;
+          }
+        }
+
+        points.push(newPoint);
+
+        // Draw preview lines
+        if (penPreviewRef.current) {
+          canvas.remove(penPreviewRef.current);
+        }
+        if (points.length > 1) {
+          const pathStr = points.reduce((acc, p, i) => {
+            return acc + (i === 0 ? `M ${p.x} ${p.y}` : ` L ${p.x} ${p.y}`);
+          }, '');
+          const preview = new Path(pathStr, {
+            fill: '',
+            stroke: '#7c5cfc',
+            strokeWidth: 2,
+            selectable: false,
+            evented: false,
+          });
+          (preview as FabricObject & { name?: string }).name = 'pen-preview';
+          canvas.add(preview);
+          penPreviewRef.current = preview;
+        }
+
+        // Draw point indicator
+        const dot = new Ellipse({
+          left: newPoint.x - 3,
+          top: newPoint.y - 3,
+          rx: 3,
+          ry: 3,
+          fill: '#7c5cfc',
+          stroke: '',
+          selectable: false,
+          evented: false,
+        });
+        (dot as FabricObject & { name?: string }).name = 'pen-preview';
+        canvas.add(dot);
+        canvas.requestRenderAll();
+        setShowWelcome(false);
         return;
       }
 
@@ -433,7 +548,7 @@ const CanvasArea = forwardRef<CanvasAreaHandle, CanvasAreaProps>(({ onLayersChan
         return;
       }
 
-      // Shape drawing
+      // Shape drawing (including frame)
       if (isDrawingRef.current && activeShapeRef.current) {
         const pointer = canvas.getScenePoint(e);
         const start = drawStartRef.current;
@@ -647,7 +762,7 @@ const CanvasArea = forwardRef<CanvasAreaHandle, CanvasAreaProps>(({ onLayersChan
         const toolMap: Record<string, ToolType> = {
           'v': 'select', 'h': 'hand', 'r': 'rectangle', 'o': 'ellipse',
           't': 'triangle', 'l': 'line', 'a': 'arrow', 's': 'star',
-          'x': 'text', 'p': 'pencil',
+          'x': 'text', 'p': 'pencil', 'f': 'frame', 'n': 'pen',
         };
         const tool = toolMap[e.key.toLowerCase()];
         if (tool) {
@@ -690,6 +805,7 @@ const CanvasArea = forwardRef<CanvasAreaHandle, CanvasAreaProps>(({ onLayersChan
           e.preventDefault();
           const idx = historyIndexRef.current;
           if (idx > 0) {
+            historyIndexRef.current = idx - 1;
             dispatch({ type: 'UNDO' });
             loadHistoryState(idx - 1);
           }
@@ -700,6 +816,7 @@ const CanvasArea = forwardRef<CanvasAreaHandle, CanvasAreaProps>(({ onLayersChan
           const idx = historyIndexRef.current;
           const hist = historyRef.current;
           if (idx < hist.length - 1) {
+            historyIndexRef.current = idx + 1;
             dispatch({ type: 'REDO' });
             loadHistoryState(idx + 1);
           }
@@ -1306,14 +1423,35 @@ const CanvasArea = forwardRef<CanvasAreaHandle, CanvasAreaProps>(({ onLayersChan
       const canvas = canvasRef.current;
       if (!canvas) return [];
       const objects = getCanvasObjects(canvas);
-      return objects.map((obj) => ({
-        id: obj.customId || '',
-        name: (obj as FabricObject & { name?: string }).name || 'Object',
-        type: obj.customType || obj.type || 'unknown',
-        visible: obj.visible !== false,
-        locked: !!obj.locked,
-        selected: state.selectedObjectIds.includes(obj.customId || ''),
-      }));
+
+      const buildLayerInfo = (obj: FabricObject, depth: number): LayerInfo => {
+        const id = obj.customId || '';
+        const customType = obj.customType || obj.type || 'unknown';
+        const info: LayerInfo = {
+          id,
+          name: (obj as FabricObject & { name?: string }).name || 'Object',
+          type: customType,
+          visible: obj.visible !== false,
+          locked: !!obj.locked,
+          selected: state.selectedObjectIds.includes(id),
+          depth,
+          expanded: expandedLayersRef.current.has(id),
+          isComponent: customType === 'component',
+          isInstance: customType === 'instance',
+        };
+
+        // If it's a group/frame, add children
+        if (obj.type === 'group' || customType === 'frame' || customType === 'component') {
+          const group = obj as Group;
+          if (group.getObjects) {
+            info.children = group.getObjects().map((child) => buildLayerInfo(child, depth + 1));
+          }
+        }
+
+        return info;
+      };
+
+      return objects.map((obj) => buildLayerInfo(obj, 0));
     },
     selectObjectById: (id: string) => {
       const canvas = canvasRef.current;
@@ -1425,6 +1563,7 @@ const CanvasArea = forwardRef<CanvasAreaHandle, CanvasAreaProps>(({ onLayersChan
     performUndo: () => {
       const idx = historyIndexRef.current;
       if (idx > 0) {
+        historyIndexRef.current = idx - 1;
         dispatch({ type: 'UNDO' });
         loadHistoryState(idx - 1);
       }
@@ -1433,9 +1572,214 @@ const CanvasArea = forwardRef<CanvasAreaHandle, CanvasAreaProps>(({ onLayersChan
       const idx = historyIndexRef.current;
       const hist = historyRef.current;
       if (idx < hist.length - 1) {
+        historyIndexRef.current = idx + 1;
         dispatch({ type: 'REDO' });
         loadHistoryState(idx + 1);
       }
+    },
+    alignObjects: (alignment: string) => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const activeObjs = canvas.getActiveObjects();
+      if (activeObjs.length < 2) return;
+
+      const bounds = activeObjs.map((obj) => {
+        const br = obj.getBoundingRect();
+        return { obj, left: br.left, top: br.top, width: br.width, height: br.height };
+      });
+
+      switch (alignment) {
+        case 'align-left': {
+          const minLeft = Math.min(...bounds.map((b) => b.left));
+          bounds.forEach((b) => {
+            b.obj.set({ left: (b.obj.left ?? 0) + (minLeft - b.left) });
+            b.obj.setCoords();
+          });
+          break;
+        }
+        case 'align-center-h': {
+          const minLeft = Math.min(...bounds.map((b) => b.left));
+          const maxRight = Math.max(...bounds.map((b) => b.left + b.width));
+          const centerX = (minLeft + maxRight) / 2;
+          bounds.forEach((b) => {
+            b.obj.set({ left: (b.obj.left ?? 0) + (centerX - (b.left + b.width / 2)) });
+            b.obj.setCoords();
+          });
+          break;
+        }
+        case 'align-right': {
+          const maxRight = Math.max(...bounds.map((b) => b.left + b.width));
+          bounds.forEach((b) => {
+            b.obj.set({ left: (b.obj.left ?? 0) + (maxRight - (b.left + b.width)) });
+            b.obj.setCoords();
+          });
+          break;
+        }
+        case 'align-top': {
+          const minTop = Math.min(...bounds.map((b) => b.top));
+          bounds.forEach((b) => {
+            b.obj.set({ top: (b.obj.top ?? 0) + (minTop - b.top) });
+            b.obj.setCoords();
+          });
+          break;
+        }
+        case 'align-center-v': {
+          const minTop = Math.min(...bounds.map((b) => b.top));
+          const maxBottom = Math.max(...bounds.map((b) => b.top + b.height));
+          const centerY = (minTop + maxBottom) / 2;
+          bounds.forEach((b) => {
+            b.obj.set({ top: (b.obj.top ?? 0) + (centerY - (b.top + b.height / 2)) });
+            b.obj.setCoords();
+          });
+          break;
+        }
+        case 'align-bottom': {
+          const maxBottom = Math.max(...bounds.map((b) => b.top + b.height));
+          bounds.forEach((b) => {
+            b.obj.set({ top: (b.obj.top ?? 0) + (maxBottom - (b.top + b.height)) });
+            b.obj.setCoords();
+          });
+          break;
+        }
+        case 'distribute-h': {
+          if (bounds.length < 3) break;
+          bounds.sort((a, b) => a.left - b.left);
+          const totalWidth = bounds[bounds.length - 1].left + bounds[bounds.length - 1].width - bounds[0].left;
+          const objWidthSum = bounds.reduce((sum, b) => sum + b.width, 0);
+          const gap = (totalWidth - objWidthSum) / (bounds.length - 1);
+          let x = bounds[0].left;
+          bounds.forEach((b, i) => {
+            if (i > 0) {
+              b.obj.set({ left: (b.obj.left ?? 0) + (x - b.left) });
+              b.obj.setCoords();
+            }
+            x += b.width + gap;
+          });
+          break;
+        }
+        case 'distribute-v': {
+          if (bounds.length < 3) break;
+          bounds.sort((a, b) => a.top - b.top);
+          const totalHeight = bounds[bounds.length - 1].top + bounds[bounds.length - 1].height - bounds[0].top;
+          const objHeightSum = bounds.reduce((sum, b) => sum + b.height, 0);
+          const gap = (totalHeight - objHeightSum) / (bounds.length - 1);
+          let y = bounds[0].top;
+          bounds.forEach((b, i) => {
+            if (i > 0) {
+              b.obj.set({ top: (b.obj.top ?? 0) + (y - b.top) });
+              b.obj.setCoords();
+            }
+            y += b.height + gap;
+          });
+          break;
+        }
+      }
+
+      canvas.requestRenderAll();
+      saveHistory();
+      notifySelectionChanged();
+    },
+    switchPage: (pageId: string) => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      // Save current page state
+      const currentJSON = JSON.stringify(canvas.toObject(['customId', 'name', 'selectable', 'evented', 'customType', 'locked']));
+      savePageState(state.activePageId, currentJSON);
+
+      // Load target page
+      const targetPage = state.pages.find((p) => p.id === pageId);
+      if (targetPage && targetPage.canvasJSON) {
+        historyPauseRef.current = true;
+        try {
+          const parsed = JSON.parse(targetPage.canvasJSON);
+          canvas.loadFromJSON(parsed).then(() => {
+            canvas.requestRenderAll();
+            historyPauseRef.current = false;
+            notifyLayersChanged();
+            notifySelectionChanged();
+          }).catch(() => {
+            historyPauseRef.current = false;
+          });
+        } catch {
+          historyPauseRef.current = false;
+        }
+      } else {
+        // New blank page
+        canvas.clear();
+        canvas.backgroundColor = '#1a1a1a';
+        const artboard = new Rect({
+          left: (canvas.width! - ARTBOARD_WIDTH) / 2,
+          top: (canvas.height! - ARTBOARD_HEIGHT) / 2,
+          width: ARTBOARD_WIDTH,
+          height: ARTBOARD_HEIGHT,
+          fill: '#ffffff',
+          selectable: false,
+          evented: false,
+        });
+        (artboard as FabricObject & { name?: string }).name = 'artboard';
+        artboard.customId = 'artboard';
+        artboard.customType = 'artboard';
+        canvas.add(artboard);
+        canvas.requestRenderAll();
+        notifyLayersChanged();
+        notifySelectionChanged();
+      }
+    },
+    makeComponent: () => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const activeObjs = canvas.getActiveObjects();
+      if (activeObjs.length === 0) return;
+
+      let component: FabricObject;
+      if (activeObjs.length === 1) {
+        component = activeObjs[0];
+      } else {
+        // Group multiple objects into a component
+        const group = new Group(activeObjs, {});
+        activeObjs.forEach((obj) => canvas.remove(obj));
+        assignCustomProps(group, 'component');
+        canvas.add(group);
+        component = group;
+      }
+      component.customType = 'component';
+      (component as FabricObject & { name?: string }).name =
+        (component as FabricObject & { name?: string }).name?.replace(/^(Rectangle|Ellipse|Group|Triangle)/, 'Component') || 'Component';
+      canvas.setActiveObject(component);
+      canvas.requestRenderAll();
+      saveHistory();
+      notifyLayersChanged();
+      notifySelectionChanged();
+      showToast('Component created');
+    },
+    createInstance: () => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const active = canvas.getActiveObject();
+      if (!active || active.customType !== 'component') return;
+
+      active.clone().then((cloned: FabricObject) => {
+        cloned.set({ left: (cloned.left ?? 0) + 30, top: (cloned.top ?? 0) + 30 });
+        cloned.customId = uuidv4();
+        cloned.customType = 'instance';
+        (cloned as FabricObject & { name?: string }).name =
+          ((active as FabricObject & { name?: string }).name || 'Component') + ' Instance';
+        canvas.add(cloned);
+        canvas.setActiveObject(cloned);
+        canvas.requestRenderAll();
+        saveHistory();
+        notifyLayersChanged();
+        notifySelectionChanged();
+        showToast('Instance created');
+      });
+    },
+    toggleExpand: (id: string) => {
+      if (expandedLayersRef.current.has(id)) {
+        expandedLayersRef.current.delete(id);
+      } else {
+        expandedLayersRef.current.add(id);
+      }
+      notifyLayersChanged();
     },
   }));
 

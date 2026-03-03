@@ -1,10 +1,8 @@
-import React, { useRef } from 'react';
+import React from 'react';
 import {
-  PenTool, MousePointer2, Hand, Square, Circle, Triangle, Minus,
-  ArrowUpRight, Star, Type, Pencil, Image, Undo2, Redo2, Download,
+  PenTool, Undo2, Redo2, Download,
 } from 'lucide-react';
 import { useAppContext } from '../../store/canvasStore';
-import { ToolType } from '../../types';
 import ToolButton from './ToolButton';
 import ZoomControls from './ZoomControls';
 
@@ -13,22 +11,8 @@ interface ToolbarProps {
   onImageUpload: () => void;
 }
 
-const tools: { tool: ToolType; icon: typeof MousePointer2; tooltip: string; shortcut: string }[] = [
-  { tool: 'select', icon: MousePointer2, tooltip: 'Select (V)', shortcut: 'V' },
-  { tool: 'hand', icon: Hand, tooltip: 'Hand (H)', shortcut: 'H' },
-];
-
-const shapeTools: { tool: ToolType; icon: typeof Square; tooltip: string }[] = [
-  { tool: 'rectangle', icon: Square, tooltip: 'Rectangle (R)' },
-  { tool: 'ellipse', icon: Circle, tooltip: 'Ellipse (O)' },
-  { tool: 'triangle', icon: Triangle, tooltip: 'Triangle (T)' },
-  { tool: 'line', icon: Minus, tooltip: 'Line (L)' },
-  { tool: 'arrow', icon: ArrowUpRight, tooltip: 'Arrow (A)' },
-  { tool: 'star', icon: Star, tooltip: 'Star (S)' },
-];
-
 export default function Toolbar({ canvasRef, onImageUpload }: ToolbarProps) {
-  const { state, setTool, dispatch } = useAppContext();
+  const { state, dispatch } = useAppContext();
 
   const canUndo = state.historyIndex > 0;
   const canRedo = state.historyIndex < state.history.length - 1;
@@ -41,47 +25,8 @@ export default function Toolbar({ canvasRef, onImageUpload }: ToolbarProps) {
         <span className="text-white font-bold text-base">Vigma</span>
       </div>
 
-      {/* Center - Tools */}
+      {/* Center - Undo/Redo */}
       <div className="flex items-center gap-0.5">
-        {tools.map((t) => (
-          <ToolButton
-            key={t.tool}
-            icon={t.icon}
-            tooltip={t.tooltip}
-            active={state.activeTool === t.tool}
-            onClick={() => setTool(t.tool)}
-          />
-        ))}
-        <div className="w-px h-6 bg-[#3c3c3c] mx-1" />
-        {shapeTools.map((t) => (
-          <ToolButton
-            key={t.tool}
-            icon={t.icon}
-            tooltip={t.tooltip}
-            active={state.activeTool === t.tool}
-            onClick={() => setTool(t.tool)}
-          />
-        ))}
-        <div className="w-px h-6 bg-[#3c3c3c] mx-1" />
-        <ToolButton
-          icon={Type}
-          tooltip="Text (X)"
-          active={state.activeTool === 'text'}
-          onClick={() => setTool('text')}
-        />
-        <ToolButton
-          icon={Pencil}
-          tooltip="Pencil (P)"
-          active={state.activeTool === 'pencil'}
-          onClick={() => setTool('pencil')}
-        />
-        <div className="w-px h-6 bg-[#3c3c3c] mx-1" />
-        <ToolButton
-          icon={Image}
-          tooltip="Add Image"
-          onClick={onImageUpload}
-        />
-        <div className="w-px h-6 bg-[#3c3c3c] mx-1" />
         <ToolButton
           icon={Undo2}
           tooltip="Undo (Ctrl+Z)"

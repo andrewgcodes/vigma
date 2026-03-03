@@ -1,14 +1,16 @@
 import React from 'react';
-import { PanelRightClose, PanelRightOpen } from 'lucide-react';
+import { PanelRightClose, PanelRightOpen, MoveHorizontal, MoveVertical, Maximize2 } from 'lucide-react';
 import { useAppContext } from '../../store/canvasStore';
 import { FabricObject, Textbox, Rect, Shadow } from 'fabric';
 import TransformSection from './TransformSection';
+import AlignmentSection from './AlignmentSection';
 import FillSection from './FillSection';
 import StrokeSection from './StrokeSection';
 import OpacitySection from './OpacitySection';
 import ShadowSection from './ShadowSection';
 import TextSection from './TextSection';
 import ActionsSection from './ActionsSection';
+import ColorStylesPanel from './ColorStylesPanel';
 import NumberInput from '../shared/NumberInput';
 import SectionHeader from '../shared/SectionHeader';
 
@@ -21,11 +23,14 @@ interface RightSidebarProps {
   onSendToBack: () => void;
   onGroup: () => void;
   onUngroup: () => void;
+  onAlign: (alignment: string) => void;
+  onMakeComponent: () => void;
 }
 
 export default function RightSidebar({
   selectedObjects, onPropertyChange, onDuplicate, onDelete,
   onBringToFront, onSendToBack, onGroup, onUngroup,
+  onAlign, onMakeComponent,
 }: RightSidebarProps) {
   const { state, dispatch } = useAppContext();
 
@@ -105,8 +110,10 @@ export default function RightSidebar({
   const textAlign = textObj?.textAlign ?? 'left';
   const textFill = typeof textObj?.fill === 'string' ? textObj.fill : '#ffffff';
   const lineHeight = textObj?.lineHeight ?? 1.2;
+  const charSpacing = textObj?.charSpacing ?? 0;
 
   const isGroup = obj.type === 'group';
+  const isFrame = (obj as FabricObject & { customType?: string }).customType === 'frame';
 
   return (
     <div className="w-[280px] bg-[#252525] border-l border-[#3c3c3c] flex flex-col overflow-y-auto select-none">
@@ -119,10 +126,40 @@ export default function RightSidebar({
         </button>
       </div>
 
+      <AlignmentSection
+        onAlign={onAlign}
+        enabled={hasMultiple}
+      />
+
       <TransformSection
         x={x} y={y} width={w} height={h} rotation={rotation}
         onChange={(prop, val) => onPropertyChange(prop, val)}
       />
+
+      {/* Layout / Resizing section */}
+      <div>
+        <SectionHeader title="Layout" />
+        <div className="px-3 pb-2">
+          <div className="flex items-center gap-1 mb-2">
+            <span className="text-xs text-[#a0a0a0] w-16">Resizing</span>
+            <div className="flex gap-0.5">
+              {[
+                { key: 'hug', icon: MoveHorizontal, label: 'Hug' },
+                { key: 'fixed', icon: Maximize2, label: 'Fixed' },
+                { key: 'fill', icon: MoveVertical, label: 'Fill' },
+              ].map(({ key, icon: Icon, label }) => (
+                <button
+                  key={key}
+                  className="px-2 py-1 rounded text-[10px] text-[#a0a0a0] hover:text-white hover:bg-[#3c3c3c] transition-colors border border-[#3c3c3c]"
+                  title={label}
+                >
+                  <Icon size={12} />
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
 
       {!isLine && (
         <FillSection
@@ -203,14 +240,21 @@ export default function RightSidebar({
           textAlign={textAlign}
           fill={textFill}
           lineHeight={lineHeight}
+          charSpacing={charSpacing}
           onFontFamilyChange={(v) => onPropertyChange('fontFamily', v)}
           onFontSizeChange={(v) => onPropertyChange('fontSize', v)}
           onFontWeightChange={(v) => onPropertyChange('fontWeight', v)}
           onTextAlignChange={(v) => onPropertyChange('textAlign', v)}
           onFillChange={(v) => onPropertyChange('fill', v)}
           onLineHeightChange={(v) => onPropertyChange('lineHeight', v)}
+          onCharSpacingChange={(v) => onPropertyChange('charSpacing', v)}
         />
       )}
+
+      <ColorStylesPanel
+        currentColor={fillColor}
+        onApplyColor={(color) => onPropertyChange('fill', color)}
+      />
 
       <ActionsSection
         onDuplicate={onDuplicate}

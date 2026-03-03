@@ -1,7 +1,9 @@
 import React, { createContext, useContext, useReducer, useCallback } from 'react';
-import { AppState, AppAction, ToolType, SerializedObject } from '../types';
+import { AppState, AppAction, ToolType, SerializedObject, PageInfo, ColorStyle } from '../types';
 
 const MAX_HISTORY = 50;
+
+const DEFAULT_PAGE_ID = 'page-1';
 
 const initialState: AppState = {
   activeTool: 'select',
@@ -16,6 +18,9 @@ const initialState: AppState = {
   rightSidebarOpen: true,
   showExportModal: false,
   toastMessage: null,
+  pages: [{ id: DEFAULT_PAGE_ID, name: 'Page 1', canvasJSON: null }],
+  activePageId: DEFAULT_PAGE_ID,
+  colorStyles: [],
 };
 
 function appReducer(state: AppState, action: AppAction): AppState {
@@ -63,6 +68,36 @@ function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, toastMessage: null };
     case 'SET_CANVAS_READY':
       return { ...state, canvasReady: true };
+    case 'ADD_PAGE':
+      return { ...state, pages: [...state.pages, action.page] };
+    case 'DELETE_PAGE':
+      if (state.pages.length <= 1) return state;
+      return {
+        ...state,
+        pages: state.pages.filter((p) => p.id !== action.pageId),
+        activePageId: state.activePageId === action.pageId ? state.pages[0].id : state.activePageId,
+      };
+    case 'RENAME_PAGE':
+      return {
+        ...state,
+        pages: state.pages.map((p) => (p.id === action.pageId ? { ...p, name: action.name } : p)),
+      };
+    case 'SET_ACTIVE_PAGE':
+      return { ...state, activePageId: action.pageId, historyIndex: -1, history: [] };
+    case 'SAVE_PAGE_STATE':
+      return {
+        ...state,
+        pages: state.pages.map((p) => (p.id === action.pageId ? { ...p, canvasJSON: action.canvasJSON } : p)),
+      };
+    case 'ADD_COLOR_STYLE':
+      return { ...state, colorStyles: [...state.colorStyles, action.style] };
+    case 'DELETE_COLOR_STYLE':
+      return { ...state, colorStyles: state.colorStyles.filter((s) => s.id !== action.styleId) };
+    case 'UPDATE_COLOR_STYLE':
+      return {
+        ...state,
+        colorStyles: state.colorStyles.map((s) => (s.id === action.styleId ? { ...s, color: action.color } : s)),
+      };
     default:
       return state;
   }
@@ -80,6 +115,13 @@ interface AppContextType {
   redo: () => void;
   setSelected: (ids: string[]) => void;
   showToast: (message: string) => void;
+  addPage: (page: PageInfo) => void;
+  deletePage: (pageId: string) => void;
+  renamePage: (pageId: string, name: string) => void;
+  setActivePage: (pageId: string) => void;
+  savePageState: (pageId: string, canvasJSON: string) => void;
+  addColorStyle: (style: ColorStyle) => void;
+  deleteColorStyle: (styleId: string) => void;
 }
 
 const AppContext = createContext<AppContextType | null>(null);
@@ -99,6 +141,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     dispatch({ type: 'SHOW_TOAST', message });
     setTimeout(() => dispatch({ type: 'HIDE_TOAST' }), 3000);
   }, []);
+  const addPage = useCallback((page: PageInfo) => dispatch({ type: 'ADD_PAGE', page }), []);
+  const deletePage = useCallback((pageId: string) => dispatch({ type: 'DELETE_PAGE', pageId }), []);
+  const renamePage = useCallback((pageId: string, name: string) => dispatch({ type: 'RENAME_PAGE', pageId, name }), []);
+  const setActivePage = useCallback((pageId: string) => dispatch({ type: 'SET_ACTIVE_PAGE', pageId }), []);
+  const savePageState = useCallback((pageId: string, canvasJSON: string) => dispatch({ type: 'SAVE_PAGE_STATE', pageId, canvasJSON }), []);
+  const addColorStyle = useCallback((style: ColorStyle) => dispatch({ type: 'ADD_COLOR_STYLE', style }), []);
+  const deleteColorStyle = useCallback((styleId: string) => dispatch({ type: 'DELETE_COLOR_STYLE', styleId }), []);
 
   return (
     <AppContext.Provider
@@ -114,6 +163,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         redo,
         setSelected,
         showToast,
+        addPage,
+        deletePage,
+        renamePage,
+        setActivePage,
+        savePageState,
+        addColorStyle,
+        deleteColorStyle,
       }}
     >
       {children}
