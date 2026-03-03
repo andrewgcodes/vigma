@@ -1332,6 +1332,47 @@ export class CanvasEngine {
     this.saveHistory()
   }
 
+  booleanExclude() {
+    const active = this.canvas.getActiveObject()
+    if (!active || !(active instanceof ActiveSelection)) return
+    const objects = active.getObjects()
+    if (objects.length < 2) return
+    // Exclude = symmetric difference (areas in either shape but not both)
+    // Approximate by grouping both with inverted clipPaths of each other
+    const base = objects[0]
+    const cutter = objects[1]
+    // Clone base clipped by inverted cutter
+    const clipForBase = new Rect({
+      left: (cutter.left || 0) - (base.left || 0),
+      top: (cutter.top || 0) - (base.top || 0),
+      width: (cutter.width || 0) * (cutter.scaleX || 1),
+      height: (cutter.height || 0) * (cutter.scaleY || 1),
+      absolutePositioned: false,
+      inverted: true,
+    })
+    base.set('clipPath', clipForBase)
+    // Clone cutter clipped by inverted base
+    const clipForCutter = new Rect({
+      left: (base.left || 0) - (cutter.left || 0),
+      top: (base.top || 0) - (cutter.top || 0),
+      width: (base.width || 0) * (base.scaleX || 1),
+      height: (base.height || 0) * (base.scaleY || 1),
+      absolutePositioned: false,
+      inverted: true,
+    })
+    cutter.set('clipPath', clipForCutter)
+    // Group both clipped shapes
+    const group = new Group([base, cutter], {})
+    const id = uuidv4()
+    ;(group as any).id = id
+    ;(group as any).name = 'Exclude'
+    objects.forEach(o => this.canvas.remove(o))
+    this.canvas.add(group)
+    this.canvas.setActiveObject(group)
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
   // MASKING - use top object as mask for bottom
   applyMask() {
     const active = this.canvas.getActiveObject()
