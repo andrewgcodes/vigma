@@ -231,7 +231,7 @@ export default function DesignPage() {
           engine.addStar({ left, top, fill: fill.color })
           break
         case 'frame':
-          engine.addFrame({ left, top, width: minW || 375, height: minH || 812 })
+          engine.addFrame({ left, top, width: w < 5 ? 375 : minW, height: h < 5 ? 812 : minH })
           break
         case 'text':
           engine.addText({ left, top, width: Math.max(minW, 150) })
@@ -346,9 +346,9 @@ export default function DesignPage() {
             refreshObjectProps()
             return
           case 'c': engine.copy(); e.preventDefault(); return
-          case 'x': engine.cut(); refreshLayers(); e.preventDefault(); return
-          case 'v': engine.paste(); refreshLayers(); e.preventDefault(); return
-          case 'd': engine.duplicate(); refreshLayers(); e.preventDefault(); return
+          case 'x': engine.cut().then(() => refreshLayers()); e.preventDefault(); return
+          case 'v': engine.paste().then(() => refreshLayers()); e.preventDefault(); return
+          case 'd': engine.duplicate().then(() => refreshLayers()); e.preventDefault(); return
           case 'a': engine.selectAll(); e.preventDefault(); return
           case 'g':
             if (shift) { engine.ungroupSelected(); } else { engine.groupSelected(); }
@@ -564,12 +564,13 @@ export default function DesignPage() {
 
   const handleDeletePage = useCallback((id: string) => {
     if (pages.length <= 1) return
-    removePage(id)
+    const remaining = pages.filter(p => p.id !== id)
     if (currentPageId === id) {
-      const remaining = pages.filter(p => p.id !== id)
+      // Switch to another page first (saves current canvas), then remove
       handleSelectPage(remaining[0].id)
     }
-  }, [currentPageId, pages])
+    removePage(id)
+  }, [currentPageId, pages, handleSelectPage])
 
   const handleRenamePage = useCallback((id: string, name: string) => {
     updatePage(id, { name })
