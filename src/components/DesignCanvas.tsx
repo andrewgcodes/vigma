@@ -377,12 +377,14 @@ export default function DesignCanvas() {
             if (e.shiftKey) {
               const store = useCanvasStore.getState();
               store.redo();
-              const entry = store.history[store.historyIndex + 1];
+              const freshRedo = useCanvasStore.getState();
+              const entry = freshRedo.history[freshRedo.historyIndex];
               if (entry) canvasEngine.restoreFromHistory(entry.json);
             } else {
               const store = useCanvasStore.getState();
               store.undo();
-              const entry = store.history[store.historyIndex - 1];
+              const freshUndo = useCanvasStore.getState();
+              const entry = freshUndo.history[freshUndo.historyIndex];
               if (entry) canvasEngine.restoreFromHistory(entry.json);
             }
             break;

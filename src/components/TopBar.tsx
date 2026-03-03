@@ -160,7 +160,8 @@ export default function TopBar() {
 
   const handleUndo = () => {
     undo();
-    const entry = history[historyIndex - 1];
+    const freshState = useCanvasStore.getState();
+    const entry = freshState.history[freshState.historyIndex];
     if (entry) {
       canvasEngine.restoreFromHistory(entry.json);
     }
@@ -168,7 +169,8 @@ export default function TopBar() {
 
   const handleRedo = () => {
     redo();
-    const entry = history[historyIndex + 1];
+    const freshState = useCanvasStore.getState();
+    const entry = freshState.history[freshState.historyIndex];
     if (entry) {
       canvasEngine.restoreFromHistory(entry.json);
     }

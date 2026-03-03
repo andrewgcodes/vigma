@@ -317,8 +317,10 @@ export default function CanvasComments() {
               onChange={(e) => setReplyText(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
-                  if (!replyingTo) setReplyingTo(activeComment.id);
-                  setTimeout(() => handleSubmitReply(), 0);
+                  if (!replyText.trim() || !activeComment) return;
+                  sendComment(replyText.trim(), activeComment.x, activeComment.y, activeComment.id);
+                  setReplyText('');
+                  setReplyingTo(null);
                 }
                 if (e.key === 'Escape') {
                   setReplyingTo(null);
@@ -332,8 +334,10 @@ export default function CanvasComments() {
             <button
               className="comment-send-btn"
               onClick={() => {
-                if (!replyingTo) setReplyingTo(activeComment.id);
-                setTimeout(() => handleSubmitReply(), 0);
+                if (!replyText.trim() || !activeComment) return;
+                sendComment(replyText.trim(), activeComment.x, activeComment.y, activeComment.id);
+                setReplyText('');
+                setReplyingTo(null);
               }}
               disabled={!replyText.trim()}
             >
