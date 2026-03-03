@@ -93,7 +93,9 @@ export class CanvasEngine {
     });
 
     this.canvas.on('object:removed', () => {
-      this.saveHistory();
+      if (!this.historyPaused) {
+        this.saveHistory();
+      }
       this.onObjectsChange?.();
     });
 
@@ -936,6 +938,7 @@ export class CanvasEngine {
     const selection = active as fabric.ActiveSelection;
     const objects = selection.getObjects();
 
+    this.historyPaused = true;
     // Remove from canvas first
     objects.forEach((obj) => this.canvas!.remove(obj));
     this.canvas.discardActiveObject();
@@ -943,6 +946,7 @@ export class CanvasEngine {
     const group = new fabric.Group(objects);
     this.setObjectId(group);
     this.canvas.add(group);
+    this.historyPaused = false;
     this.canvas.setActiveObject(group);
     this.canvas.requestRenderAll();
     this.saveHistory();
@@ -956,11 +960,13 @@ export class CanvasEngine {
     const group = active as fabric.Group;
     const items = group.getObjects();
 
+    this.historyPaused = true;
     this.canvas.remove(group);
 
     items.forEach((item) => {
       this.canvas!.add(item);
     });
+    this.historyPaused = false;
 
     this.canvas.requestRenderAll();
     this.saveHistory();
