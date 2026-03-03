@@ -81,6 +81,7 @@ export default function DesignCanvas() {
   const fillColor = useDesignStore((s) => s.fillColor);
   const strokeColor = useDesignStore((s) => s.strokeColor);
   const strokeWidth = useDesignStore((s) => s.strokeWidth);
+  const selectedIds = useDesignStore((s) => s.selectedIds);
 
   // Keyboard shortcuts
   useKeyboard({
@@ -233,6 +234,7 @@ export default function DesignCanvas() {
 
         // For pen tool, collect points for a custom path
         if (tool === 'pen') {
+          isDrawingRef.current = false;
           return;
         }
 
@@ -825,8 +827,8 @@ export default function DesignCanvas() {
       {/* Status bar */}
       <div className="fixed bottom-0 left-0 right-0 h-6 bg-white/80 backdrop-blur border-t border-canvas-border flex items-center justify-between px-4 z-10">
         <span className="text-2xs text-canvas-text-secondary">
-          {useDesignStore.getState().selectedIds.length > 0
-            ? `${useDesignStore.getState().selectedIds.length} selected`
+          {selectedIds.length > 0
+            ? `${selectedIds.length} selected`
             : 'Ready'}
         </span>
         <span className="text-2xs text-canvas-text-secondary font-mono">
