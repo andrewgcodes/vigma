@@ -102,11 +102,34 @@ function NumberInput({
   step?: number;
   width?: number;
 }) {
+  const [localValue, setLocalValue] = useState(String(Math.round(value * 100) / 100));
+  const [isFocused, setIsFocused] = useState(false);
+
+  // Sync local value with prop when not focused (external changes)
+  React.useEffect(() => {
+    if (!isFocused) {
+      setLocalValue(String(Math.round(value * 100) / 100));
+    }
+  }, [value, isFocused]);
+
+  const commit = (val: string) => {
+    const num = parseFloat(val) || 0;
+    if (num !== value) {
+      onChange(num);
+    }
+  };
+
   return (
     <input
       type="number"
-      value={Math.round(value * 100) / 100}
-      onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
+      value={localValue}
+      onChange={(e) => setLocalValue(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          commit(localValue);
+          e.currentTarget.blur();
+        }
+      }}
       min={min}
       max={max}
       step={step || 1}
@@ -124,10 +147,13 @@ function NumberInput({
         textAlign: "right",
       }}
       onFocus={(e) => {
+        setIsFocused(true);
         e.currentTarget.style.borderColor = "#0071e3";
         e.currentTarget.style.boxShadow = "0 0 0 2px rgba(0,113,227,0.15)";
       }}
       onBlur={(e) => {
+        setIsFocused(false);
+        commit(localValue);
         e.currentTarget.style.borderColor = "#e5e5e7";
         e.currentTarget.style.boxShadow = "none";
       }}
