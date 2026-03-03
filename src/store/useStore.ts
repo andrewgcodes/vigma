@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { ToolType, LayerInfo } from "@/types";
+import type { ToolType, LayerInfo, ContextMenuState } from "@/types";
 
 interface DesignState {
   // Tool state
@@ -52,6 +52,14 @@ interface DesignState {
   setPenColor: (color: string) => void;
   penWidth: number;
   setPenWidth: (width: number) => void;
+
+  // Context menu
+  contextMenu: ContextMenuState;
+  setContextMenu: (menu: ContextMenuState) => void;
+
+  // Clipboard
+  clipboardData: string | null;
+  setClipboardData: (data: string | null) => void;
 }
 
 export const useStore = create<DesignState>((set) => ({
@@ -102,4 +110,10 @@ export const useStore = create<DesignState>((set) => ({
   setPenColor: (color) => set({ penColor: color }),
   penWidth: 2,
   setPenWidth: (width) => set({ penWidth: width }),
+
+  contextMenu: { visible: false, x: 0, y: 0 },
+  setContextMenu: (menu) => set({ contextMenu: menu }),
+
+  clipboardData: null,
+  setClipboardData: (data) => set({ clipboardData: data }),
 }));

@@ -35,7 +35,24 @@ export interface CanvasObjectProps {
   fontSize?: number;
   fontWeight?: string;
   fontStyle?: string;
+  textAlign?: string;
+  underline?: boolean;
+  linethrough?: boolean;
   text?: string;
   scaleX: number;
   scaleY: number;
+  shadow?: {
+    color: string;
+    blur: number;
+    offsetX: number;
+    offsetY: number;
+  } | null;
+  flipX?: boolean;
+  flipY?: boolean;
+}
+
+export interface ContextMenuState {
+  visible: boolean;
+  x: number;
+  y: number;
 }
