@@ -63,7 +63,7 @@ export default function DesignCanvas({ canvasRef, historyRef }: DesignCanvasProp
   } = useStore();
 
   const syncLayers = useCallback((canvas: fabric.Canvas) => {
-    const objects = canvas.getObjects();
+    const objects = canvas.getObjects().filter((obj) => !(obj as fabric.FabricObject & { _isSnapGuide?: boolean })._isSnapGuide);
     const layerInfos: LayerInfo[] = objects.map((obj) => {
       const o = obj as fabric.FabricObject & { id?: string; name?: string };
       return {
@@ -769,6 +769,8 @@ export default function DesignCanvas({ canvasRef, historyRef }: DesignCanvasProp
                 canvas.setActiveObject(obj);
                 canvas.renderAll();
                 saveHistory();
+                // Update clipboard so next paste cascades offset
+                setClipboardData(JSON.stringify(obj.toJSON()));
               }
             });
           } catch {

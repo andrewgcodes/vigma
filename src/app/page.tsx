@@ -336,10 +336,12 @@ export default function Home() {
           historyRef.current.saveState(canvas);
           setCanUndo(historyRef.current.canUndo);
           setCanRedo(historyRef.current.canRedo);
+          // Update clipboard so next paste cascades offset
+          setClipboardData(JSON.stringify(obj.toJSON()));
         }
       });
     } catch { /* ignore */ }
-  }, [clipboardData, setCanUndo, setCanRedo]);
+  }, [clipboardData, setClipboardData, setCanUndo, setCanRedo]);
 
   const handleContextDuplicate = useCallback(() => {
     const canvas = canvasRef.current;
@@ -608,7 +610,7 @@ export default function Home() {
   );
 
   const syncLayers = (canvas: fabric.Canvas) => {
-    const objects = canvas.getObjects();
+    const objects = canvas.getObjects().filter((obj) => !(obj as fabric.FabricObject & { _isSnapGuide?: boolean })._isSnapGuide);
     const layerInfos = objects.map((obj) => {
       const o = obj as fabric.FabricObject & { id?: string; name?: string };
       return {
