@@ -163,9 +163,9 @@ export default function PropertiesPanel({ fabricRef }: PropertiesPanelProps) {
     if (key === 'opacity') {
       active.set('opacity', (value as number) / 100);
     } else if (key === 'width') {
-      active.set('scaleX', (value as number) / (active.width ?? 1));
+      active.set('scaleX', (value as number) / (active.width || 1));
     } else if (key === 'height') {
-      active.set('scaleY', (value as number) / (active.height ?? 1));
+      active.set('scaleY', (value as number) / (active.height || 1));
     } else {
       active.set(key as keyof fabric.FabricObject, value);
     }

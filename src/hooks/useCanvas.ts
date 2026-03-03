@@ -194,6 +194,16 @@ export function useCanvas() {
       syncLayers();
     });
 
+    // Assign id/name to freehand pen paths so they appear in layers panel
+    canvas.on('path:created', (opt: { path: fabric.FabricObject }) => {
+      const path = opt.path;
+      const id = uuidv4();
+      (path as fabric.FabricObject & { id?: string }).id = id;
+      (path as fabric.FabricObject & { name?: string }).name = 'Path';
+      syncLayers();
+      saveHistory();
+    });
+
     const handleResize = () => {
       canvas.setDimensions({
         width: window.innerWidth,
@@ -224,13 +234,25 @@ export function useCanvas() {
       const evt = opt.e as MouseEvent;
       if (evt.button === 2) {
         evt.preventDefault();
-        const result = canvas.findTarget(evt);
-        const target = result as unknown as fabric.FabricObject | undefined;
-        if (target) {
-          canvas.setActiveObject(target);
-          canvas.renderAll();
+        const active = canvas.getActiveObject();
+        const pointer = canvas.getScenePoint(evt);
+        // Check if click is on an existing object
+        let targetId: string | null = null;
+        const objects = canvas.getObjects();
+        for (let i = objects.length - 1; i >= 0; i--) {
+          const obj = objects[i];
+          if (obj.containsPoint(pointer) && (obj as fabric.FabricObject & { id?: string }).id) {
+            if (!active || active !== obj) {
+              canvas.setActiveObject(obj);
+              canvas.renderAll();
+            }
+            targetId = (obj as fabric.FabricObject & { id?: string }).id || null;
+            break;
+          }
         }
-        const targetId = target ? (target as fabric.FabricObject & { id?: string }).id || null : null;
+        if (!targetId && active) {
+          targetId = (active as fabric.FabricObject & { id?: string }).id || null;
+        }
         setContextMenuRef.current({ x: evt.clientX, y: evt.clientY, objectId: targetId });
         return;
       }
@@ -243,12 +265,16 @@ export function useCanvas() {
 
       // Eyedropper tool
       if (tool === 'eyedropper') {
-        const result = canvas.findTarget(evt);
-        const target = result as unknown as fabric.FabricObject | undefined;
-        if (target) {
-          const fill = target.fill;
-          const color = typeof fill === 'string' ? fill : '#000000';
-          setFillColorRef.current(color);
+        const pointer = canvas.getScenePoint(evt);
+        const objects = canvas.getObjects();
+        for (let i = objects.length - 1; i >= 0; i--) {
+          const obj = objects[i];
+          if (obj.containsPoint(pointer) && (obj as fabric.FabricObject & { id?: string }).id) {
+            const fill = obj.fill;
+            const color = typeof fill === 'string' ? fill : '#000000';
+            setFillColorRef.current(color);
+            break;
+          }
         }
         setActiveTool(previousToolRef.current || 'select');
         return;

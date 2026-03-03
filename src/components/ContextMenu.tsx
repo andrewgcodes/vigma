@@ -51,7 +51,14 @@ export default function ContextMenu({ fabricRef }: ContextMenuProps) {
     const clipboard = (window as unknown as Record<string, unknown>).__vigma_clipboard as fabric.FabricObject | undefined;
     if (!clipboard) return;
     const cloned = await clipboard.clone();
-    cloned.set({ left: contextMenu.x, top: contextMenu.y });
+    const vpt = canvas.viewportTransform;
+    if (vpt) {
+      const invertedTransform = fabric.util.invertTransform(vpt);
+      const point = fabric.util.transformPoint(new fabric.Point(contextMenu.x, contextMenu.y), invertedTransform);
+      cloned.set({ left: point.x, top: point.y });
+    } else {
+      cloned.set({ left: contextMenu.x, top: contextMenu.y });
+    }
     const id = uuidv4();
     (cloned as fabric.FabricObject & { id?: string }).id = id;
     (cloned as fabric.FabricObject & { name?: string }).name = 'Copy';
