@@ -73,7 +73,11 @@ export default function DesignPage() {
   const [shareLinkCopied, setShareLinkCopied] = useState(false)
   const collabRef = useRef<CollaborationManager | null>(null)
   const userRef = useRef<UserIdentity>(getUserIdentity())
-  const syncingFromRemoteCountRef = useRef(0)
+  // Track which object IDs are currently being applied from remote peers.
+  // Using a Set<string> instead of a counter prevents race conditions where
+  // async enlivenObjects resolves after the counter is decremented by other
+  // synchronous paths, causing objects to be echoed back to Yjs (Bug 1 fix).
+  const remoteObjectIdsRef = useRef<Set<string>>(new Set())
 
   // Panel resize handlers
   const handleResizeStart = useCallback((side: 'left' | 'right', e: React.MouseEvent) => {
@@ -225,8 +229,10 @@ export default function DesignPage() {
   // Sync a single canvas object to Yjs
   const syncObjectToCollab = useCallback((obj: any) => {
     const collab = collabRef.current
-    if (!collab || syncingFromRemoteCountRef.current > 0) return
+    if (!collab) return
     if (!obj || !obj.id) return
+    // Skip if this object is currently being applied from a remote peer
+    if (remoteObjectIdsRef.current.has(obj.id)) return
     try {
       const json = JSON.stringify(obj.toJSON(['id', 'name', 'isFrame', 'lockMovementX', 'lockMovementY', 'lockRotation', 'lockScalingX', 'lockScalingY', 'hasControls', 'selectable', 'evented']))
       collab.syncObjectToYjs(obj.id, json)
@@ -239,7 +245,7 @@ export default function DesignPage() {
   const syncAllObjectsToCollab = useCallback(() => {
     const collab = collabRef.current
     const engine = engineRef.current
-    if (!collab || !engine || syncingFromRemoteCountRef.current > 0) return
+    if (!collab || !engine) return
     const objects = engine.canvas.getObjects().filter((o: any) => !o.isPreview && !o.isGrid)
     const items = objects.map((obj: any) => {
       if (!obj.id) obj.id = uuidv4()
@@ -276,7 +282,17 @@ export default function DesignPage() {
     const collab = collabRef.current
     if (!engine || !collab) return
 
-    syncingFromRemoteCountRef.current++
+    // Track ALL object IDs being processed in this batch (Bug 1 fix).
+    // Using per-object ID tracking instead of a global counter prevents
+    // race conditions when async enlivenObjects interleaves with sync paths.
+    const processingIds = new Set<string>([
+      ...changes.deleted,
+      ...changes.added,
+      ...changes.updated,
+    ])
+    for (const id of processingIds) {
+      remoteObjectIdsRef.current.add(id)
+    }
 
     // Handle deletions
     for (const id of changes.deleted) {
@@ -343,15 +359,23 @@ export default function DesignPage() {
     engine.canvas.renderAll()
     refreshLayers()
 
-    // Only decrement the counter after all async enlivens complete
+    // Clean up tracked IDs only after ALL async operations complete
     if (enlivenPromises.length > 0) {
       Promise.all(enlivenPromises).catch((e) => {
         console.warn('Failed to enliven remote objects', e)
       }).finally(() => {
-        syncingFromRemoteCountRef.current--
+        for (const id of processingIds) {
+          remoteObjectIdsRef.current.delete(id)
+        }
       })
     } else {
-      syncingFromRemoteCountRef.current--
+      // All synchronous — use queueMicrotask to ensure event handlers
+      // (like object:removed) have fired before we remove the guard
+      queueMicrotask(() => {
+        for (const id of processingIds) {
+          remoteObjectIdsRef.current.delete(id)
+        }
+      })
     }
   }, [])
 
@@ -413,13 +437,35 @@ export default function DesignPage() {
     // Guard: if user left the room or component unmounted during sync, bail out
     if (collabRef.current !== collab) return
 
-    // After persistence sync, check if the room has objects
-    // Only push local canvas state if the room is truly empty
-    if (collab.getAllObjects().size === 0) {
-      syncAllObjectsToCollab()
+    // Reconcile local canvas with whatever is already in the Y.Doc (Bug 2 fix).
+    // Instead of the old "push all or nothing" approach that could wipe remote
+    // objects or cause duplication, we merge: local-only objects go to Yjs,
+    // remote-only objects come to canvas, overlapping objects keep remote version.
+    const engine = engineRef.current
+    if (engine) {
+      const localObjects = engine.canvas.getObjects()
+        .filter((o: any) => !o.isPreview && !o.isGrid)
+        .map((obj: any) => {
+          if (!obj.id) obj.id = uuidv4()
+          return {
+            id: obj.id,
+            json: JSON.stringify(obj.toJSON(['id', 'name', 'isFrame', 'lockMovementX', 'lockMovementY', 'lockRotation', 'lockScalingX', 'lockScalingY', 'hasControls', 'selectable', 'evented'])),
+          }
+        })
+
+      const remoteOnlyIds = collab.reconcileCanvasState(localObjects)
+
+      // Add remote-only objects to the canvas
+      if (remoteOnlyIds.length > 0) {
+        handleRemoteObjectChange({
+          added: remoteOnlyIds,
+          updated: [],
+          deleted: [],
+        })
+      }
     }
     setComments(collab.getComments())
-  }, [handleRemoteObjectChange, syncAllObjectsToCollab])
+  }, [handleRemoteObjectChange])
 
   // Canvas event listeners for collaboration sync
   useEffect(() => {
@@ -427,65 +473,65 @@ export default function DesignPage() {
     if (!engine || !isCollaborating) return
 
     const onModified = (opt: any) => {
-      if (syncingFromRemoteCountRef.current > 0) return
       const target = opt.target
       if (!target) return
       if ((target as any).type === 'activeselection') {
-        // Multiple objects selected and moved
         const objects = (target as any).getObjects()
         for (const obj of objects) {
-          syncObjectToCollab(obj)
+          // Per-object remote check (Bug 1 fix)
+          if (!remoteObjectIdsRef.current.has(obj.id)) {
+            syncObjectToCollab(obj)
+          }
         }
       } else {
+        if (target.id && remoteObjectIdsRef.current.has(target.id)) return
         syncObjectToCollab(target)
       }
     }
 
     const onAdded = (opt: any) => {
-      if (syncingFromRemoteCountRef.current > 0) return
       const target = opt.target
       if (!target || (target as any).isPreview || (target as any).isGrid) return
       if (!target.id) target.id = uuidv4()
+      // Check if THIS specific object is being applied from remote (Bug 1 fix)
+      if (remoteObjectIdsRef.current.has(target.id)) return
       syncObjectToCollab(target)
     }
 
     const onRemoved = (opt: any) => {
-      if (syncingFromRemoteCountRef.current > 0) return
       const target = opt.target
       if (!target || !target.id || (target as any).isPreview || (target as any).isGrid) return
+      // Check if THIS specific object is being removed from remote (Bug 1 fix)
+      if (remoteObjectIdsRef.current.has(target.id)) return
       collabRef.current?.removeObjectFromYjs(target.id)
     }
 
-    const onPathCreated = (opt: any) => {
-      if (syncingFromRemoteCountRef.current > 0) return
-      const path = opt.path
-      if (!path) return
-      if (!path.id) path.id = uuidv4()
-      syncObjectToCollab(path)
-    }
+    // NOTE: path:created handler removed (Bug 3 fix).
+    // Fabric.js fires BOTH path:created AND object:added for freehand paths.
+    // The onAdded handler above already syncs the path to Yjs, so having
+    // a path:created handler caused double-sync of the same object.
 
     // Sync text content when user finishes editing (Fabric.js text editing
     // does NOT fire object:modified for content changes — only for
     // move/resize/rotate transforms)
     const onTextEditingExited = (opt: any) => {
-      if (syncingFromRemoteCountRef.current > 0) return
       const target = opt.target
       if (!target) return
+      if (target.id && remoteObjectIdsRef.current.has(target.id)) return
       syncObjectToCollab(target)
     }
 
     // Also sync on every keystroke so collaborators see live typing
     const onTextChanged = (opt: any) => {
-      if (syncingFromRemoteCountRef.current > 0) return
       const target = opt.target
       if (!target) return
+      if (target.id && remoteObjectIdsRef.current.has(target.id)) return
       syncObjectToCollab(target)
     }
 
     engine.canvas.on('object:modified', onModified)
     engine.canvas.on('object:added', onAdded)
     engine.canvas.on('object:removed', onRemoved)
-    engine.canvas.on('path:created', onPathCreated)
     engine.canvas.on('text:editing:exited', onTextEditingExited)
     engine.canvas.on('text:changed', onTextChanged)
 
@@ -493,7 +539,6 @@ export default function DesignPage() {
       engine.canvas.off('object:modified', onModified)
       engine.canvas.off('object:added', onAdded)
       engine.canvas.off('object:removed', onRemoved)
-      engine.canvas.off('path:created', onPathCreated)
       engine.canvas.off('text:editing:exited', onTextEditingExited)
       engine.canvas.off('text:changed', onTextChanged)
     }

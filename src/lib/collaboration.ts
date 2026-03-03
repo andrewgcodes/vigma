@@ -251,7 +251,9 @@ export class CollaborationManager {
     return result
   }
 
-  /** Push entire canvas state to Yjs (for initial sync) */
+  /** Push entire canvas state to Yjs (destructive — clears existing first).
+   *  WARNING: Only use for full canvas replacement (e.g., page switch).
+   *  Do NOT use for initial sync — use reconcileCanvasState() instead. */
   pushCanvasState(objects: Array<{ id: string; json: string }>) {
     this.isSyncingLocal = true
     this.doc.transact(() => {
@@ -266,6 +268,41 @@ export class CollaborationManager {
       }
     })
     this.isSyncingLocal = false
+  }
+
+  /** Reconcile local canvas state with Yjs (Bug 2 fix).
+   *  Instead of destructively replacing all objects, this merges:
+   *  - Local objects not in remote → added to Yjs
+   *  - Remote objects not in local → returned so caller can add to canvas
+   *  - Objects in both → remote version is kept (it was there first)
+   *  This prevents race conditions during initial sync where WebRTC peers
+   *  may deliver objects while IndexedDB is still loading. */
+  reconcileCanvasState(localObjects: Array<{ id: string; json: string }>): string[] {
+    this.isSyncingLocal = true
+    const remoteIds = new Set(Array.from(this.objectsMap.keys()))
+    const localIds = new Set(localObjects.map(o => o.id))
+
+    this.doc.transact(() => {
+      // Add local objects that don't exist in remote
+      for (const obj of localObjects) {
+        if (!remoteIds.has(obj.id)) {
+          this.objectsMap.set(obj.id, obj.json)
+        }
+        // If object exists in both, remote wins (they were there first)
+      }
+      // Do NOT delete remote objects that aren't in local
+      // (they may have been added by other peers)
+    })
+    this.isSyncingLocal = false
+
+    // Return IDs of remote objects not in local (caller needs to add to canvas)
+    const remoteOnlyIds: string[] = []
+    remoteIds.forEach(id => {
+      if (!localIds.has(id)) {
+        remoteOnlyIds.push(id)
+      }
+    })
+    return remoteOnlyIds
   }
 
   // === CURSOR / PRESENCE ===
