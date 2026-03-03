@@ -63,6 +63,7 @@ export default function DesignPage() {
   const [comments, setComments] = useState<Comment[]>([])
   const [showResolved, setShowResolved] = useState(false)
   const [commentInput, setCommentInput] = useState<{ x: number; y: number; text: string } | null>(null)
+  const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('disconnected')
   const collabRef = useRef<CollaborationManager | null>(null)
   const userRef = useRef<UserIdentity>(getUserIdentity())
   const syncingFromRemoteCountRef = useRef(0)
@@ -283,7 +284,7 @@ export default function DesignPage() {
   }, [])
 
   // Start collaboration session
-  const startCollaboration = useCallback((rid: string) => {
+  const startCollaboration = useCallback(async (rid: string) => {
     if (collabRef.current) return
 
     const collab = new CollaborationManager(rid, userRef.current)
@@ -299,18 +300,25 @@ export default function DesignPage() {
       onUsersChange: (users) => {
         setRemoteUsers(users)
       },
+      onConnectionStatusChange: (status) => {
+        setConnectionStatus(status)
+      },
     })
 
     setRoomId(rid)
     setIsCollaborating(true)
+    setConnectionStatus('connecting')
 
-    // Wait a moment for initial sync, then push current canvas state if we're the first
-    setTimeout(() => {
-      if (collab.getAllObjects().size === 0) {
-        syncAllObjectsToCollab()
-      }
-      setComments(collab.getComments())
-    }, 1000)
+    // Wait for IndexedDB persistence to finish loading (or timeout after 3s)
+    // This ensures we don't push empty state before persisted data loads
+    await collab.waitForSync(3000)
+
+    // After persistence sync, check if the room has objects
+    // Only push local canvas state if the room is truly empty
+    if (collab.getAllObjects().size === 0) {
+      syncAllObjectsToCollab()
+    }
+    setComments(collab.getComments())
   }, [handleRemoteObjectChange, syncAllObjectsToCollab])
 
   // Canvas event listeners for collaboration sync
@@ -416,6 +424,7 @@ export default function DesignPage() {
     setRoomId(null)
     setRemoteUsers([])
     setComments([])
+    setConnectionStatus('disconnected')
     clearRoomFromHash()
   }, [])
 
@@ -1234,6 +1243,7 @@ export default function DesignPage() {
         isCollaborating={isCollaborating}
         roomId={roomId}
         remoteUsers={remoteUsers}
+        connectionStatus={connectionStatus}
         onShare={handleShare}
         onLeaveRoom={handleLeaveRoom}
       />
