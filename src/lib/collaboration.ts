@@ -488,13 +488,19 @@ export class CollaborationManager {
         return
       }
 
-      const timeout = setTimeout(done, timeoutMs)
+      // Clean up the observer when done (whether by data arrival or timeout)
+      const cleanup = () => {
+        this.objectsMap.unobserve(observer)
+      }
+
+      const timeout = setTimeout(() => { cleanup(); done() }, timeoutMs)
 
       // Resolve when IndexedDB finishes loading (if it has data)
       if (this.persistence) {
         this.persistence.on('synced', () => {
           // Only resolve early if persistence actually had data
           if (this.objectsMap.size > 0) {
+            cleanup()
             done()
           }
         })
@@ -503,7 +509,7 @@ export class CollaborationManager {
       // Resolve when Y.Doc receives remote data (from WebRTC or BroadcastChannel)
       const observer = () => {
         if (this.objectsMap.size > 0) {
-          this.objectsMap.unobserve(observer)
+          cleanup()
           done()
         }
       }
