@@ -130,10 +130,8 @@ export default function Editor() {
 
     canvas.on('object:removed', () => {
       syncLayers();
-      // Only save history for intentional deletions, not temp shape removal during drawing
-      if (!isDrawingShape.current) {
-        saveHistory();
-      }
+      // History is saved explicitly by callers (keyboard delete, layer delete, etc.)
+      // to avoid N+1 entries during batch operations
     });
 
     // Path created (from drawing) - assign customId/customName

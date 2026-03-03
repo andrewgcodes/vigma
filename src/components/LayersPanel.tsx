@@ -99,6 +99,9 @@ export default function LayersPanel({ canvas }: LayersPanelProps) {
     if (!obj || !canvas.current) return;
     canvas.current.remove(obj);
     canvas.current.renderAll();
+    // Explicitly save history since object:removed no longer does it
+    const json = JSON.stringify(canvas.current.toObject(['customId', 'customName']));
+    useEditorStore.getState().pushHistory(json);
   };
 
   const handleMoveUp = (index: number) => {
