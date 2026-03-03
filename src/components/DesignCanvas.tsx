@@ -27,6 +27,7 @@ export default function DesignCanvas() {
   const canvasElRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [canvasSize, setCanvasSize] = useState({ w: 1200, h: 800 });
+  const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
 
   const {
     canvasRef,
@@ -330,6 +331,7 @@ export default function DesignCanvas() {
         vpt[5] += dy;
         canvas.setViewportTransform(vpt);
         lastPanPointRef.current = clientPos;
+        setPanOffset({ x: vpt[4], y: vpt[5] });
         canvas.renderAll();
         return;
       }
@@ -440,6 +442,7 @@ export default function DesignCanvas() {
         vpt[4] -= e.deltaX;
         vpt[5] -= e.deltaY;
         canvas.setViewportTransform(vpt);
+        setPanOffset({ x: vpt[4], y: vpt[5] });
       }
       canvas.renderAll();
     };
@@ -671,8 +674,6 @@ export default function DesignCanvas() {
     canvas.renderAll();
   }, [canvasRef, setZoom]);
 
-  const vpt = canvasRef.current?.viewportTransform;
-
   return (
     <div className="w-screen h-screen overflow-hidden bg-canvas-bg" ref={containerRef}>
       {/* Top Bar */}
@@ -694,8 +695,8 @@ export default function DesignCanvas() {
         canvasWidth={canvasSize.w}
         canvasHeight={canvasSize.h}
         zoom={zoom}
-        panX={vpt ? vpt[4] : 0}
-        panY={vpt ? vpt[5] : 0}
+        panX={panOffset.x}
+        panY={panOffset.y}
       />
 
       {/* Left Panel */}

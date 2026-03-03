@@ -72,7 +72,14 @@ export function useCanvas() {
   const saveHistory = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+    // Remove grid lines before saving history, then restore
+    const gridObjects = canvas.getObjects().filter((o) => (o as any)._isGrid);
+    gridObjects.forEach((o) => canvas.remove(o));
     const json = JSON.stringify(canvas.toJSON());
+    gridObjects.forEach((o) => {
+      canvas.add(o);
+      canvas.sendObjectToBack(o);
+    });
     store.getState().pushHistory({
       canvasJSON: json,
       timestamp: Date.now(),
@@ -331,7 +338,7 @@ export function useCanvas() {
   const selectAll = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const objects = canvas.getObjects();
+    const objects = canvas.getObjects().filter((o) => !(o as any)._isGrid);
     if (objects.length === 0) return;
     const selection = new fabric.ActiveSelection(objects, { canvas });
     canvas.setActiveObject(selection);
@@ -381,7 +388,7 @@ export function useCanvas() {
   const zoomToFit = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const objects = canvas.getObjects();
+    const objects = canvas.getObjects().filter((o) => !(o as any)._isGrid);
     if (objects.length === 0) return;
 
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -427,6 +434,17 @@ export function useCanvas() {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
+    // Remove grid lines before export, then restore
+    const gridObjects = canvas.getObjects().filter((o) => (o as any)._isGrid);
+    gridObjects.forEach((o) => canvas.remove(o));
+    const restoreGrid = () => {
+      gridObjects.forEach((o) => {
+        canvas.add(o);
+        canvas.sendObjectToBack(o);
+      });
+      canvas.renderAll();
+    };
+
     if (format === 'json') {
       const json = JSON.stringify(canvas.toJSON(), null, 2);
       const blob = new Blob([json], { type: 'application/json' });
@@ -436,6 +454,7 @@ export function useCanvas() {
       a.download = 'vigma-design.json';
       a.click();
       URL.revokeObjectURL(url);
+      restoreGrid();
       return;
     }
 
@@ -448,6 +467,7 @@ export function useCanvas() {
       a.download = 'vigma-design.svg';
       a.click();
       URL.revokeObjectURL(url);
+      restoreGrid();
       return;
     }
 
@@ -460,6 +480,7 @@ export function useCanvas() {
       a.href = dataURL;
       a.download = 'vigma-design.png';
       a.click();
+      restoreGrid();
       return;
     }
 
@@ -476,7 +497,10 @@ export function useCanvas() {
         });
         pdf.addImage(dataURL, 'PNG', 0, 0, canvas.width! * scale, canvas.height! * scale);
         pdf.save('vigma-design.pdf');
+        restoreGrid();
       });
+    } else {
+      restoreGrid();
     }
   }, []);
 

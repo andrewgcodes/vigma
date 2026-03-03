@@ -171,7 +171,7 @@ export default function LayersPanel({ canvas, onSaveHistory }: LayersPanelProps)
 
   const getLayerItems = useCallback((): LayerItemData[] => {
     if (!canvas) return [];
-    const objects = canvas.getObjects();
+    const objects = canvas.getObjects().filter((o) => !(o as any)._isGrid);
     const activeObjects = canvas.getActiveObjects();
     const activeIds = new Set(activeObjects.map((o) => (o as any).customId));
 
