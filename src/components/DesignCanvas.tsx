@@ -91,18 +91,27 @@ export default function DesignCanvas({ canvasRef, historyRef }: DesignCanvasProp
     snapGuidesRef.current = [];
   }, []);
 
+  // Get logical bounds (canvas-space, unaffected by zoom/pan)
+  const getLogicalBounds = (obj: fabric.FabricObject) => {
+    const left = obj.left || 0;
+    const top = obj.top || 0;
+    const w = (obj.width || 0) * (obj.scaleX || 1);
+    const h = (obj.height || 0) * (obj.scaleY || 1);
+    return { left, top, width: w, height: h };
+  };
+
   // Show snap guides when moving objects
   const showSnapGuides = useCallback((canvas: fabric.Canvas, movingObj: fabric.FabricObject) => {
     clearSnapGuides(canvas);
-    const SNAP_THRESHOLD = 5;
+    const SNAP_THRESHOLD = 8;
     const guides: fabric.FabricObject[] = [];
-    const movingBounds = movingObj.getBoundingRect();
+    const movingBounds = getLogicalBounds(movingObj);
     const movingCenterX = movingBounds.left + movingBounds.width / 2;
     const movingCenterY = movingBounds.top + movingBounds.height / 2;
 
     canvas.getObjects().forEach((obj) => {
       if (obj === movingObj || (obj as fabric.FabricObject & { _isSnapGuide?: boolean })._isSnapGuide) return;
-      const bounds = obj.getBoundingRect();
+      const bounds = getLogicalBounds(obj);
       const centerX = bounds.left + bounds.width / 2;
       const centerY = bounds.top + bounds.height / 2;
 
