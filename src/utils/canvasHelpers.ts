@@ -1,7 +1,7 @@
 import { Canvas, FabricObject, Polygon, Point } from 'fabric';
 
 export function getCanvasObjects(canvas: Canvas): FabricObject[] {
-  return canvas.getObjects().filter((obj) => (obj as FabricObject & { name?: string }).name !== 'artboard' && (obj as FabricObject & { name?: string }).name !== 'grid');
+  return canvas.getObjects().filter((obj) => (obj as FabricObject & { name?: string }).name !== 'artboard' && (obj as FabricObject & { name?: string }).name !== 'grid' && (obj as FabricObject & { name?: string }).name !== 'pen-preview');
 }
 
 export function findObjectById(canvas: Canvas, id: string): FabricObject | undefined {

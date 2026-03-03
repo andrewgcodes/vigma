@@ -277,6 +277,18 @@ const CanvasArea = forwardRef<CanvasAreaHandle, CanvasAreaProps>(({ onLayersChan
     canvas.selection = tool === 'select';
     canvas.defaultCursor = 'default';
 
+    // Clean up pen tool state when switching away
+    if (tool !== 'pen') {
+      const penPreviews = canvas.getObjects().filter(
+        (o) => (o as FabricObject & { name?: string }).name === 'pen-preview'
+      );
+      if (penPreviews.length > 0) {
+        penPreviews.forEach((o) => canvas.remove(o));
+      }
+      penPointsRef.current = [];
+      penPreviewRef.current = null;
+    }
+
     if (tool === 'hand') {
       canvas.defaultCursor = 'grab';
       canvas.selection = false;
