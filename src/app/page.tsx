@@ -82,6 +82,10 @@ export default function DesignPage() {
   // the same object ID appears in multiple concurrent remote batches (the count
   // ensures the guard stays up until ALL batches processing that ID have completed).
   const remoteObjectIdsRef = useRef<Map<string, number>>(new Map())
+  // Guard to prevent auto-save from persisting the empty canvas during
+  // the gap between clearCanvas() and loadFromJSON() completing when
+  // leaving a room or switching rooms via URL hash change.
+  const isReloadingSoloRef = useRef(false)
 
   // Panel resize handlers
   const handleResizeStart = useCallback((side: 'left' | 'right', e: React.MouseEvent) => {
@@ -432,6 +436,7 @@ export default function DesignPage() {
         setComments([])
         setConnectionStatus('disconnected')
         if (engineRef.current) {
+          isReloadingSoloRef.current = true
           engineRef.current.clearCanvas()
           // Reload solo project from localStorage
           const savedPages = localStorage.getItem('vigma-pages')
@@ -440,10 +445,17 @@ export default function DesignPage() {
               const parsed = JSON.parse(savedPages)
               if (parsed.pages?.[0]?.canvasJSON) {
                 engineRef.current.loadFromJSON(parsed.pages[0].canvasJSON).then(() => {
+                  isReloadingSoloRef.current = false
                   refreshLayers()
                 })
+              } else {
+                isReloadingSoloRef.current = false
               }
-            } catch (e) { /* ignore corrupt data */ }
+            } catch (e) {
+              isReloadingSoloRef.current = false
+            }
+          } else {
+            isReloadingSoloRef.current = false
           }
         }
       }
@@ -700,6 +712,7 @@ export default function DesignPage() {
     // auto-saved to localStorage, bleeding into future sessions.
     const engine = engineRef.current
     if (engine) {
+      isReloadingSoloRef.current = true
       engine.clearCanvas()
       try {
         const savedPages = localStorage.getItem('vigma-pages')
@@ -708,11 +721,17 @@ export default function DesignPage() {
           const currentPage = parsed.pages?.find((p: any) => p.id === parsed.currentPageId) || parsed.pages?.[0]
           if (currentPage?.canvasJSON) {
             engine.loadFromJSON(currentPage.canvasJSON).then(() => {
+              isReloadingSoloRef.current = false
               refreshLayers()
             })
+          } else {
+            isReloadingSoloRef.current = false
           }
+        } else {
+          isReloadingSoloRef.current = false
         }
       } catch (e) {
+        isReloadingSoloRef.current = false
         console.warn('Failed to reload solo project after leaving room', e)
       }
     }
@@ -1265,6 +1284,9 @@ export default function DesignPage() {
     if (!engine) return
     // Don't save to localStorage while in a collaboration room
     if (collabRef.current) return
+    // Don't save while transitioning from room back to solo mode
+    // (canvas is temporarily empty between clearCanvas and loadFromJSON)
+    if (isReloadingSoloRef.current) return
     try {
       const store = useDesignStore.getState()
       // Snapshot the live canvas into the current page's canvasJSON
