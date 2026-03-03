@@ -9,6 +9,7 @@ import LayersPanel from '@/components/LayersPanel'
 import PagesPanel from '@/components/PagesPanel'
 import PropertiesPanel from '@/components/PropertiesPanel'
 import ContextMenu from '@/components/ContextMenu'
+import Rulers from '@/components/Rulers'
 import { v4 as uuidv4 } from 'uuid'
 import type { ToolType } from '@/types/design'
 
@@ -771,6 +772,16 @@ export default function DesignPage() {
           />
         </div>
       )}
+
+      {/* Rulers */}
+      <Rulers
+        zoom={zoom}
+        panX={viewport.panX}
+        panY={viewport.panY}
+        showRulers={showRulers}
+        leftOffset={leftPanelOpen ? 240 : 0}
+        topOffset={44}
+      />
 
       {/* Canvas */}
       <div
