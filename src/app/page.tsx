@@ -342,16 +342,12 @@ export default function DesignPage() {
       if (ctrl) {
         switch (e.key.toLowerCase()) {
           case 'z':
-            if (shift) { engine.redo(); } else { engine.undo(); }
+            if (shift) { engine.redo().then(() => { refreshLayers(); refreshObjectProps() }); } else { engine.undo().then(() => { refreshLayers(); refreshObjectProps() }); }
             e.preventDefault()
-            refreshLayers()
-            refreshObjectProps()
             return
           case 'y':
-            engine.redo()
+            engine.redo().then(() => { refreshLayers(); refreshObjectProps() })
             e.preventDefault()
-            refreshLayers()
-            refreshObjectProps()
             return
           case 'c': engine.copy(); e.preventDefault(); return
           case 'x': engine.cut().then(() => refreshLayers()); e.preventDefault(); return
@@ -646,6 +642,57 @@ export default function DesignPage() {
     refreshObjectProps()
   }, [])
 
+  const handleBlendModeChange = useCallback((mode: string) => {
+    engineRef.current?.setBlendMode(mode)
+    refreshObjectProps()
+  }, [])
+
+  const handleStrokePositionChange = useCallback((position: 'center' | 'inside' | 'outside') => {
+    engineRef.current?.setStrokePosition(position)
+    refreshObjectProps()
+  }, [])
+
+  const handleIndividualCornerChange = useCallback((corners: { tl: number, tr: number, br: number, bl: number }) => {
+    engineRef.current?.setIndividualCornerRadius(corners)
+    refreshObjectProps()
+  }, [])
+
+  const handleBlurChange = useCallback((blur: number) => {
+    engineRef.current?.setLayerBlur(blur)
+    refreshObjectProps()
+  }, [])
+
+  const handleInnerShadowChange = useCallback((config: { color: string, blur: number, offsetX: number, offsetY: number }) => {
+    engineRef.current?.setInnerShadow(config)
+    refreshObjectProps()
+  }, [])
+
+  const handleExportSelected = useCallback((format: string, scale: number) => {
+    const engine = engineRef.current
+    if (!engine) return
+    let dataURL: string | null = null
+    if (format === 'png') dataURL = engine.exportSelectedToPNG(scale)
+    else if (format === 'svg') dataURL = engine.exportSelectedToSVG()
+    else if (format === 'jpg') dataURL = engine.exportSelectedToJPG(scale)
+    if (dataURL) downloadDataURL(dataURL, `selection.${format}`)
+  }, [])
+
+  const handleCropImage = useCallback((crop: { left: number, top: number, width: number, height: number }) => {
+    engineRef.current?.cropImage(crop)
+    refreshObjectProps()
+  }, [])
+
+  const handleResetCrop = useCallback(() => {
+    engineRef.current?.resetCrop()
+    refreshObjectProps()
+  }, [])
+
+  const handleFlatten = useCallback(() => {
+    engineRef.current?.flattenSelected()
+    refreshLayers()
+    refreshObjectProps()
+  }, [])
+
   // DROP handler for images
   useEffect(() => {
     const handleDrop = async (e: DragEvent) => {
@@ -687,8 +734,8 @@ export default function DesignPage() {
         showGrid={showGrid}
         showRulers={showRulers}
         snapToGrid={snapToGrid}
-        onUndo={() => { engineRef.current?.undo(); setTimeout(() => { refreshLayers(); refreshObjectProps() }, 50) }}
-        onRedo={() => { engineRef.current?.redo(); setTimeout(() => { refreshLayers(); refreshObjectProps() }, 50) }}
+                onUndo={() => { engineRef.current?.undo().then(() => { refreshLayers(); refreshObjectProps() }) }}
+                onRedo={() => { engineRef.current?.redo().then(() => { refreshLayers(); refreshObjectProps() }) }}
         onZoomIn={() => engineRef.current?.zoomIn()}
         onZoomOut={() => engineRef.current?.zoomOut()}
         onZoomReset={() => engineRef.current?.resetZoom()}
@@ -798,6 +845,15 @@ export default function DesignPage() {
             onStrokeDashChange={handleStrokeDashChange}
             onAlignObjects={(align) => { engineRef.current?.alignObjects(align as any); refreshObjectProps() }}
             onDistribute={(dir) => { engineRef.current?.distributeObjects(dir); refreshObjectProps() }}
+            onBlendModeChange={handleBlendModeChange}
+            onStrokePositionChange={handleStrokePositionChange}
+            onIndividualCornerChange={handleIndividualCornerChange}
+            onBlurChange={handleBlurChange}
+            onInnerShadowChange={handleInnerShadowChange}
+            onExportSelected={handleExportSelected}
+            onCropImage={handleCropImage}
+            onResetCrop={handleResetCrop}
+            onFlatten={handleFlatten}
           />
         </div>
       )}
@@ -854,8 +910,15 @@ export default function DesignPage() {
             refreshObjectProps()
           }
         }}
+        onBooleanUnion={() => { engineRef.current?.booleanUnion(); refreshLayers(); refreshObjectProps() }}
+        onBooleanSubtract={() => { engineRef.current?.booleanSubtract(); refreshLayers(); refreshObjectProps() }}
+        onBooleanIntersect={() => { engineRef.current?.booleanIntersect(); refreshLayers(); refreshObjectProps() }}
+        onBooleanExclude={() => { engineRef.current?.booleanExclude(); refreshLayers(); refreshObjectProps() }}
+        onMask={() => { engineRef.current?.applyMask(); refreshLayers(); refreshObjectProps() }}
+        onRemoveMask={() => { engineRef.current?.removeMask(); refreshLayers(); refreshObjectProps() }}
         hasSelection={selectedIds.length > 0}
         isLocked={objectProps?.locked || false}
+        multipleSelected={selectedIds.length > 1}
       />
     </div>
   )

@@ -9,7 +9,8 @@ import {
   AlignStartHorizontal, AlignCenterHorizontal, AlignEndHorizontal,
   ArrowUpToLine, ArrowDownToLine, ArrowUp, ArrowDown,
   Trash2, Copy, Clipboard, Scissors, Lock, Unlock,
-  Sun, Moon, Layers
+  Sun, Moon, Layers, Download, Crop, Sparkles,
+  Square
 } from 'lucide-react'
 import ColorPicker from './ColorPicker'
 
@@ -39,6 +40,30 @@ interface PropertiesPanelProps {
   onStrokeDashChange: (dash: number[]) => void
   onAlignObjects: (align: string) => void
   onDistribute: (dir: 'horizontal' | 'vertical') => void
+  onBlendModeChange?: (mode: string) => void
+  onStrokePositionChange?: (position: 'center' | 'inside' | 'outside') => void
+  onIndividualCornerChange?: (corners: { tl: number, tr: number, br: number, bl: number }) => void
+  onBlurChange?: (blur: number) => void
+  onInnerShadowChange?: (config: { color: string, blur: number, offsetX: number, offsetY: number }) => void
+  onExportSelected?: (format: string, scale: number) => void
+  onCropImage?: (crop: { left: number, top: number, width: number, height: number }) => void
+  onResetCrop?: () => void
+  onFlatten?: () => void
+}
+
+const BLEND_MODES = [
+  'source-over', 'multiply', 'screen', 'overlay', 'darken', 'lighten',
+  'color-dodge', 'color-burn', 'hard-light', 'soft-light', 'difference',
+  'exclusion', 'hue', 'saturation', 'color', 'luminosity'
+]
+
+const BLEND_MODE_LABELS: Record<string, string> = {
+  'source-over': 'Normal', 'multiply': 'Multiply', 'screen': 'Screen',
+  'overlay': 'Overlay', 'darken': 'Darken', 'lighten': 'Lighten',
+  'color-dodge': 'Color Dodge', 'color-burn': 'Color Burn',
+  'hard-light': 'Hard Light', 'soft-light': 'Soft Light',
+  'difference': 'Difference', 'exclusion': 'Exclusion',
+  'hue': 'Hue', 'saturation': 'Saturation', 'color': 'Color', 'luminosity': 'Luminosity',
 }
 
 export default function PropertiesPanel({
@@ -67,12 +92,28 @@ export default function PropertiesPanel({
   onStrokeDashChange,
   onAlignObjects,
   onDistribute,
+  onBlendModeChange,
+  onStrokePositionChange,
+  onIndividualCornerChange,
+  onBlurChange,
+  onInnerShadowChange,
+  onExportSelected,
+  onCropImage,
+  onResetCrop,
+  onFlatten,
 }: PropertiesPanelProps) {
   const [shadowEnabled, setShadowEnabled] = useState(false)
   const [shadowConfig, setShadowConfig] = useState({ color: 'rgba(0,0,0,0.25)', blur: 10, offsetX: 0, offsetY: 4 })
   const [fillType, setFillType] = useState<'solid' | 'gradient'>('solid')
   const [gradientColor1, setGradientColor1] = useState('#4A90D9')
   const [gradientColor2, setGradientColor2] = useState('#50C878')
+  const [showIndividualCorners, setShowIndividualCorners] = useState(false)
+  const [individualCorners, setIndividualCorners] = useState({ tl: 0, tr: 0, br: 0, bl: 0 })
+  const [innerShadowEnabled, setInnerShadowEnabled] = useState(false)
+  const [innerShadowConfig, setInnerShadowConfig] = useState({ color: 'rgba(0,0,0,0.25)', blur: 10, offsetX: 0, offsetY: 4 })
+  const [effectType, setEffectType] = useState<'drop-shadow' | 'inner-shadow' | 'layer-blur'>('drop-shadow')
+  const [exportScale, setExportScale] = useState(2)
+  const [exportFormat, setExportFormat] = useState('png')
 
   // Sync shadow state with selected object
   useEffect(() => {
@@ -106,6 +147,26 @@ export default function PropertiesPanel({
     }
   }, [objectProps?.fill, objectProps?.id])
 
+  // Sync inner shadow
+  useEffect(() => {
+    if (objectProps?.innerShadow) {
+      setInnerShadowEnabled(true)
+      setInnerShadowConfig(objectProps.innerShadow)
+    } else {
+      setInnerShadowEnabled(false)
+    }
+  }, [objectProps?.innerShadow, objectProps?.id])
+
+  // Sync individual corners
+  useEffect(() => {
+    if (objectProps?.cornerRadii) {
+      setShowIndividualCorners(true)
+      setIndividualCorners(objectProps.cornerRadii)
+    } else {
+      setShowIndividualCorners(false)
+    }
+  }, [objectProps?.cornerRadii, objectProps?.id])
+
   if (!objectProps) {
     return (
       <div className="flex flex-col h-full">
@@ -120,7 +181,8 @@ export default function PropertiesPanel({
   }
 
   const isText = objectProps.type === 'textbox' || objectProps.type === 'i-text'
-  const isRect = objectProps.type === 'rect'
+  const isRect = objectProps.type === 'rect' || objectProps.isRect
+  const isImage = objectProps.isImage
   const fillColor = typeof objectProps.fill === 'string' ? objectProps.fill : '#4A90D9'
 
   return (
@@ -213,12 +275,28 @@ export default function PropertiesPanel({
         {/* Corner Radius for Rects */}
         {isRect && (
           <Section title="Corner Radius">
-            <PropInput
-              label="R"
-              value={objectProps.rx || 0}
-              onChange={(v) => onCornerRadiusChange(v)}
-              min={0}
-            />
+            <div className="space-y-2">
+              {!showIndividualCorners ? (
+                <div className="flex items-center gap-2">
+                  <div className="flex-1">
+                    <PropInput label="R" value={objectProps.rx || 0} onChange={(v) => onCornerRadiusChange(v)} min={0} />
+                  </div>
+                  <button onClick={() => setShowIndividualCorners(true)} className="p-1.5 rounded-lg bg-canvas-bg hover:bg-canvas-hover border border-canvas-border text-canvas-text-tertiary" title="Individual corners">
+                    <Square size={12} />
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-2 gap-2">
+                    <PropInput label="TL" value={individualCorners.tl} onChange={(v) => { const c = { ...individualCorners, tl: v }; setIndividualCorners(c); onIndividualCornerChange?.(c) }} min={0} />
+                    <PropInput label="TR" value={individualCorners.tr} onChange={(v) => { const c = { ...individualCorners, tr: v }; setIndividualCorners(c); onIndividualCornerChange?.(c) }} min={0} />
+                    <PropInput label="BL" value={individualCorners.bl} onChange={(v) => { const c = { ...individualCorners, bl: v }; setIndividualCorners(c); onIndividualCornerChange?.(c) }} min={0} />
+                    <PropInput label="BR" value={individualCorners.br} onChange={(v) => { const c = { ...individualCorners, br: v }; setIndividualCorners(c); onIndividualCornerChange?.(c) }} min={0} />
+                  </div>
+                  <button onClick={() => { setShowIndividualCorners(false); const avg = Math.round((individualCorners.tl + individualCorners.tr + individualCorners.br + individualCorners.bl) / 4); onCornerRadiusChange(avg) }} className="text-xxs text-canvas-accent hover:underline">Uniform radius</button>
+                </>
+              )}
+            </div>
           </Section>
         )}
 
@@ -241,6 +319,13 @@ export default function PropertiesPanel({
               </span>
             </div>
           </div>
+        </Section>
+
+        {/* Blend Mode */}
+        <Section title="Blend Mode">
+          <select value={objectProps.blendMode || 'source-over'} onChange={(e) => onBlendModeChange?.(e.target.value)} className="w-full text-xs bg-canvas-bg border border-canvas-border rounded-lg px-2 py-1.5 focus:outline-none focus:border-canvas-accent text-canvas-text">
+            {BLEND_MODES.map(mode => (<option key={mode} value={mode}>{BLEND_MODE_LABELS[mode] || mode}</option>))}
+          </select>
         </Section>
 
         {/* Fill */}
@@ -310,50 +395,92 @@ export default function PropertiesPanel({
               color={objectProps.stroke || '#000000'}
               onChange={(c) => onStrokeChange(c, objectProps.strokeWidth || 1)}
             />
-            <PropInput
-              label="Width"
-              value={objectProps.strokeWidth || 0}
-              onChange={(v) => onStrokeChange(objectProps.stroke || '#000000', v)}
-              min={0}
-            />
+            <div className="grid grid-cols-2 gap-2">
+              <PropInput label="Width" value={objectProps.strokeWidth || 0} onChange={(v) => onStrokeChange(objectProps.stroke || '#000000', v)} min={0} />
+              <div>
+                <span className="text-xxs text-canvas-text-tertiary">Position</span>
+                <select value={objectProps.strokePosition || 'center'} onChange={(e) => onStrokePositionChange?.(e.target.value as 'center' | 'inside' | 'outside')} className="w-full text-xs bg-canvas-bg border border-canvas-border rounded-lg px-1.5 py-1 focus:outline-none focus:border-canvas-accent text-canvas-text mt-0.5">
+                  <option value="center">Center</option>
+                  <option value="inside">Inside</option>
+                  <option value="outside">Outside</option>
+                </select>
+              </div>
+            </div>
             <div className="flex gap-1">
-              <button onClick={() => onStrokeDashChange([])} className="flex-1 text-xxs py-1 rounded-md bg-canvas-bg border border-canvas-border">Solid</button>
-              <button onClick={() => onStrokeDashChange([5, 5])} className="flex-1 text-xxs py-1 rounded-md bg-canvas-bg border border-canvas-border">Dashed</button>
-              <button onClick={() => onStrokeDashChange([2, 2])} className="flex-1 text-xxs py-1 rounded-md bg-canvas-bg border border-canvas-border">Dotted</button>
+              <button onClick={() => onStrokeDashChange([])} className={`flex-1 text-xxs py-1 rounded-md border ${!objectProps.strokeDashArray || objectProps.strokeDashArray.length === 0 ? 'bg-canvas-accent text-white border-canvas-accent' : 'bg-canvas-bg border-canvas-border'}`}>Solid</button>
+              <button onClick={() => onStrokeDashChange([5, 5])} className={`flex-1 text-xxs py-1 rounded-md border ${objectProps.strokeDashArray?.length === 2 && objectProps.strokeDashArray[0] === 5 ? 'bg-canvas-accent text-white border-canvas-accent' : 'bg-canvas-bg border-canvas-border'}`}>Dashed</button>
+              <button onClick={() => onStrokeDashChange([2, 2])} className={`flex-1 text-xxs py-1 rounded-md border ${objectProps.strokeDashArray?.length === 2 && objectProps.strokeDashArray[0] === 2 ? 'bg-canvas-accent text-white border-canvas-accent' : 'bg-canvas-bg border-canvas-border'}`}>Dotted</button>
             </div>
           </div>
         </Section>
 
-        {/* Shadow */}
-        <Section title="Shadow">
+        {/* Effects (Drop Shadow, Inner Shadow, Layer Blur) */}
+        <Section title="Effects">
           <div className="space-y-2">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={shadowEnabled}
-                onChange={(e) => {
-                  setShadowEnabled(e.target.checked)
-                  if (e.target.checked) {
-                    onShadowChange(shadowConfig)
-                  } else {
-                    onShadowRemove()
-                  }
-                }}
-                className="w-3.5 h-3.5 rounded accent-canvas-accent"
-              />
-              <span className="text-xs text-canvas-text-secondary">Enable shadow</span>
-            </label>
-            {shadowEnabled && (
+            <div className="flex gap-1">
+              <button onClick={() => setEffectType('drop-shadow')} className={`flex-1 text-xxs py-1 rounded-md border ${effectType === 'drop-shadow' ? 'bg-canvas-accent text-white border-canvas-accent' : 'bg-canvas-bg border-canvas-border text-canvas-text-secondary'}`}>Drop Shadow</button>
+              <button onClick={() => setEffectType('inner-shadow')} className={`flex-1 text-xxs py-1 rounded-md border ${effectType === 'inner-shadow' ? 'bg-canvas-accent text-white border-canvas-accent' : 'bg-canvas-bg border-canvas-border text-canvas-text-secondary'}`}>Inner Shadow</button>
+              <button onClick={() => setEffectType('layer-blur')} className={`flex-1 text-xxs py-1 rounded-md border ${effectType === 'layer-blur' ? 'bg-canvas-accent text-white border-canvas-accent' : 'bg-canvas-bg border-canvas-border text-canvas-text-secondary'}`}>Blur</button>
+            </div>
+            {effectType === 'drop-shadow' && (
               <>
-                <PropInput label="Blur" value={shadowConfig.blur} onChange={(v) => { setShadowConfig(c => ({ ...c, blur: v })); onShadowChange({ ...shadowConfig, blur: v }) }} min={0} />
-                <div className="grid grid-cols-2 gap-2">
-                  <PropInput label="X" value={shadowConfig.offsetX} onChange={(v) => { setShadowConfig(c => ({ ...c, offsetX: v })); onShadowChange({ ...shadowConfig, offsetX: v }) }} />
-                  <PropInput label="Y" value={shadowConfig.offsetY} onChange={(v) => { setShadowConfig(c => ({ ...c, offsetY: v })); onShadowChange({ ...shadowConfig, offsetY: v }) }} />
-                </div>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={shadowEnabled} onChange={(e) => { setShadowEnabled(e.target.checked); if (e.target.checked) { onShadowChange(shadowConfig) } else { onShadowRemove() } }} className="w-3.5 h-3.5 rounded accent-canvas-accent" />
+                  <span className="text-xs text-canvas-text-secondary">Enable drop shadow</span>
+                </label>
+                {shadowEnabled && (
+                  <>
+                    <ColorPicker color={shadowConfig.color} onChange={(c) => { setShadowConfig(cfg => ({ ...cfg, color: c })); onShadowChange({ ...shadowConfig, color: c }) }} label="Color" />
+                    <PropInput label="Blur" value={shadowConfig.blur} onChange={(v) => { setShadowConfig(c => ({ ...c, blur: v })); onShadowChange({ ...shadowConfig, blur: v }) }} min={0} />
+                    <div className="grid grid-cols-2 gap-2">
+                      <PropInput label="X" value={shadowConfig.offsetX} onChange={(v) => { setShadowConfig(c => ({ ...c, offsetX: v })); onShadowChange({ ...shadowConfig, offsetX: v }) }} />
+                      <PropInput label="Y" value={shadowConfig.offsetY} onChange={(v) => { setShadowConfig(c => ({ ...c, offsetY: v })); onShadowChange({ ...shadowConfig, offsetY: v }) }} />
+                    </div>
+                  </>
+                )}
               </>
+            )}
+            {effectType === 'inner-shadow' && (
+              <>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={innerShadowEnabled} onChange={(e) => { setInnerShadowEnabled(e.target.checked); if (e.target.checked) { onInnerShadowChange?.(innerShadowConfig) } else { onShadowRemove() } }} className="w-3.5 h-3.5 rounded accent-canvas-accent" />
+                  <span className="text-xs text-canvas-text-secondary">Enable inner shadow</span>
+                </label>
+                {innerShadowEnabled && (
+                  <>
+                    <PropInput label="Blur" value={innerShadowConfig.blur} onChange={(v) => { setInnerShadowConfig(c => ({ ...c, blur: v })); onInnerShadowChange?.({ ...innerShadowConfig, blur: v }) }} min={0} />
+                    <div className="grid grid-cols-2 gap-2">
+                      <PropInput label="X" value={innerShadowConfig.offsetX} onChange={(v) => { setInnerShadowConfig(c => ({ ...c, offsetX: v })); onInnerShadowChange?.({ ...innerShadowConfig, offsetX: v }) }} />
+                      <PropInput label="Y" value={innerShadowConfig.offsetY} onChange={(v) => { setInnerShadowConfig(c => ({ ...c, offsetY: v })); onInnerShadowChange?.({ ...innerShadowConfig, offsetY: v }) }} />
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+            {effectType === 'layer-blur' && (
+              <div className="flex items-center gap-2">
+                <span className="text-xxs text-canvas-text-secondary w-10">Blur</span>
+                <input type="range" min="0" max="100" step="1" value={objectProps.blurAmount || 0} onChange={(e) => onBlurChange?.(parseInt(e.target.value))} className="flex-1 h-1.5 bg-canvas-border rounded-full accent-canvas-accent" />
+                <span className="text-xxs text-canvas-text-secondary w-8 text-right">{objectProps.blurAmount || 0}</span>
+              </div>
             )}
           </div>
         </Section>
+
+        {/* Image controls */}
+        {isImage && (
+          <Section title="Image">
+            <div className="space-y-2">
+              <button onClick={() => { const w = objectProps.width || 200; const h = objectProps.height || 200; onCropImage?.({ left: -w * 0.125, top: -h * 0.125, width: w * 0.75, height: h * 0.75 }) }} className="flex items-center gap-2 w-full px-2 py-1.5 rounded-lg border text-xs bg-canvas-bg border-canvas-border text-canvas-text-secondary hover:bg-canvas-hover transition-colors">
+                <Crop size={14} /> Crop Image
+              </button>
+              <button onClick={() => onResetCrop?.()} className="flex items-center gap-2 w-full px-2 py-1.5 rounded-lg border text-xs bg-canvas-bg border-canvas-border text-canvas-text-secondary hover:bg-canvas-hover transition-colors">Reset Crop</button>
+              <button onClick={() => onFlatten?.()} className="flex items-center gap-2 w-full px-2 py-1.5 rounded-lg border text-xs bg-canvas-bg border-canvas-border text-canvas-text-secondary hover:bg-canvas-hover transition-colors">
+                <Sparkles size={14} /> Flatten / Rasterize
+              </button>
+            </div>
+          </Section>
+        )}
 
         {/* Text Properties */}
         {isText && (
@@ -448,6 +575,34 @@ export default function PropertiesPanel({
             </Section>
           </>
         )}
+
+        {/* Per-Object Export */}
+        <Section title="Export Selected">
+          <div className="space-y-2">
+            <div className="flex gap-2">
+              <div className="flex-1">
+                <span className="text-xxs text-canvas-text-tertiary">Scale</span>
+                <select value={exportScale} onChange={(e) => setExportScale(Number(e.target.value))} className="w-full text-xs bg-canvas-bg border border-canvas-border rounded-lg px-1.5 py-1 focus:outline-none focus:border-canvas-accent text-canvas-text mt-0.5">
+                  <option value={1}>1x</option>
+                  <option value={2}>2x</option>
+                  <option value={3}>3x</option>
+                  <option value={4}>4x</option>
+                </select>
+              </div>
+              <div className="flex-1">
+                <span className="text-xxs text-canvas-text-tertiary">Format</span>
+                <select value={exportFormat} onChange={(e) => setExportFormat(e.target.value)} className="w-full text-xs bg-canvas-bg border border-canvas-border rounded-lg px-1.5 py-1 focus:outline-none focus:border-canvas-accent text-canvas-text mt-0.5">
+                  <option value="png">PNG</option>
+                  <option value="svg">SVG</option>
+                  <option value="jpg">JPG</option>
+                </select>
+              </div>
+            </div>
+            <button onClick={() => onExportSelected?.(exportFormat, exportScale)} className="flex items-center justify-center gap-2 w-full px-2 py-1.5 rounded-lg text-xs bg-canvas-accent text-white hover:bg-canvas-accent/90 transition-colors">
+              <Download size={14} /> Export Selection
+            </button>
+          </div>
+        </Section>
 
         {/* Order & Transform */}
         <Section title="Order">

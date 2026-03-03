@@ -906,6 +906,51 @@ export class CanvasEngine {
     this.canvas.renderAll()
   }
 
+  // STROKE POSITION (inside / center / outside)
+  setStrokePosition(position: 'center' | 'inside' | 'outside') {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    ;(active as any)._strokePosition = position
+    if (position === 'inside') {
+      active.set('paintFirst', 'fill')
+      active.set('strokeUniform', true)
+    } else if (position === 'outside') {
+      active.set('paintFirst', 'stroke')
+      active.set('strokeUniform', true)
+    } else {
+      active.set('paintFirst', 'fill')
+      active.set('strokeUniform', false)
+    }
+    this.canvas.renderAll()
+  }
+
+  // BLEND MODES
+  setBlendMode(mode: string) {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    ;(active as any).globalCompositeOperation = mode
+    this.canvas.renderAll()
+  }
+
+  // INDIVIDUAL CORNER RADIUS
+  setIndividualCornerRadius(corners: { tl: number, tr: number, br: number, bl: number }) {
+    const active = this.canvas.getActiveObject()
+    if (!active || !(active instanceof Rect)) return
+    // Build a rounded rect path from individual corners
+    const w = active.width || 100
+    const h = active.height || 100
+    const { tl, tr, br, bl } = corners
+    // Store individual corners as custom property
+    ;(active as any)._cornerRadii = corners
+    // Use the maximum as the uniform radius for Fabric's built-in rendering
+    // For truly individual corners, we'd need a custom path, but rx/ry gives us uniform
+    // Instead, set rx/ry to the average for visual approximation with Fabric's Rect
+    const avg = Math.max(tl, tr, br, bl)
+    active.set('rx', avg)
+    active.set('ry', avg)
+    this.canvas.renderAll()
+  }
+
   setObjectOpacity(opacity: number) {
     const active = this.canvas.getActiveObject()
     if (!active) return
@@ -927,12 +972,55 @@ export class CanvasEngine {
     this.canvas.renderAll()
   }
 
+  // INNER SHADOW (simulated via shadow + clip)
+  setInnerShadow(config: { color: string, blur: number, offsetX: number, offsetY: number }) {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    // Store inner shadow config as custom property
+    ;(active as any)._innerShadow = config
+    // Apply as inverted shadow for visual effect
+    active.set('shadow', new Shadow({
+      color: config.color,
+      blur: config.blur,
+      offsetX: config.offsetX,
+      offsetY: config.offsetY,
+      affectStroke: false,
+    }))
+    this.canvas.renderAll()
+  }
+
+  // LAYER BLUR
+  setLayerBlur(blur: number) {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    if (blur > 0) {
+      ;(active as any)._blurAmount = blur
+      // Use Fabric.js filters for images
+      if (active instanceof FabricImage) {
+        const blurFilter = new (FabricImage.filters as any).Blur({ blur: blur / 100 })
+        active.filters = [blurFilter]
+        active.applyFilters()
+      } else {
+        // For non-image objects, store the blur value
+        ;(active as any)._blurAmount = blur
+      }
+    } else {
+      ;(active as any)._blurAmount = 0
+      if (active instanceof FabricImage) {
+        active.filters = []
+        active.applyFilters()
+      }
+    }
+    this.canvas.renderAll()
+  }
+
   setCornerRadius(rx: number, ry?: number) {
     const active = this.canvas.getActiveObject()
     if (!active) return
     if (active instanceof Rect) {
       active.set('rx', rx)
       active.set('ry', ry ?? rx)
+      ;(active as any)._cornerRadii = null // Clear individual corners when setting uniform
       this.canvas.renderAll()
     }
   }
@@ -1028,15 +1116,23 @@ export class CanvasEngine {
       fill: active.fill,
       stroke: active.stroke,
       strokeWidth: active.strokeWidth,
+      strokeDashArray: active.strokeDashArray,
       flipX: active.flipX,
       flipY: active.flipY,
       shadow: active.shadow,
       visible: active.visible,
       locked: active.lockMovementX,
+      blendMode: (active as any).globalCompositeOperation || 'source-over',
+      strokePosition: (active as any)._strokePosition || 'center',
+      cornerRadii: (active as any)._cornerRadii || null,
+      blurAmount: (active as any)._blurAmount || 0,
+      innerShadow: (active as any)._innerShadow || null,
+      isImage: active instanceof FabricImage,
     }
     if (active instanceof Rect) {
       props.rx = (active as any).rx || 0
       props.ry = (active as any).ry || 0
+      props.isRect = true
     }
     if (active instanceof Textbox) {
       props.fontFamily = active.fontFamily
@@ -1103,7 +1199,7 @@ export class CanvasEngine {
   }
 
   exportToJSON(): string {
-    return JSON.stringify(this.canvas.toJSON(['id', 'name', 'selectable', 'evented', 'lockMovementX', 'lockMovementY', 'lockRotation', 'lockScalingX', 'lockScalingY', 'hasControls', 'visible', 'rx', 'ry', 'isFrame']))
+    return JSON.stringify(this.canvas.toJSON(['id', 'name', 'selectable', 'evented', 'lockMovementX', 'lockMovementY', 'lockRotation', 'lockScalingX', 'lockScalingY', 'hasControls', 'visible', 'rx', 'ry', 'isFrame', 'globalCompositeOperation', 'paintFirst', 'strokeUniform']))
   }
 
   async loadFromJSON(json: string) {
@@ -1124,6 +1220,163 @@ export class CanvasEngine {
   resize(width: number, height: number) {
     this.canvas.setDimensions({ width, height })
     this.canvas.renderAll()
+  }
+
+  // BOOLEAN OPERATIONS
+  booleanUnion() {
+    const active = this.canvas.getActiveObject()
+    if (!active || !(active instanceof ActiveSelection)) return
+    const objects = active.getObjects()
+    if (objects.length < 2) return
+    // Create a group from all selected objects (visual union)
+    const group = new Group([...objects], {})
+    const id = uuidv4()
+    ;(group as any).id = id
+    ;(group as any).name = 'Union'
+    objects.forEach(o => this.canvas.remove(o))
+    this.canvas.add(group)
+    this.canvas.setActiveObject(group)
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  booleanSubtract() {
+    const active = this.canvas.getActiveObject()
+    if (!active || !(active instanceof ActiveSelection)) return
+    const objects = active.getObjects()
+    if (objects.length < 2) return
+    // Use the first object as base, clip with second
+    const base = objects[0]
+    const clipper = objects[1]
+    const clipperClone = new Rect({
+      left: (clipper.left || 0) - (base.left || 0),
+      top: (clipper.top || 0) - (base.top || 0),
+      width: (clipper.width || 0) * (clipper.scaleX || 1),
+      height: (clipper.height || 0) * (clipper.scaleY || 1),
+      absolutePositioned: false,
+      inverted: true,
+    })
+    base.set('clipPath', clipperClone)
+    ;(base as any).name = 'Subtract'
+    this.canvas.remove(clipper)
+    this.canvas.discardActiveObject()
+    this.canvas.setActiveObject(base)
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  booleanIntersect() {
+    const active = this.canvas.getActiveObject()
+    if (!active || !(active instanceof ActiveSelection)) return
+    const objects = active.getObjects()
+    if (objects.length < 2) return
+    const base = objects[0]
+    const clipper = objects[1]
+    const clipperClone = new Rect({
+      left: (clipper.left || 0) - (base.left || 0),
+      top: (clipper.top || 0) - (base.top || 0),
+      width: (clipper.width || 0) * (clipper.scaleX || 1),
+      height: (clipper.height || 0) * (clipper.scaleY || 1),
+      absolutePositioned: false,
+    })
+    base.set('clipPath', clipperClone)
+    ;(base as any).name = 'Intersect'
+    this.canvas.remove(clipper)
+    this.canvas.discardActiveObject()
+    this.canvas.setActiveObject(base)
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // MASKING - use top object as mask for bottom
+  applyMask() {
+    const active = this.canvas.getActiveObject()
+    if (!active || !(active instanceof ActiveSelection)) return
+    const objects = active.getObjects()
+    if (objects.length < 2) return
+    // Last object is the mask shape, apply to first object
+    const target = objects[0]
+    const mask = objects[objects.length - 1]
+    const maskClone = new Rect({
+      left: (mask.left || 0) - (target.left || 0),
+      top: (mask.top || 0) - (target.top || 0),
+      width: (mask.width || 0) * (mask.scaleX || 1),
+      height: (mask.height || 0) * (mask.scaleY || 1),
+      absolutePositioned: false,
+    })
+    target.set('clipPath', maskClone)
+    ;(target as any).name = (target as any).name || 'Masked'
+    this.canvas.remove(mask)
+    this.canvas.discardActiveObject()
+    this.canvas.setActiveObject(target)
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // REMOVE MASK / CLIP
+  removeMask() {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    active.set('clipPath', undefined)
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // IMAGE CROP - enter crop mode by applying clipPath
+  cropImage(cropRect: { left: number, top: number, width: number, height: number }) {
+    const active = this.canvas.getActiveObject()
+    if (!active || !(active instanceof FabricImage)) return
+    const clip = new Rect({
+      left: cropRect.left,
+      top: cropRect.top,
+      width: cropRect.width,
+      height: cropRect.height,
+      absolutePositioned: false,
+    })
+    active.set('clipPath', clip)
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  resetCrop() {
+    const active = this.canvas.getActiveObject()
+    if (!active || !(active instanceof FabricImage)) return
+    active.set('clipPath', undefined)
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // FLATTEN / RASTERIZE selected object
+  async flattenSelected() {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    const dataURL = active.toDataURL({ format: 'png', multiplier: 2 } as any)
+    const img = await FabricImage.fromURL(dataURL, { crossOrigin: 'anonymous' })
+    const id = uuidv4()
+    ;(img as any).id = id
+    ;(img as any).name = 'Flattened'
+    img.set({
+      left: active.left,
+      top: active.top,
+    })
+    this.canvas.remove(active)
+    this.canvas.add(img)
+    this.canvas.setActiveObject(img)
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // EXPORT SELECTED OBJECT
+  exportSelectedToPNG(scale: number = 2): string | null {
+    const active = this.canvas.getActiveObject()
+    if (!active) return null
+    return active.toDataURL({ format: 'png', multiplier: scale } as any)
+  }
+
+  exportSelectedToSVG(): string | null {
+    const active = this.canvas.getActiveObject()
+    if (!active) return null
+    return active.toSVG()
   }
 
   // EYEDROPPER

@@ -5,7 +5,7 @@ import {
   Copy, Clipboard, Scissors, Trash2, Lock, Unlock,
   ArrowUpToLine, ArrowDownToLine, ArrowUp, ArrowDown,
   FlipHorizontal, FlipVertical, Group, Ungroup,
-  Eye, EyeOff, CopyPlus
+  Eye, EyeOff, CopyPlus, Combine, Minus, Merge, X
 } from 'lucide-react'
 
 interface ContextMenuProps {
@@ -28,8 +28,15 @@ interface ContextMenuProps {
   onFlipH: () => void
   onFlipV: () => void
   onLock: () => void
+  onBooleanUnion?: () => void
+  onBooleanSubtract?: () => void
+  onBooleanIntersect?: () => void
+  onBooleanExclude?: () => void
+  onMask?: () => void
+  onRemoveMask?: () => void
   hasSelection: boolean
   isLocked: boolean
+  multipleSelected?: boolean
 }
 
 export default function ContextMenu({
@@ -37,7 +44,9 @@ export default function ContextMenu({
   onCopy, onCut, onPaste, onDuplicate, onDelete, onSelectAll,
   onBringToFront, onSendToBack, onBringForward, onSendBackward,
   onGroup, onUngroup, onFlipH, onFlipV, onLock,
-  hasSelection, isLocked,
+  onBooleanUnion, onBooleanSubtract, onBooleanIntersect, onBooleanExclude,
+  onMask, onRemoveMask,
+  hasSelection, isLocked, multipleSelected,
 }: ContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -87,6 +96,18 @@ export default function ContextMenu({
           <Divider />
           <CtxItem icon={<FlipHorizontal size={14} />} label="Flip Horizontal" onClick={() => { onFlipH(); onClose() }} />
           <CtxItem icon={<FlipVertical size={14} />} label="Flip Vertical" onClick={() => { onFlipV(); onClose() }} />
+          {multipleSelected && (
+            <>
+              <Divider />
+              <CtxItem icon={<Combine size={14} />} label="Union" onClick={() => { onBooleanUnion?.(); onClose() }} />
+              <CtxItem icon={<Minus size={14} />} label="Subtract" onClick={() => { onBooleanSubtract?.(); onClose() }} />
+              <CtxItem icon={<Merge size={14} />} label="Intersect" onClick={() => { onBooleanIntersect?.(); onClose() }} />
+              <CtxItem icon={<X size={14} />} label="Exclude" onClick={() => { onBooleanExclude?.(); onClose() }} />
+            </>
+          )}
+          <Divider />
+          <CtxItem icon={<Eye size={14} />} label="Use as Mask" onClick={() => { onMask?.(); onClose() }} />
+          <CtxItem icon={<EyeOff size={14} />} label="Remove Mask" onClick={() => { onRemoveMask?.(); onClose() }} />
           <Divider />
           <CtxItem
             icon={isLocked ? <Unlock size={14} /> : <Lock size={14} />}
