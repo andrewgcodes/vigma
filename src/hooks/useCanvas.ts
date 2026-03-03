@@ -20,6 +20,9 @@ type ExtendedFabricObject = fabric.FabricObject & {
   isFrame?: boolean;
 };
 
+// Register custom properties so they are included in toJSON/toObject serialization
+fabric.FabricObject.customProperties = ['id', 'customName', 'isGrid', 'isFrame'];
+
 export function useCanvas() {
   const canvasRef = useRef<fabric.Canvas | null>(null);
   const canvasElRef = useRef<HTMLCanvasElement | null>(null);
@@ -56,6 +59,7 @@ export function useCanvas() {
   const saveHistory = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+    // Custom properties are registered via FabricObject.customProperties above
     const json = JSON.stringify(canvas.toJSON());
     pushHistory({ json, timestamp: Date.now() });
   }, [pushHistory]);
@@ -690,12 +694,20 @@ export function useCanvas() {
     saveHistory();
   }, [saveHistory]);
 
-  const copySelected = useCallback(() => {
+  const copySelected = useCallback(async () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const activeObjects = canvas.getActiveObjects();
     if (activeObjects.length === 0) return;
-    clipboardRef.current = activeObjects;
+    // Clone objects for clipboard so paste uses independent copies
+    const clones: fabric.FabricObject[] = [];
+    for (const obj of activeObjects) {
+      const cloned = await obj.clone();
+      // Preserve absolute position for single objects
+      cloned.set({ left: obj.left, top: obj.top });
+      clones.push(cloned);
+    }
+    clipboardRef.current = clones;
   }, []);
 
   const cutSelected = useCallback(() => {
@@ -804,14 +816,28 @@ export function useCanvas() {
     if (!activeObj || !(activeObj instanceof fabric.Group)) return;
 
     const items = (activeObj as fabric.Group).getObjects();
-    const groupLeft = activeObj.left ?? 0;
-    const groupTop = activeObj.top ?? 0;
+    // Use the group's transform matrix to compute absolute positions
+    const groupTransform = activeObj.calcTransformMatrix();
     canvas.remove(activeObj);
     const newObjects: fabric.FabricObject[] = [];
     items.forEach((item) => {
+      // Calculate absolute position using the group's transform matrix
+      const itemTransform = item.calcTransformMatrix();
+      // Multiply group transform by item transform to get absolute transform
+      const absoluteTransform = fabric.util.multiplyTransformMatrices(
+        groupTransform,
+        itemTransform
+      );
+      // Decompose the absolute transform to get position, scale, rotation
+      const decomposed = fabric.util.qrDecompose(absoluteTransform);
       item.set({
-        left: (item.left ?? 0) + groupLeft,
-        top: (item.top ?? 0) + groupTop,
+        left: decomposed.translateX,
+        top: decomposed.translateY,
+        scaleX: decomposed.scaleX,
+        scaleY: decomposed.scaleY,
+        angle: decomposed.angle,
+        flipX: false,
+        flipY: false,
       });
       item.setCoords();
       canvas.add(item);
@@ -1005,6 +1031,10 @@ export function useCanvas() {
       top: Math.round(active.top ?? 0),
       width: Math.round((active.width ?? 0) * (active.scaleX ?? 1)),
       height: Math.round((active.height ?? 0) * (active.scaleY ?? 1)),
+      baseWidth: active.width ?? 0,
+      baseHeight: active.height ?? 0,
+      scaleX: active.scaleX ?? 1,
+      scaleY: active.scaleY ?? 1,
       angle: Math.round(active.angle ?? 0),
       opacity: Math.round((active.opacity ?? 1) * 100),
       fill: (active.fill as string) || '#000000',

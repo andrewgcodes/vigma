@@ -142,9 +142,9 @@ export default function PropertiesPanel({
                     value={props.width as number}
                     onChange={(e) => {
                       const newWidth = Number(e.target.value);
-                      const currentWidth = props.width as number;
-                      if (currentWidth > 0) {
-                        setObjectProperty('scaleX', newWidth / ((props.width as number) / ((props as Record<string, unknown>).scaleX as number || 1)));
+                      const baseWidth = (props.baseWidth as number) || 1;
+                      if (baseWidth > 0) {
+                        setObjectProperty('scaleX', newWidth / baseWidth);
                       }
                     }}
                   />
@@ -157,9 +157,9 @@ export default function PropertiesPanel({
                     value={props.height as number}
                     onChange={(e) => {
                       const newHeight = Number(e.target.value);
-                      const currentHeight = props.height as number;
-                      if (currentHeight > 0) {
-                        setObjectProperty('scaleY', newHeight / ((props.height as number) / ((props as Record<string, unknown>).scaleY as number || 1)));
+                      const baseHeight = (props.baseHeight as number) || 1;
+                      if (baseHeight > 0) {
+                        setObjectProperty('scaleY', newHeight / baseHeight);
                       }
                     }}
                   />
