@@ -37,7 +37,6 @@ export function useCanvas() {
     setZoom,
     setSelectedObjectIds,
     setLayers,
-    addLayer,
     fillColor,
     strokeColor,
     strokeWidth,
@@ -248,7 +247,7 @@ export function useCanvas() {
         canvas.setActiveObject(text);
         text.enterEditing();
         isDrawing.current = false;
-        addLayer({ id, name: 'Text', type: 'textbox', visible: true, locked: false });
+        // syncLayers() already ran via the object:added event, no need for addLayer
         saveHistory();
         setActiveTool('select');
         return;
@@ -440,15 +439,7 @@ export function useCanvas() {
 
         canvas.setActiveObject(finalObject);
         saveHistory();
-        const id = (finalObject as fabric.FabricObject & { id?: string }).id || '';
-        const name = (finalObject as fabric.FabricObject & { name?: string }).name || 'Object';
-        addLayer({
-          id,
-          name,
-          type: finalObject.type || 'object',
-          visible: true,
-          locked: false,
-        });
+        // syncLayers() already ran via the object:added event, no need for addLayer
         currentShape.current = null;
         isDrawing.current = false;
         setActiveTool('select');

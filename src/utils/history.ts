@@ -10,6 +10,12 @@ export class HistoryManager {
   private onRestoreCallbacks: Array<() => void> = [];
 
   init(canvas: fabric.Canvas) {
+    // Reset all state to prevent stale data from previous canvas instances
+    this.undoStack = [];
+    this.redoStack = [];
+    this.onChangeCallbacks = [];
+    this.onRestoreCallbacks = [];
+    this.isRestoring = false;
     this.canvas = canvas;
     this.saveState();
   }
@@ -44,7 +50,7 @@ export class HistoryManager {
   }
 
   async undo() {
-    if (!this.canvas || this.undoStack.length <= 1) return;
+    if (!this.canvas || this.undoStack.length <= 1 || this.isRestoring) return;
     this.isRestoring = true;
     const current = this.undoStack.pop();
     if (current) this.redoStack.push(current);
@@ -59,7 +65,7 @@ export class HistoryManager {
   }
 
   async redo() {
-    if (!this.canvas || this.redoStack.length === 0) return;
+    if (!this.canvas || this.redoStack.length === 0 || this.isRestoring) return;
     this.isRestoring = true;
     const next = this.redoStack.pop();
     if (next) {
