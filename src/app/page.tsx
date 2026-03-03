@@ -296,7 +296,7 @@ export default function Home() {
     const activeObj = canvas.getActiveObject();
     if (activeObj) {
       activeObj.clone().then((cloned: fabric.FabricObject) => {
-        const json = JSON.stringify(cloned.toJSON());
+        const json = JSON.stringify((cloned as unknown as { toJSON(props: string[]): object }).toJSON(['id', 'name']));
         setClipboardData(json);
       });
     }
@@ -308,7 +308,7 @@ export default function Home() {
     const activeObj = canvas.getActiveObject();
     if (activeObj) {
       activeObj.clone().then((cloned: fabric.FabricObject) => {
-        const json = JSON.stringify(cloned.toJSON());
+        const json = JSON.stringify((cloned as unknown as { toJSON(props: string[]): object }).toJSON(['id', 'name']));
         setClipboardData(json);
         const activeObjs = canvas.getActiveObjects();
         activeObjs.forEach((obj) => canvas.remove(obj));
@@ -342,7 +342,7 @@ export default function Home() {
           setCanUndo(historyRef.current.canUndo);
           setCanRedo(historyRef.current.canRedo);
           // Update clipboard so next paste cascades offset
-          setClipboardData(JSON.stringify(obj.toJSON()));
+          setClipboardData(JSON.stringify((obj as unknown as { toJSON(props: string[]): object }).toJSON(['id', 'name'])));
         }
       });
     } catch { /* ignore */ }

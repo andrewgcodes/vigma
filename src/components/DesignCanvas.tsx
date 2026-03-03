@@ -331,6 +331,14 @@ export default function DesignCanvas({ canvasRef, historyRef }: DesignCanvasProp
     const canvas = canvasRef.current;
     if (!canvas) return;
 
+    // Cancel any in-progress drag-to-draw when tool changes
+    if (isDrawingRef.current && drawingObjRef.current) {
+      canvas.remove(drawingObjRef.current);
+      isDrawingRef.current = false;
+      drawingObjRef.current = null;
+      canvas.renderAll();
+    }
+
     if (activeTool === "pen") {
       canvas.isDrawingMode = true;
       canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
@@ -731,7 +739,7 @@ export default function DesignCanvas({ canvasRef, historyRef }: DesignCanvasProp
         const activeObj = canvas.getActiveObject();
         if (activeObj) {
           activeObj.clone().then((cloned: fabric.FabricObject) => {
-            const json = JSON.stringify(cloned.toJSON());
+            const json = JSON.stringify((cloned as unknown as { toJSON(props: string[]): object }).toJSON(['id', 'name']));
             setClipboardData(json);
           });
         }
@@ -744,7 +752,7 @@ export default function DesignCanvas({ canvasRef, historyRef }: DesignCanvasProp
         const activeObj = canvas.getActiveObject();
         if (activeObj) {
           activeObj.clone().then((cloned: fabric.FabricObject) => {
-            const json = JSON.stringify(cloned.toJSON());
+            const json = JSON.stringify((cloned as unknown as { toJSON(props: string[]): object }).toJSON(['id', 'name']));
             setClipboardData(json);
             const activeObjs = canvas.getActiveObjects();
             activeObjs.forEach((obj) => canvas.remove(obj));
@@ -779,7 +787,7 @@ export default function DesignCanvas({ canvasRef, historyRef }: DesignCanvasProp
                 canvas.renderAll();
                 saveHistory();
                 // Update clipboard so next paste cascades offset
-                setClipboardData(JSON.stringify(obj.toJSON()));
+                setClipboardData(JSON.stringify((obj as unknown as { toJSON(props: string[]): object }).toJSON(['id', 'name'])));
               }
             });
           } catch {
