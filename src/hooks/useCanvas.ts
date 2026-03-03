@@ -122,11 +122,17 @@ export function useCanvas() {
       padding: 4,
     });
 
+    // Register custom properties so they survive toJSON/loadFromJSON round-trips
+    fabric.FabricObject.customProperties = ['id', 'name'];
+
     fabricRef.current = canvas;
     historyManager.init(canvas);
     historyManager.onChange((canUndo, canRedo) => {
       setCanUndo(canUndo);
       setCanRedo(canRedo);
+    });
+    historyManager.onRestore(() => {
+      syncLayers();
     });
 
     canvas.on('selection:created', () => {
@@ -178,7 +184,6 @@ export function useCanvas() {
 
     canvas.on('object:removed', () => {
       syncLayers();
-      saveHistory();
     });
 
     const handleResize = () => {
@@ -403,8 +408,17 @@ export function useCanvas() {
     canvas.on('mouse:up', () => {
       if (isPanning.current) {
         isPanning.current = false;
-        canvas.selection = true;
-        canvas.setCursor('default');
+        const tool = activeToolRef.current;
+        if (tool === 'select') {
+          canvas.selection = true;
+          canvas.setCursor('default');
+        } else if (tool === 'hand') {
+          canvas.selection = false;
+          canvas.setCursor('grab');
+        } else {
+          canvas.selection = false;
+          canvas.setCursor('crosshair');
+        }
         return;
       }
 

@@ -7,6 +7,7 @@ export class HistoryManager {
   private isRestoring = false;
   private maxHistory = 50;
   private onChangeCallbacks: Array<(canUndo: boolean, canRedo: boolean) => void> = [];
+  private onRestoreCallbacks: Array<() => void> = [];
 
   init(canvas: fabric.Canvas) {
     this.canvas = canvas;
@@ -15,6 +16,14 @@ export class HistoryManager {
 
   onChange(cb: (canUndo: boolean, canRedo: boolean) => void) {
     this.onChangeCallbacks.push(cb);
+  }
+
+  onRestore(cb: () => void) {
+    this.onRestoreCallbacks.push(cb);
+  }
+
+  private notifyRestore() {
+    this.onRestoreCallbacks.forEach((cb) => cb());
   }
 
   private notify() {
@@ -46,6 +55,7 @@ export class HistoryManager {
     }
     this.isRestoring = false;
     this.notify();
+    this.notifyRestore();
   }
 
   async redo() {
@@ -59,6 +69,7 @@ export class HistoryManager {
     }
     this.isRestoring = false;
     this.notify();
+    this.notifyRestore();
   }
 
   get canUndo() {
