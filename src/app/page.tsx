@@ -1456,7 +1456,7 @@ export default function DesignPage() {
               <LayersPanel
                 layers={layers}
                 selectedIds={selectedIds}
-                onSelect={(id) => engineRef.current?.selectObjectById(id)}
+                onSelect={(id) => { setActiveTool('select'); engineRef.current?.selectObjectById(id); refreshObjectProps() }}
                 onToggleVisibility={(id) => { engineRef.current?.toggleVisibility(id); refreshLayers() }}
                 onToggleLock={(id) => {
                   const obj = engineRef.current?.canvas.getObjects().find((o: any) => o.id === id)
