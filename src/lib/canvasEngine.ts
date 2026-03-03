@@ -714,6 +714,10 @@ export class CanvasEngine {
     this.canvas.zoomToPoint(center, zoom)
     this.canvas.renderAll()
     this.onZoomChange?.(zoom)
+    const vpt = this.canvas.viewportTransform
+    if (vpt) {
+      this.onViewportChange?.(zoom, vpt[4], vpt[5])
+    }
   }
 
   zoomIn() {
