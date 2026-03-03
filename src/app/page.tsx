@@ -53,6 +53,8 @@ export default function DesignPage() {
   const [zoom, setZoom] = useState(1)
   const [contextMenu, setContextMenu] = useState({ visible: false, x: 0, y: 0, hasSelection: false, multipleSelected: false, isLocked: false })
   const [isDrawingShape, setIsDrawingShape] = useState(false)
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'just-saved'>('saved')
+  const saveStatusTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const drawStartRef = useRef<{ x: number; y: number } | null>(null)
   const previewObjRef = useRef<any>(null)
   const resizingRef = useRef<{ side: 'left' | 'right'; startX: number; startWidth: number } | null>(null)
@@ -1096,9 +1098,17 @@ export default function DesignPage() {
     }
   }, [])
 
-  // SAVE PROJECT (saves all pages)
+  // SAVE PROJECT (saves all pages) – called by Cmd+S and the "Save to Browser" menu item
   const handleSaveProject = useCallback(() => {
+    setSaveStatus('saving')
     persistAllPages()
+    // Clear any pending timeout so rapid Cmd+S presses don't fight
+    if (saveStatusTimeoutRef.current) clearTimeout(saveStatusTimeoutRef.current)
+    // Show "Saved!" confirmation briefly, then fade back to "saved"
+    setSaveStatus('just-saved')
+    saveStatusTimeoutRef.current = setTimeout(() => {
+      setSaveStatus('saved')
+    }, 2000)
   }, [persistAllPages])
 
   // Auto-save every 1 second (aggressive save to prevent data loss)
@@ -1531,6 +1541,7 @@ export default function DesignPage() {
         onToggleRightPanel={toggleRightPanel}
         onClearCanvas={() => { engineRef.current?.clearCanvas(); refreshLayers(); refreshObjectProps() }}
         onSaveProject={handleSaveProject}
+        saveStatus={saveStatus}
         leftPanelOpen={leftPanelOpen}
         rightPanelOpen={rightPanelOpen}
         isCollaborating={isCollaborating}

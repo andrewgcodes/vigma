@@ -5,7 +5,7 @@ import {
   Undo2, Redo2, ZoomIn, ZoomOut, Maximize2,
   Download, Upload, Menu, Grid3X3, Ruler, Magnet,
   LayoutDashboard, PanelLeft, PanelRight, RotateCcw,
-  Save, FileJson, FileImage, FileCode, Info, Share2, Users, Copy, Check, LogOut, MessageSquare, HelpCircle
+  Save, FileJson, FileImage, FileCode, Info, Share2, Users, Copy, Check, LogOut, MessageSquare, HelpCircle, Cloud, CloudOff, Loader2
 } from 'lucide-react'
 import type { RemoteUser } from '@/lib/collaboration'
 
@@ -32,6 +32,7 @@ interface TopBarProps {
   onToggleRightPanel: () => void
   onClearCanvas: () => void
   onSaveProject: () => void
+  saveStatus?: 'saved' | 'saving' | 'just-saved'
   leftPanelOpen: boolean
   rightPanelOpen: boolean
   // Collaboration
@@ -66,6 +67,7 @@ export default function TopBar({
   onToggleRightPanel,
   onClearCanvas,
   onSaveProject,
+  saveStatus = 'saved',
   leftPanelOpen,
   rightPanelOpen,
   isCollaborating,
@@ -121,6 +123,22 @@ export default function TopBar({
             <span className="text-white text-xs font-bold">V</span>
           </div>
           <span className="text-sm font-semibold text-canvas-text tracking-tight">Vigma</span>
+          {/* Save status indicator */}
+          <div className={`flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-medium transition-all duration-300 ${
+            saveStatus === 'just-saved'
+              ? 'text-green-600 bg-green-50'
+              : saveStatus === 'saving'
+              ? 'text-amber-600 bg-amber-50'
+              : 'text-canvas-text-tertiary'
+          }`}>
+            {saveStatus === 'just-saved' ? (
+              <><Check size={11} className="text-green-500" /><span>Saved</span></>
+            ) : saveStatus === 'saving' ? (
+              <><Loader2 size={11} className="animate-spin" /><span>Saving...</span></>
+            ) : (
+              <><Cloud size={11} /><span>Saved</span></>
+            )}
+          </div>
           <div className="relative" onMouseEnter={() => setShowInfoTooltip(true)} onMouseLeave={() => setShowInfoTooltip(false)}>
             <Info size={13} className="text-canvas-text-tertiary hover:text-canvas-text-secondary cursor-pointer transition-colors" />
             {showInfoTooltip && (
