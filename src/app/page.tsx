@@ -777,9 +777,16 @@ export default function DesignPage() {
   const handleExportSelected = useCallback((format: string, scale: number) => {
     const engine = engineRef.current
     if (!engine) return
+    if (format === 'svg') {
+      const svg = engine.exportSelectedToSVG()
+      if (svg) {
+        const blob = new Blob([svg], { type: 'image/svg+xml' })
+        downloadBlob(blob, 'selection.svg')
+      }
+      return
+    }
     let dataURL: string | null = null
     if (format === 'png') dataURL = engine.exportSelectedToPNG(scale)
-    else if (format === 'svg') dataURL = engine.exportSelectedToSVG()
     else if (format === 'jpg') dataURL = engine.exportSelectedToJPG(scale)
     if (dataURL) downloadDataURL(dataURL, `selection.${format}`)
   }, [])
