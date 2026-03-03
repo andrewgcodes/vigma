@@ -14,6 +14,10 @@ export class CanvasEngine {
   private guidelines: FabricObject[] = []
   private snapThreshold = 5
   private snapHandler: ((e: any) => void) | null = null
+  private smartGuideHandler: ((e: any) => void) | null = null
+  private smartGuideRenderHandler: (() => void) | null = null
+  private activeGuideLines: { orientation: 'h' | 'v'; position: number; start: number; end: number }[] = []
+  private smartGuidesEnabled = true
   private onSelectionChange?: (ids: string[]) => void
   private onObjectModified?: () => void
   private onHistoryChange?: (canUndo: boolean, canRedo: boolean) => void
@@ -47,6 +51,7 @@ export class CanvasEngine {
 
     this.setupEventListeners()
     this.setupCustomControls()
+    this.enableSmartGuides()
     this.saveHistory()
   }
 
@@ -893,6 +898,167 @@ export class CanvasEngine {
       this.canvas.off('object:moving', this.snapHandler)
       this.snapHandler = null
     }
+  }
+
+  // SMART ALIGNMENT GUIDES
+  enableSmartGuides() {
+    if (this.smartGuidesEnabled && this.smartGuideHandler) return
+    this.smartGuidesEnabled = true
+    const threshold = this.snapThreshold
+
+    this.smartGuideHandler = (e: any) => {
+      const target = e.target
+      if (!target || (target as any).isGrid || (target as any).isPreview) return
+
+      const tBound = target.getBoundingRect()
+      const tLeft = tBound.left
+      const tRight = tBound.left + tBound.width
+      const tTop = tBound.top
+      const tBottom = tBound.top + tBound.height
+      const tCenterX = tBound.left + tBound.width / 2
+      const tCenterY = tBound.top + tBound.height / 2
+
+      // Convert viewport coordinates back to scene coordinates for snapping
+      const zoom = this.canvas.getZoom()
+      const vpt = this.canvas.viewportTransform || [1, 0, 0, 1, 0, 0]
+
+      const newGuides: { orientation: 'h' | 'v'; position: number; start: number; end: number }[] = []
+      let snapDx = 0
+      let snapDy = 0
+      let snappedX = false
+      let snappedY = false
+
+      const objects = this.canvas.getObjects().filter(
+        (o) => o !== target && !(o as any).isGrid && !(o as any).isPreview && o.visible !== false
+      )
+
+      for (const obj of objects) {
+        if (snappedX && snappedY) break
+        const oBound = obj.getBoundingRect()
+        const oLeft = oBound.left
+        const oRight = oBound.left + oBound.width
+        const oTop = oBound.top
+        const oBottom = oBound.top + oBound.height
+        const oCenterX = oBound.left + oBound.width / 2
+        const oCenterY = oBound.top + oBound.height / 2
+
+        // Convert screen coords to scene coords for guide line rendering
+        const toSceneX = (sx: number) => (sx - vpt[4]) / zoom
+        const toSceneY = (sy: number) => (sy - vpt[5]) / zoom
+
+        // Vertical alignment checks (X-axis snapping)
+        if (!snappedX) {
+          const vChecks = [
+            { tEdge: tLeft, oEdge: oLeft },
+            { tEdge: tLeft, oEdge: oRight },
+            { tEdge: tRight, oEdge: oLeft },
+            { tEdge: tRight, oEdge: oRight },
+            { tEdge: tCenterX, oEdge: oCenterX },
+          ]
+          for (const { tEdge, oEdge } of vChecks) {
+            if (Math.abs(tEdge - oEdge) < threshold) {
+              snapDx = (oEdge - tEdge) / zoom
+              const minY = Math.min(tTop, oTop)
+              const maxY = Math.max(tBottom, oBottom)
+              newGuides.push({ orientation: 'v', position: toSceneX(oEdge), start: toSceneY(minY), end: toSceneY(maxY) })
+              snappedX = true
+              break
+            }
+          }
+        }
+
+        // Horizontal alignment checks (Y-axis snapping)
+        if (!snappedY) {
+          const hChecks = [
+            { tEdge: tTop, oEdge: oTop },
+            { tEdge: tTop, oEdge: oBottom },
+            { tEdge: tBottom, oEdge: oTop },
+            { tEdge: tBottom, oEdge: oBottom },
+            { tEdge: tCenterY, oEdge: oCenterY },
+          ]
+          for (const { tEdge, oEdge } of hChecks) {
+            if (Math.abs(tEdge - oEdge) < threshold) {
+              snapDy = (oEdge - tEdge) / zoom
+              const minX = Math.min(tLeft, oLeft)
+              const maxX = Math.max(tRight, oRight)
+              newGuides.push({ orientation: 'h', position: toSceneY(oEdge), start: toSceneX(minX), end: toSceneX(maxX) })
+              snappedY = true
+              break
+            }
+          }
+        }
+      }
+
+      // Apply snap
+      if (snapDx !== 0 || snapDy !== 0) {
+        target.set({
+          left: (target.left ?? 0) + snapDx,
+          top: (target.top ?? 0) + snapDy,
+        })
+        target.setCoords()
+      }
+
+      this.activeGuideLines = newGuides
+      this.canvas.requestRenderAll()
+    }
+
+    // Render guide lines on the lower canvas (after:render)
+    // The lower canvas is cleared automatically before each render cycle,
+    // so guide lines disappear naturally when no alignments are active.
+    this.smartGuideRenderHandler = () => {
+      if (this.activeGuideLines.length === 0) return
+      const ctx = this.canvas.getContext()
+      const zoom = this.canvas.getZoom()
+      const vpt = this.canvas.viewportTransform || [1, 0, 0, 1, 0, 0]
+
+      ctx.save()
+      ctx.strokeStyle = '#ff2d55'
+      ctx.lineWidth = 1
+      ctx.setLineDash([4, 4])
+
+      for (const guide of this.activeGuideLines) {
+        ctx.beginPath()
+        if (guide.orientation === 'v') {
+          const screenX = guide.position * zoom + vpt[4]
+          const startY = guide.start * zoom + vpt[5]
+          const endY = guide.end * zoom + vpt[5]
+          ctx.moveTo(screenX, startY)
+          ctx.lineTo(screenX, endY)
+        } else {
+          const screenY = guide.position * zoom + vpt[5]
+          const startX = guide.start * zoom + vpt[4]
+          const endX = guide.end * zoom + vpt[4]
+          ctx.moveTo(startX, screenY)
+          ctx.lineTo(endX, screenY)
+        }
+        ctx.stroke()
+      }
+      ctx.restore()
+    }
+
+    this.canvas.on('object:moving', this.smartGuideHandler)
+    this.canvas.on('after:render', this.smartGuideRenderHandler)
+
+    // Clear guides when mouse is released
+    const clearGuides = () => {
+      this.activeGuideLines = []
+      this.canvas.requestRenderAll()
+    }
+    this.canvas.on('mouse:up', clearGuides)
+  }
+
+  disableSmartGuides() {
+    if (this.smartGuideHandler) {
+      this.canvas.off('object:moving', this.smartGuideHandler)
+      this.smartGuideHandler = null
+    }
+    if (this.smartGuideRenderHandler) {
+      this.canvas.off('after:render', this.smartGuideRenderHandler)
+      this.smartGuideRenderHandler = null
+    }
+    this.activeGuideLines = []
+    this.smartGuidesEnabled = false
+    this.canvas.requestRenderAll()
   }
 
   // PROPERTY SETTERS
