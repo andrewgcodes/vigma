@@ -14,6 +14,7 @@ import CursorOverlay from '@/components/CursorOverlay'
 import CommentPins from '@/components/CommentPins'
 import CommentsPanel from '@/components/CommentsPanel'
 import { CollaborationManager, generateRoomId, getRoomIdFromHash, setRoomIdInHash, clearRoomFromHash, prewarmSignalingServer } from '@/lib/collaboration'
+import { persistGet, persistSet, persistRemove } from '@/lib/persistence'
 import type { Comment, CommentReply, RemoteUser } from '@/lib/collaboration'
 import { getUserIdentity } from '@/lib/userIdentity'
 import type { UserIdentity } from '@/lib/userIdentity'
@@ -54,6 +55,8 @@ export default function DesignPage() {
   const [contextMenu, setContextMenu] = useState({ visible: false, x: 0, y: 0, hasSelection: false, multipleSelected: false, isLocked: false })
   const [isDrawingShape, setIsDrawingShape] = useState(false)
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved' | 'just-saved'>('saved')
+  const [largeImageWarning, setLargeImageWarning] = useState<string | null>(null)
+  const largeImageWarningTimerRef = useRef<NodeJS.Timeout | null>(null)
   const saveStatusTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const drawStartRef = useRef<{ x: number; y: number } | null>(null)
   const previewObjRef = useRef<any>(null)
@@ -157,8 +160,33 @@ export default function DesignPage() {
       // would cause old room objects to bleed into the new room.
       const loadSaved = async () => {
         if (getRoomIdFromHash()) return // joining a room — skip localStorage load
+
+        // Helper: attempt to load canvas JSON with retry.
+        // Fabric.js can throw "Cannot read properties of undefined (reading 'clearRect')"
+        // if the canvas element isn't fully ready on the first attempt.
+        const tryLoadJSON = async (json: string, retries = 2): Promise<boolean> => {
+          for (let attempt = 0; attempt <= retries; attempt++) {
+            try {
+              await engine.loadFromJSON(json)
+              return true
+            } catch (loadErr) {
+              // SyntaxError means genuinely corrupt JSON — re-throw so the
+              // outer catch can clear localStorage. No point retrying.
+              if (loadErr instanceof SyntaxError) throw loadErr
+              console.warn(`loadFromJSON attempt ${attempt + 1} failed:`, loadErr)
+              if (attempt < retries) {
+                // Wait briefly for the canvas to finish initializing
+                await new Promise(r => setTimeout(r, 100))
+              }
+            }
+          }
+          return false
+        }
+
         try {
-          const savedPages = localStorage.getItem('vigma-pages')
+          // Read from IndexedDB (large-data-safe), with automatic fallback
+          // to localStorage for projects saved before the IndexedDB migration.
+          const savedPages = await persistGet('vigma-pages')
           if (savedPages) {
             const parsed = JSON.parse(savedPages)
             if (parsed.pages && Array.isArray(parsed.pages) && parsed.pages.length > 0) {
@@ -196,7 +224,7 @@ export default function DesignPage() {
               // Load the current page's canvas
               const currentPage = parsed.pages.find((p: any) => p.id === targetPageId)
               if (currentPage && currentPage.canvasJSON) {
-                await engine.loadFromJSON(currentPage.canvasJSON)
+                await tryLoadJSON(currentPage.canvasJSON)
               }
               // Restore viewport (zoom/pan) from saved state
               if (parsed.viewport) {
@@ -213,16 +241,22 @@ export default function DesignPage() {
             }
           }
           // Fallback: try loading legacy single-page format
-          const saved = localStorage.getItem('vigma-project')
+          const saved = await persistGet('vigma-project')
           if (saved) {
-            await engine.loadFromJSON(saved)
+            await tryLoadJSON(saved)
             refreshLayers()
           }
         } catch (e) {
-          // If saved data is corrupt or incompatible, clear it
-          console.warn('Failed to load saved project, clearing localStorage', e)
-          localStorage.removeItem('vigma-pages')
-          localStorage.removeItem('vigma-project')
+          // Only clear storage for genuine data corruption (JSON parse errors).
+          // Do NOT clear for transient canvas errors (e.g. clearRect) — the saved
+          // data is still valid and will load fine on the next page load.
+          if (e instanceof SyntaxError) {
+            console.warn('Saved project data is corrupt, clearing storage', e)
+            persistRemove('vigma-pages')
+            persistRemove('vigma-project')
+          } else {
+            console.warn('Failed to load saved project (data preserved in storage)', e)
+          }
         }
       }
       loadSaved()
@@ -448,30 +482,36 @@ export default function DesignPage() {
         if (engineRef.current) {
           isReloadingSoloRef.current = true
           engineRef.current.clearCanvas()
-          // Reload solo project from localStorage
-          const savedPages = localStorage.getItem('vigma-pages')
-          if (savedPages) {
-            try {
-              const parsed = JSON.parse(savedPages)
-              if (parsed.pages?.length > 0) {
-                const currentPage = parsed.pages.find((p: any) => p.id === parsed.currentPageId) || parsed.pages[0]
-                if (currentPage?.canvasJSON) {
-                  engineRef.current.loadFromJSON(currentPage.canvasJSON).then(() => {
+          // Reload solo project from IndexedDB (falls back to localStorage)
+          const engine = engineRef.current
+          persistGet('vigma-pages').then((savedPages) => {
+            if (savedPages) {
+              try {
+                const parsed = JSON.parse(savedPages)
+                if (parsed.pages?.length > 0) {
+                  const currentPage = parsed.pages.find((p: any) => p.id === parsed.currentPageId) || parsed.pages[0]
+                  if (currentPage?.canvasJSON) {
+                    engine.loadFromJSON(currentPage.canvasJSON).then(() => {
+                      isReloadingSoloRef.current = false
+                      refreshLayers()
+                    }).catch(() => {
+                      isReloadingSoloRef.current = false
+                    })
+                  } else {
                     isReloadingSoloRef.current = false
-                    refreshLayers()
-                  })
+                  }
                 } else {
                   isReloadingSoloRef.current = false
                 }
-              } else {
+              } catch (e) {
                 isReloadingSoloRef.current = false
               }
-            } catch (e) {
+            } else {
               isReloadingSoloRef.current = false
             }
-          } else {
+          }).catch(() => {
             isReloadingSoloRef.current = false
-          }
+          })
         }
       }
     }
@@ -723,32 +763,37 @@ export default function DesignPage() {
     clearRoomFromHash()
 
     // Clear the canvas of room objects and reload the user's solo project
-    // from localStorage. Without this, room objects stay on canvas and get
-    // auto-saved to localStorage, bleeding into future sessions.
+    // from IndexedDB (falls back to localStorage). Without this, room objects
+    // stay on canvas and get auto-saved, bleeding into future sessions.
     const engine = engineRef.current
     if (engine) {
       isReloadingSoloRef.current = true
       engine.clearCanvas()
-      try {
-        const savedPages = localStorage.getItem('vigma-pages')
+      persistGet('vigma-pages').then((savedPages) => {
         if (savedPages) {
-          const parsed = JSON.parse(savedPages)
-          const currentPage = parsed.pages?.find((p: any) => p.id === parsed.currentPageId) || parsed.pages?.[0]
-          if (currentPage?.canvasJSON) {
-            engine.loadFromJSON(currentPage.canvasJSON).then(() => {
+          try {
+            const parsed = JSON.parse(savedPages)
+            const currentPage = parsed.pages?.find((p: any) => p.id === parsed.currentPageId) || parsed.pages?.[0]
+            if (currentPage?.canvasJSON) {
+              engine.loadFromJSON(currentPage.canvasJSON).then(() => {
+                isReloadingSoloRef.current = false
+                refreshLayers()
+              }).catch(() => {
+                isReloadingSoloRef.current = false
+              })
+            } else {
               isReloadingSoloRef.current = false
-              refreshLayers()
-            })
-          } else {
+            }
+          } catch (e) {
             isReloadingSoloRef.current = false
+            console.warn('Failed to reload solo project after leaving room', e)
           }
         } else {
           isReloadingSoloRef.current = false
         }
-      } catch (e) {
+      }).catch(() => {
         isReloadingSoloRef.current = false
-        console.warn('Failed to reload solo project after leaving room', e)
-      }
+      })
     }
   }, [refreshLayers])
 
@@ -884,6 +929,9 @@ export default function DesignPage() {
         input.onchange = async (e) => {
           const file = (e.target as HTMLInputElement).files?.[0]
           if (file && engine) {
+            if (file.size > 3 * 1024 * 1024) {
+              showLargeImageWarning(file.name, file.size)
+            }
             await engine.addImageFromFile(file)
             refreshLayers()
             setActiveTool('select')
@@ -1287,40 +1335,44 @@ export default function DesignPage() {
   }, [zoom]) // re-attach after engine init (zoom changes after engine mounts)
 
   // Helper: persist current canvas state into the Zustand store for the active page,
-  // then write ALL pages to localStorage. Always reads from the store directly to
-  // avoid stale-closure bugs.
-  // IMPORTANT: Skip localStorage save during collaboration — the room's objects
-  // are persisted via Yjs IndexedDB (per-room). Writing them to the global
-  // localStorage would cause stale room data to bleed into other rooms/solo mode.
+  // then write ALL pages to IndexedDB (and best-effort localStorage mirror).
+  // Always reads from the store directly to avoid stale-closure bugs.
+  // IMPORTANT: Skip save during collaboration — the room's objects are persisted
+  // via Yjs IndexedDB (per-room). Writing them to global storage would cause stale
+  // room data to bleed into other rooms/solo mode.
   const persistAllPages = useCallback(() => {
     const engine = engineRef.current
     if (!engine) return
-    // Don't save to localStorage while in a collaboration room
+    // Don't save while in a collaboration room
     if (collabRef.current) return
     // Don't save while transitioning from room back to solo mode
     // (canvas is temporarily empty between clearCanvas and loadFromJSON)
     if (isReloadingSoloRef.current) return
-    try {
-      const store = useDesignStore.getState()
-      // Snapshot the live canvas into the current page's canvasJSON
-      store.updatePage(store.currentPageId, { canvasJSON: engine.exportToJSON() })
-      // Capture current viewport state for persistence
-      const vpt = engine.canvas.viewportTransform
-      const currentViewport = vpt
-        ? { zoom: engine.canvas.getZoom(), panX: vpt[4], panY: vpt[5] }
-        : { zoom: 1, panX: 0, panY: 0 }
-      // Write all pages + currentPageId + viewport to localStorage
-      const pagesData = {
-        pages: useDesignStore.getState().pages,
-        currentPageId: store.currentPageId,
-        viewport: currentViewport,
-      }
-      localStorage.setItem('vigma-pages', JSON.stringify(pagesData))
-      // Legacy single-page key for backward compat
-      localStorage.setItem('vigma-project', engine.exportToJSON())
-    } catch (e) {
-      console.warn('Failed to persist pages', e)
+
+    const store = useDesignStore.getState()
+    // Snapshot the live canvas into the current page's canvasJSON
+    store.updatePage(store.currentPageId, { canvasJSON: engine.exportToJSON() })
+    // Capture current viewport state for persistence
+    const vpt = engine.canvas.viewportTransform
+    const currentViewport = vpt
+      ? { zoom: engine.canvas.getZoom(), panX: vpt[4], panY: vpt[5] }
+      : { zoom: 1, panX: 0, panY: 0 }
+    // Build the payload once
+    const pagesData = {
+      pages: useDesignStore.getState().pages,
+      currentPageId: store.currentPageId,
+      viewport: currentViewport,
     }
+    const payload = JSON.stringify(pagesData)
+
+    // Write to IndexedDB (large-data-safe, handles images of any size).
+    // persistSet writes to localStorage synchronously first (critical for
+    // beforeunload — the async IndexedDB write may not complete during page
+    // unload), then writes to IndexedDB for large payloads that exceed
+    // localStorage's ~5MB quota.
+    persistSet('vigma-pages', payload).catch((err) => {
+      console.warn('Failed to persist pages to IndexedDB', err)
+    })
   }, [])
 
   // SAVE PROJECT (saves all pages) – called by Cmd+S and the "Save to Browser" menu item
@@ -1417,9 +1469,25 @@ export default function DesignPage() {
     })
   }, [persistAllPages])
 
+  // Show a dismissible warning when the user uploads a large image (>3MB).
+  // Large base64-encoded images can affect multiplayer sync performance and
+  // may exceed browser storage limits in some edge cases.
+  const showLargeImageWarning = useCallback((fileName: string, fileSize: number) => {
+    const sizeMB = (fileSize / (1024 * 1024)).toFixed(1)
+    setLargeImageWarning(
+      `"${fileName}" is ${sizeMB} MB. Large images may affect performance, especially in multiplayer. Vigma will try its best to save and sync it.`
+    )
+    // Auto-dismiss after 8 seconds
+    if (largeImageWarningTimerRef.current) clearTimeout(largeImageWarningTimerRef.current)
+    largeImageWarningTimerRef.current = setTimeout(() => setLargeImageWarning(null), 8000)
+  }, [])
+
   const handleImportImage = useCallback(async (file: File) => {
     const engine = engineRef.current
     if (!engine) return
+    if (file.size > 3 * 1024 * 1024) {
+      showLargeImageWarning(file.name, file.size)
+    }
     await engine.addImageFromFile(file)
     refreshLayers()
   }, [])
@@ -1651,6 +1719,9 @@ export default function DesignPage() {
         for (let i = 0; i < files.length; i++) {
           const file = files[i]
           if (file.type.startsWith('image/')) {
+            if (file.size > 3 * 1024 * 1024) {
+              showLargeImageWarning(file.name, file.size)
+            }
             await engine.addImageFromFile(file)
           }
         }
@@ -1672,6 +1743,27 @@ export default function DesignPage() {
 
   return (
     <MobileGate>
+    {/* Large Image Upload Warning Toast */}
+    {largeImageWarning && (
+      <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[9999] max-w-lg w-full mx-4 animate-in fade-in slide-in-from-top-2">
+        <div className="bg-amber-50 border border-amber-200 rounded-xl shadow-lg px-4 py-3 flex items-start gap-3">
+          <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+            <svg className="w-4 h-4 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+            </svg>
+          </div>
+          <p className="text-sm text-amber-800 flex-1">{largeImageWarning}</p>
+          <button
+            onClick={() => setLargeImageWarning(null)}
+            className="text-amber-400 hover:text-amber-600 transition-colors flex-shrink-0"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    )}
     {/* Share Beta Warning Modal */}
     {showShareWarning && (
       <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm">
