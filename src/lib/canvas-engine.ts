@@ -1311,24 +1311,28 @@ export class CanvasEngine {
   private static STORAGE_KEY = 'vigma_canvas_data';
   private saveTimeout: ReturnType<typeof setTimeout> | null = null;
 
+  saveToLocalStorageSync() {
+    if (!this.canvas) return;
+    try {
+      const json = JSON.stringify((this.canvas as unknown as { toJSON(props: string[]): object }).toJSON(['id', 'customType', 'customName']));
+      const vpt = this.canvas.viewportTransform;
+      const data = JSON.stringify({
+        canvas: json,
+        zoom: this.canvas.getZoom(),
+        viewportTransform: vpt ? Array.from(vpt) : null,
+      });
+      localStorage.setItem(CanvasEngine.STORAGE_KEY, data);
+    } catch (err) {
+      console.warn('Failed to save to localStorage:', err);
+    }
+  }
+
   saveToLocalStorage() {
     if (!this.canvas) return;
     // Debounce saves to avoid excessive writes
     if (this.saveTimeout) clearTimeout(this.saveTimeout);
     this.saveTimeout = setTimeout(() => {
-      if (!this.canvas) return;
-      try {
-        const json = JSON.stringify((this.canvas as unknown as { toJSON(props: string[]): object }).toJSON(['id', 'customType', 'customName']));
-        const vpt = this.canvas.viewportTransform;
-        const data = JSON.stringify({
-          canvas: json,
-          zoom: this.canvas.getZoom(),
-          viewportTransform: vpt ? Array.from(vpt) : null,
-        });
-        localStorage.setItem(CanvasEngine.STORAGE_KEY, data);
-      } catch (err) {
-        console.warn('Failed to save to localStorage:', err);
-      }
+      this.saveToLocalStorageSync();
     }, 500);
   }
 

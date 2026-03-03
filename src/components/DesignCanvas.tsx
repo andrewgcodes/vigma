@@ -81,7 +81,7 @@ export default function DesignCanvas() {
 
     // Force save on page unload
     const handleBeforeUnload = () => {
-      canvasEngine.saveToLocalStorage();
+      canvasEngine.saveToLocalStorageSync();
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
 
