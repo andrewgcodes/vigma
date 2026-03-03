@@ -3,7 +3,10 @@
 // - Y.Map('objects') keyed by object ID -> serialized Fabric.js object JSON
 // - Y.Map('comments') keyed by comment ID for concurrent-safe mutations
 // - Awareness for live cursors and presence
-// - y-webrtc for P2P sync (no server needed)
+// - y-webrtc for P2P sync via custom signaling server on Fly.io
+
+// Custom signaling server deployed on Fly.io
+const SIGNALING_SERVER = 'wss://app-vpmeshmy.fly.dev'
 
 import * as Y from 'yjs'
 // @ts-ignore - y-webrtc doesn't have types
@@ -50,7 +53,9 @@ export class CollaborationManager {
   private onRemoteObjectChange?: (changes: { added: string[], updated: string[], deleted: string[] }) => void
   private onRemoteCommentsChange?: () => void
   private onUsersChange?: (users: RemoteUser[]) => void
+  private onConnectionStatusChange?: (status: 'connecting' | 'connected' | 'disconnected') => void
   private connected = false
+  private _persistenceSynced = false
 
   constructor(roomId: string, user: UserIdentity) {
     this.roomId = roomId
@@ -64,23 +69,38 @@ export class CollaborationManager {
     onRemoteObjectChange?: (changes: { added: string[], updated: string[], deleted: string[] }) => void
     onRemoteCommentsChange?: () => void
     onUsersChange?: (users: RemoteUser[]) => void
+    onConnectionStatusChange?: (status: 'connecting' | 'connected' | 'disconnected') => void
   }) {
     if (this.connected) return
 
     this.onRemoteObjectChange = options?.onRemoteObjectChange
     this.onRemoteCommentsChange = options?.onRemoteCommentsChange
     this.onUsersChange = options?.onUsersChange
+    this.onConnectionStatusChange = options?.onConnectionStatusChange
+
+    this.onConnectionStatusChange?.('connecting')
 
     // Set up IndexedDB persistence for offline support
     this.persistence = new IndexeddbPersistence(`vigma-room-${this.roomId}`, this.doc)
 
-    // Set up WebRTC provider for P2P sync
+    // Track when IndexedDB persistence has finished loading
+    this.persistence.on('synced', () => {
+      this._persistenceSynced = true
+    })
+
+    // Set up WebRTC provider for P2P sync using our custom signaling server
     this.provider = new WebrtcProvider(`vigma-${this.roomId}`, this.doc, {
       signaling: [
-        'wss://signaling.yjs.dev',
-        'wss://y-webrtc-signaling-eu.herokuapp.com',
-        'wss://y-webrtc-signaling-us.herokuapp.com',
+        SIGNALING_SERVER,
       ],
+    })
+
+    // Track WebRTC peer connections for status
+    this.provider.on('peers', (event: { webrtcPeers: string[], bcPeers: string[] }) => {
+      const totalPeers = (event.webrtcPeers?.length || 0) + (event.bcPeers?.length || 0)
+      if (totalPeers > 0) {
+        this.onConnectionStatusChange?.('connected')
+      }
     })
 
     // Set awareness (presence) state
@@ -360,10 +380,35 @@ export class CollaborationManager {
     return this.connected
   }
 
+  /** Check if IndexedDB persistence has finished loading */
+  isPersistenceSynced(): boolean {
+    return this._persistenceSynced
+  }
+
   /** Get number of connected peers */
   getPeerCount(): number {
     if (!this.provider) return 0
     return this.provider.awareness.getStates().size - 1 // exclude self
+  }
+
+  /** Wait for either persistence sync or timeout */
+  waitForSync(timeoutMs = 3000): Promise<void> {
+    return new Promise((resolve) => {
+      if (this._persistenceSynced) {
+        resolve()
+        return
+      }
+      const timeout = setTimeout(() => resolve(), timeoutMs)
+      if (this.persistence) {
+        this.persistence.on('synced', () => {
+          clearTimeout(timeout)
+          resolve()
+        })
+      } else {
+        clearTimeout(timeout)
+        resolve()
+      }
+    })
   }
 }
 

@@ -38,6 +38,7 @@ interface TopBarProps {
   isCollaborating?: boolean
   roomId?: string | null
   remoteUsers?: RemoteUser[]
+  connectionStatus?: 'connecting' | 'connected' | 'disconnected'
   onShare?: () => void
   onLeaveRoom?: () => void
 }
@@ -70,6 +71,7 @@ export default function TopBar({
   isCollaborating,
   roomId,
   remoteUsers = [],
+  connectionStatus = 'disconnected',
   onShare,
   onLeaveRoom,
 }: TopBarProps) {
@@ -255,8 +257,9 @@ export default function TopBar({
                 </div>
               )}
             </div>
-            <span className="text-[10px] text-canvas-text-tertiary">
-              {remoteUsers.length + 1} online
+            <span className="text-[10px] text-canvas-text-tertiary flex items-center gap-1">
+              <span className={`w-1.5 h-1.5 rounded-full ${connectionStatus === 'connected' ? 'bg-green-500' : connectionStatus === 'connecting' ? 'bg-yellow-500 animate-pulse' : 'bg-red-500'}`} />
+              {connectionStatus === 'connecting' ? 'Connecting...' : `${remoteUsers.length + 1} online`}
             </span>
             <button
               onClick={handleCopyLink}
