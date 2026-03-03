@@ -11,7 +11,7 @@ interface KeyboardShortcutsProps {
 }
 
 export default function KeyboardShortcuts({ fabricRef }: KeyboardShortcutsProps) {
-  const { setActiveTool, addLayer } = useStore();
+  const { setActiveTool } = useStore();
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -67,7 +67,7 @@ export default function KeyboardShortcuts({ fabricRef }: KeyboardShortcutsProps)
             break;
           case 'v':
             e.preventDefault();
-            handlePaste(canvas, addLayer);
+            handlePaste(canvas);
             break;
           case 'a':
             e.preventDefault();
@@ -75,7 +75,7 @@ export default function KeyboardShortcuts({ fabricRef }: KeyboardShortcutsProps)
             break;
           case 'd':
             e.preventDefault();
-            handleDuplicate(canvas, addLayer);
+            handleDuplicate(canvas);
             break;
           case 'g':
             e.preventDefault();
@@ -104,7 +104,7 @@ export default function KeyboardShortcuts({ fabricRef }: KeyboardShortcutsProps)
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [fabricRef, setActiveTool, addLayer]);
+  }, [fabricRef, setActiveTool]);
 
   return null;
 }
@@ -116,7 +116,7 @@ async function handleCopy(canvas: fabric.Canvas) {
   (window as unknown as Record<string, unknown>).__vigma_clipboard = cloned;
 }
 
-async function handlePaste(canvas: fabric.Canvas, addLayer: (layer: { id: string; name: string; type: string; visible: boolean; locked: boolean }) => void) {
+async function handlePaste(canvas: fabric.Canvas) {
   const clipboard = (window as unknown as Record<string, unknown>).__vigma_clipboard as fabric.FabricObject | undefined;
   if (!clipboard) return;
   const cloned = await clipboard.clone();
@@ -130,11 +130,11 @@ async function handlePaste(canvas: fabric.Canvas, addLayer: (layer: { id: string
   canvas.add(cloned);
   canvas.setActiveObject(cloned);
   canvas.renderAll();
-  addLayer({ id, name: 'Copy', type: cloned.type || 'object', visible: true, locked: false });
+  // syncLayers() already ran via the object:added event, no need for addLayer
   historyManager.saveState();
 }
 
-async function handleDuplicate(canvas: fabric.Canvas, addLayer: (layer: { id: string; name: string; type: string; visible: boolean; locked: boolean }) => void) {
+async function handleDuplicate(canvas: fabric.Canvas) {
   const active = canvas.getActiveObject();
   if (!active) return;
   const cloned = await active.clone();
@@ -148,7 +148,7 @@ async function handleDuplicate(canvas: fabric.Canvas, addLayer: (layer: { id: st
   canvas.add(cloned);
   canvas.setActiveObject(cloned);
   canvas.renderAll();
-  addLayer({ id, name: 'Copy', type: cloned.type || 'object', visible: true, locked: false });
+  // syncLayers() already ran via the object:added event, no need for addLayer
   historyManager.saveState();
 }
 

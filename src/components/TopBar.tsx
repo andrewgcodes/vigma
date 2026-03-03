@@ -46,7 +46,6 @@ export default function TopBar({ fabricRef }: TopBarProps) {
     setSnapToGrid,
     showRulers,
     setShowRulers,
-    addLayer,
   } = useStore();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -96,7 +95,7 @@ export default function TopBar({ fabricRef }: TopBarProps) {
     canvas.add(cloned);
     canvas.setActiveObject(cloned);
     canvas.renderAll();
-    addLayer({ id, name: 'Copy', type: cloned.type || 'object', visible: true, locked: false });
+    // syncLayers() already ran via the object:added event, no need for addLayer
     historyManager.saveState();
   };
 
@@ -122,7 +121,7 @@ export default function TopBar({ fabricRef }: TopBarProps) {
         canvas.add(img);
         canvas.setActiveObject(img);
         canvas.renderAll();
-        addLayer({ id, name: file.name, type: 'image', visible: true, locked: false });
+        // syncLayers() already ran via the object:added event, no need for addLayer
         historyManager.saveState();
       };
       imgEl.src = event.target?.result as string;
