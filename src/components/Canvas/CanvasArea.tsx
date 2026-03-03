@@ -405,9 +405,12 @@ const CanvasArea = forwardRef<CanvasAreaHandle, CanvasAreaProps>(({ onLayersChan
             const pathStr = points.reduce((acc, p, i) => {
               return acc + (i === 0 ? `M ${p.x} ${p.y}` : ` L ${p.x} ${p.y}`);
             }, '') + ' Z';
-            if (penPreviewRef.current) {
-              canvas.remove(penPreviewRef.current);
-            }
+            // Remove all pen-preview objects (dots and line preview)
+            const penPreviews = canvas.getObjects().filter(
+              (o) => (o as FabricObject & { name?: string }).name === 'pen-preview'
+            );
+            penPreviews.forEach((o) => canvas.remove(o));
+            penPreviewRef.current = null;
             const path = new Path(pathStr, {
               fill: DEFAULT_FILL,
               stroke: DEFAULT_STROKE,

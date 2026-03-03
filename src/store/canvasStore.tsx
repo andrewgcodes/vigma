@@ -75,7 +75,7 @@ function appReducer(state: AppState, action: AppAction): AppState {
       return {
         ...state,
         pages: state.pages.filter((p) => p.id !== action.pageId),
-        activePageId: state.activePageId === action.pageId ? state.pages[0].id : state.activePageId,
+        activePageId: state.activePageId === action.pageId ? (state.pages.find(p => p.id !== action.pageId)?.id ?? state.pages[0].id) : state.activePageId,
       };
     case 'RENAME_PAGE':
       return {
