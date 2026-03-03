@@ -186,10 +186,13 @@ export default function DesignPage() {
     const engine = engineRef.current
     if (!collab || !engine || syncingFromRemoteCountRef.current > 0) return
     const objects = engine.canvas.getObjects().filter((o: any) => !o.isPreview && !o.isGrid)
-    const items = objects.map((obj: any) => ({
-      id: obj.id || uuidv4(),
-      json: JSON.stringify(obj.toJSON(['id', 'name', 'isFrame', 'lockMovementX', 'lockMovementY', 'lockRotation', 'lockScalingX', 'lockScalingY', 'hasControls', 'selectable', 'evented'])),
-    }))
+    const items = objects.map((obj: any) => {
+      if (!obj.id) obj.id = uuidv4()
+      return {
+        id: obj.id,
+        json: JSON.stringify(obj.toJSON(['id', 'name', 'isFrame', 'lockMovementX', 'lockMovementY', 'lockRotation', 'lockScalingX', 'lockScalingY', 'hasControls', 'selectable', 'evented'])),
+      }
+    })
     collab.pushCanvasState(items)
   }, [])
 
