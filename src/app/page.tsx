@@ -73,12 +73,19 @@ export default function DesignPage() {
   const [shareLinkCopied, setShareLinkCopied] = useState(false)
   const collabRef = useRef<CollaborationManager | null>(null)
   const userRef = useRef<UserIdentity>(getUserIdentity())
+  // Mutable ref to track current room ID for hashchange comparisons
+  // (avoids stale closure issues with the roomId state variable)
+  const roomIdRef = useRef<string | null>(null)
   // Track which object IDs are currently being applied from remote peers.
   // Using a Map<string, number> for reference counting prevents race conditions
   // both when async enlivenObjects interleaves with sync paths (Bug 1) AND when
   // the same object ID appears in multiple concurrent remote batches (the count
   // ensures the guard stays up until ALL batches processing that ID have completed).
   const remoteObjectIdsRef = useRef<Map<string, number>>(new Map())
+  // Guard to prevent auto-save from persisting the empty canvas during
+  // the gap between clearCanvas() and loadFromJSON() completing when
+  // leaving a room or switching rooms via URL hash change.
+  const isReloadingSoloRef = useRef(false)
 
   // Panel resize handlers
   const handleResizeStart = useCallback((side: 'left' | 'right', e: React.MouseEvent) => {
@@ -145,7 +152,11 @@ export default function DesignPage() {
     window.addEventListener('resize', handleResize)
 
       // Load saved project from localStorage (supports multi-page persistence)
+      // Skip loading if we're about to join a collaboration room — the room
+      // will provide all objects via Yjs. Loading stale localStorage data here
+      // would cause old room objects to bleed into the new room.
       const loadSaved = async () => {
+        if (getRoomIdFromHash()) return // joining a room — skip localStorage load
         try {
           const savedPages = localStorage.getItem('vigma-pages')
           if (savedPages) {
@@ -403,8 +414,55 @@ export default function DesignPage() {
 
     const handleHashChange = () => {
       const newRoomId = getRoomIdFromHash()
-      if (newRoomId && !collabRef.current) {
+      if (newRoomId && newRoomId !== roomIdRef.current) {
+        // Switching rooms or joining a new one — disconnect old room first
+        if (collabRef.current) {
+          collabRef.current.disconnect()
+          collabRef.current = null
+          // Clear canvas so old room objects don't bleed into the new room
+          if (engineRef.current) {
+            engineRef.current.clearCanvas()
+          }
+        }
         startCollaboration(newRoomId)
+      } else if (!newRoomId && collabRef.current) {
+        // Hash cleared (left room via URL) — disconnect and reload solo project
+        collabRef.current.disconnect()
+        collabRef.current = null
+        setIsCollaborating(false)
+        setRoomId(null)
+        roomIdRef.current = null
+        setRemoteUsers([])
+        setComments([])
+        setConnectionStatus('disconnected')
+        if (engineRef.current) {
+          isReloadingSoloRef.current = true
+          engineRef.current.clearCanvas()
+          // Reload solo project from localStorage
+          const savedPages = localStorage.getItem('vigma-pages')
+          if (savedPages) {
+            try {
+              const parsed = JSON.parse(savedPages)
+              if (parsed.pages?.length > 0) {
+                const currentPage = parsed.pages.find((p: any) => p.id === parsed.currentPageId) || parsed.pages[0]
+                if (currentPage?.canvasJSON) {
+                  engineRef.current.loadFromJSON(currentPage.canvasJSON).then(() => {
+                    isReloadingSoloRef.current = false
+                    refreshLayers()
+                  })
+                } else {
+                  isReloadingSoloRef.current = false
+                }
+              } else {
+                isReloadingSoloRef.current = false
+              }
+            } catch (e) {
+              isReloadingSoloRef.current = false
+            }
+          } else {
+            isReloadingSoloRef.current = false
+          }
+        }
       }
     }
     window.addEventListener('hashchange', handleHashChange)
@@ -440,6 +498,7 @@ export default function DesignPage() {
     })
 
     setRoomId(rid)
+    roomIdRef.current = rid
     setIsCollaborating(true)
     // Don't set 'connecting' here — collab.connect() already fires
     // onConnectionStatusChange('connected') synchronously, and React 18
@@ -452,37 +511,57 @@ export default function DesignPage() {
     // Guard: if user left the room or component unmounted during sync, bail out
     if (collabRef.current !== collab) return
 
-    // Reconcile local canvas with whatever is already in the Y.Doc (Bug 2 fix).
-    // Instead of the old "push all or nothing" approach that could wipe remote
-    // objects or cause duplication, we merge: local-only objects go to Yjs,
-    // remote-only objects come to canvas, overlapping objects keep remote version.
+    // Check if the room already has objects (i.e., we're joining an existing room)
+    // vs creating a new room (where we want to push our local canvas objects).
     const engine = engineRef.current
     if (engine) {
-      const localObjects = engine.canvas.getObjects()
-        .filter((o: any) => !o.isPreview && !o.isGrid)
-        .map((obj: any) => {
-          if (!obj.id) obj.id = uuidv4()
-          return {
-            id: obj.id,
-            json: JSON.stringify(obj.toJSON(['id', 'name', 'isFrame', 'lockMovementX', 'lockMovementY', 'lockRotation', 'lockScalingX', 'lockScalingY', 'hasControls', 'selectable', 'evented'])),
+      const remoteObjectCount = collab.getAllObjects().size
+
+      if (remoteObjectCount > 0) {
+        // JOINING an existing room — clear any stale local objects first,
+        // then pull all remote objects onto the canvas.
+        // This prevents old localStorage/previous-room data from bleeding in.
+        const canvasObjects = engine.canvas.getObjects().filter((o: any) => !o.isPreview && !o.isGrid)
+        for (const obj of canvasObjects) {
+          engine.canvas.remove(obj)
+        }
+        engine.canvas.renderAll()
+
+        const allRemoteIds = Array.from(collab.getAllObjects().keys())
+        // Filter out IDs already being processed by a concurrent handleRemoteObjectChange
+        const safeRemoteIds = allRemoteIds.filter(id => (remoteObjectIdsRef.current.get(id) ?? 0) === 0)
+        if (safeRemoteIds.length > 0) {
+          handleRemoteObjectChange({
+            added: safeRemoteIds,
+            updated: [],
+            deleted: [],
+          })
+        }
+      } else {
+        // CREATING a new room (empty Yjs doc) — push local canvas objects to Yjs.
+        // This is the "Share" flow where the user has a design and wants to collaborate.
+        const localObjects = engine.canvas.getObjects()
+          .filter((o: any) => !o.isPreview && !o.isGrid)
+          .map((obj: any) => {
+            if (!obj.id) obj.id = uuidv4()
+            return {
+              id: obj.id,
+              json: JSON.stringify(obj.toJSON(['id', 'name', 'isFrame', 'lockMovementX', 'lockMovementY', 'lockRotation', 'lockScalingX', 'lockScalingY', 'hasControls', 'selectable', 'evented'])),
+            }
+          })
+
+        if (localObjects.length > 0) {
+          const { remoteOnlyIds, overlappingIds } = collab.reconcileCanvasState(localObjects)
+          const safeRemoteOnlyIds = remoteOnlyIds.filter(id => (remoteObjectIdsRef.current.get(id) ?? 0) === 0)
+          const safeOverlappingIds = overlappingIds.filter(id => (remoteObjectIdsRef.current.get(id) ?? 0) === 0)
+          if (safeRemoteOnlyIds.length > 0 || safeOverlappingIds.length > 0) {
+            handleRemoteObjectChange({
+              added: safeRemoteOnlyIds,
+              updated: safeOverlappingIds,
+              deleted: [],
+            })
           }
-        })
-
-      const { remoteOnlyIds, overlappingIds } = collab.reconcileCanvasState(localObjects)
-
-      // Filter out IDs already being processed by a concurrent handleRemoteObjectChange
-      // (e.g., observer-driven batch that started during waitForSync but hasn't finished
-      // enlivening yet). Without this filter, we'd start a duplicate enlivenObjects.
-      const safeRemoteOnlyIds = remoteOnlyIds.filter(id => (remoteObjectIdsRef.current.get(id) ?? 0) === 0)
-      const safeOverlappingIds = overlappingIds.filter(id => (remoteObjectIdsRef.current.get(id) ?? 0) === 0)
-
-      // Add remote-only objects and update overlapping ones on the canvas
-      if (safeRemoteOnlyIds.length > 0 || safeOverlappingIds.length > 0) {
-        handleRemoteObjectChange({
-          added: safeRemoteOnlyIds,
-          updated: safeOverlappingIds,
-          deleted: [],
-        })
+        }
       }
     }
     setComments(collab.getComments())
@@ -627,11 +706,41 @@ export default function DesignPage() {
     }
     setIsCollaborating(false)
     setRoomId(null)
+    roomIdRef.current = null
     setRemoteUsers([])
     setComments([])
     setConnectionStatus('disconnected')
     clearRoomFromHash()
-  }, [])
+
+    // Clear the canvas of room objects and reload the user's solo project
+    // from localStorage. Without this, room objects stay on canvas and get
+    // auto-saved to localStorage, bleeding into future sessions.
+    const engine = engineRef.current
+    if (engine) {
+      isReloadingSoloRef.current = true
+      engine.clearCanvas()
+      try {
+        const savedPages = localStorage.getItem('vigma-pages')
+        if (savedPages) {
+          const parsed = JSON.parse(savedPages)
+          const currentPage = parsed.pages?.find((p: any) => p.id === parsed.currentPageId) || parsed.pages?.[0]
+          if (currentPage?.canvasJSON) {
+            engine.loadFromJSON(currentPage.canvasJSON).then(() => {
+              isReloadingSoloRef.current = false
+              refreshLayers()
+            })
+          } else {
+            isReloadingSoloRef.current = false
+          }
+        } else {
+          isReloadingSoloRef.current = false
+        }
+      } catch (e) {
+        isReloadingSoloRef.current = false
+        console.warn('Failed to reload solo project after leaving room', e)
+      }
+    }
+  }, [refreshLayers])
 
   // === COMMENT HANDLERS ===
   const handleAddComment = useCallback((x: number, y: number, text: string) => {
@@ -1172,9 +1281,17 @@ export default function DesignPage() {
   // Helper: persist current canvas state into the Zustand store for the active page,
   // then write ALL pages to localStorage. Always reads from the store directly to
   // avoid stale-closure bugs.
+  // IMPORTANT: Skip localStorage save during collaboration — the room's objects
+  // are persisted via Yjs IndexedDB (per-room). Writing them to the global
+  // localStorage would cause stale room data to bleed into other rooms/solo mode.
   const persistAllPages = useCallback(() => {
     const engine = engineRef.current
     if (!engine) return
+    // Don't save to localStorage while in a collaboration room
+    if (collabRef.current) return
+    // Don't save while transitioning from room back to solo mode
+    // (canvas is temporarily empty between clearCanvas and loadFromJSON)
+    if (isReloadingSoloRef.current) return
     try {
       const store = useDesignStore.getState()
       // Snapshot the live canvas into the current page's canvasJSON
