@@ -297,13 +297,15 @@ export function useCanvas() {
 
     const group = activeObj as fabric.Group;
     const items = group.getObjects();
-    const groupTransform = group.calcTransformMatrix();
+    // Capture world-space transforms BEFORE removing the group,
+    // since calcTransformMatrix() includes the parent group's transform
+    const worldTransforms = items.map((item) => {
+      const tm = item.calcTransformMatrix();
+      return fabric.util.qrDecompose(tm);
+    });
     canvas.remove(group);
-    items.forEach((item) => {
-      // Transform item coordinates from group-local to canvas-world space
-      const itemTransform = item.calcTransformMatrix();
-      const fullTransform = fabric.util.multiplyTransformMatrices(groupTransform, itemTransform);
-      const decomposed = fabric.util.qrDecompose(fullTransform);
+    items.forEach((item, i) => {
+      const decomposed = worldTransforms[i];
       item.set({
         left: decomposed.translateX,
         top: decomposed.translateY,
