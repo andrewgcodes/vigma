@@ -245,7 +245,7 @@ export default function DesignPage() {
   const syncAllObjectsToCollab = useCallback(() => {
     const collab = collabRef.current
     const engine = engineRef.current
-    if (!collab || !engine) return
+    if (!collab || !engine || remoteObjectIdsRef.current.size > 0) return
     const objects = engine.canvas.getObjects().filter((o: any) => !o.isPreview && !o.isGrid)
     const items = objects.map((obj: any) => {
       if (!obj.id) obj.id = uuidv4()
