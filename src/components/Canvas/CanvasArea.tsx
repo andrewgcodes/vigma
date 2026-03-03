@@ -815,9 +815,20 @@ const CanvasArea = forwardRef<CanvasAreaHandle, CanvasAreaProps>(({ onLayersChan
         isPanningRef.current = false;
         const canvas = canvasRef.current;
         if (canvas) {
-          if (prevToolRef.current === 'select') {
+          const prev = prevToolRef.current;
+          if (prev === 'select') {
             canvas.defaultCursor = 'default';
             canvas.selection = true;
+          } else if (prev === 'hand') {
+            canvas.defaultCursor = 'grab';
+          } else if (prev === 'text') {
+            canvas.defaultCursor = 'text';
+          } else if (prev === 'pencil') {
+            canvas.defaultCursor = 'default';
+            canvas.isDrawingMode = true;
+          } else {
+            // Shape tools
+            canvas.defaultCursor = 'crosshair';
           }
         }
       }
