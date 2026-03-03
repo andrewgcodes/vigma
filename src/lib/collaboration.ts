@@ -5,14 +5,31 @@
 // - Awareness for live cursors and presence
 // - y-webrtc for P2P sync via custom signaling server on Fly.io
 
-// Custom signaling server deployed on Fly.io
-const SIGNALING_SERVER = 'wss://app-vpmeshmy.fly.dev'
-
 import * as Y from 'yjs'
 // @ts-ignore - y-webrtc doesn't have types
 import { WebrtcProvider } from 'y-webrtc'
 import { IndexeddbPersistence } from 'y-indexeddb'
 import type { UserIdentity } from './userIdentity'
+
+// Custom signaling server (WebSocket) used by y-webrtc
+// Override with NEXT_PUBLIC_VIGMA_SIGNALING_SERVER at build time (Vercel env var)
+const DEFAULT_SIGNALING_SERVER = 'wss://app-vpmeshmy.fly.dev'
+const SIGNALING_SERVER = process.env.NEXT_PUBLIC_VIGMA_SIGNALING_SERVER || DEFAULT_SIGNALING_SERVER
+
+function wsToHttp(url: string): string {
+  if (url.startsWith('wss://')) return `https://${url.slice('wss://'.length)}`
+  if (url.startsWith('ws://')) return `http://${url.slice('ws://'.length)}`
+  return url
+}
+
+const SIGNALING_HTTP = process.env.NEXT_PUBLIC_VIGMA_SIGNALING_HTTP || wsToHttp(SIGNALING_SERVER)
+
+/** Pre-warm the signaling server (wakes Fly.io from cold start) */
+export function prewarmSignalingServer(): void {
+  fetch(SIGNALING_HTTP, { mode: 'no-cors', cache: 'no-store' }).catch(() => {
+    // Ignore errors — this is best-effort to wake up the server
+  })
+}
 
 export interface Comment {
   id: string
@@ -95,12 +112,13 @@ export class CollaborationManager {
       ],
     })
 
-    // Track WebRTC peer connections for status
-    this.provider.on('peers', (event: { webrtcPeers: string[], bcPeers: string[] }) => {
-      const totalPeers = (event.webrtcPeers?.length || 0) + (event.bcPeers?.length || 0)
-      if (totalPeers > 0) {
-        this.onConnectionStatusChange?.('connected')
-      }
+    // Mark as connected once the provider is set up and signaling starts
+    // (Don't wait for peers — a solo user should see 'connected' immediately)
+    this.onConnectionStatusChange?.('connected')
+
+    // Track WebRTC peer connections for user count updates
+    this.provider.on('peers', () => {
+      this.emitUsersChange()
     })
 
     // Set awareness (presence) state
@@ -392,7 +410,7 @@ export class CollaborationManager {
   }
 
   /** Wait for either persistence sync or timeout */
-  waitForSync(timeoutMs = 3000): Promise<void> {
+  waitForSync(timeoutMs = 500): Promise<void> {
     return new Promise((resolve) => {
       if (this._persistenceSynced) {
         resolve()
