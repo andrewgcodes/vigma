@@ -75,7 +75,7 @@ export function useCanvas() {
     // Remove grid lines before saving history, then restore
     const gridObjects = canvas.getObjects().filter((o) => (o as any)._isGrid);
     gridObjects.forEach((o) => canvas.remove(o));
-    const json = JSON.stringify(canvas.toJSON());
+    const json = JSON.stringify(canvas.toJSON(['customId', 'customName', 'isFrame']));
     gridObjects.forEach((o) => {
       canvas.add(o);
       canvas.sendObjectToBack(o);
@@ -446,7 +446,7 @@ export function useCanvas() {
     };
 
     if (format === 'json') {
-      const json = JSON.stringify(canvas.toJSON(), null, 2);
+      const json = JSON.stringify(canvas.toJSON(['customId', 'customName', 'isFrame']), null, 2);
       const blob = new Blob([json], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
