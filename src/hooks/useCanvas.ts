@@ -697,15 +697,28 @@ export function useCanvas() {
   const copySelected = useCallback(async () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+    const activeObject = canvas.getActiveObject();
+    if (!activeObject) return;
     const activeObjects = canvas.getActiveObjects();
     if (activeObjects.length === 0) return;
     // Clone objects for clipboard so paste uses independent copies
     const clones: fabric.FabricObject[] = [];
-    for (const obj of activeObjects) {
-      const cloned = await obj.clone();
-      // Preserve absolute position for single objects
-      cloned.set({ left: obj.left, top: obj.top });
-      clones.push(cloned);
+    if (activeObjects.length > 1 && activeObject instanceof fabric.ActiveSelection) {
+      // For multi-selection, compute absolute positions from the selection's center
+      const selCenterX = (activeObject.left ?? 0) + ((activeObject.width ?? 0) * (activeObject.scaleX ?? 1)) / 2;
+      const selCenterY = (activeObject.top ?? 0) + ((activeObject.height ?? 0) * (activeObject.scaleY ?? 1)) / 2;
+      for (const obj of activeObjects) {
+        const cloned = await obj.clone();
+        // obj.left/top are relative to selection center
+        cloned.set({ left: selCenterX + (obj.left ?? 0), top: selCenterY + (obj.top ?? 0) });
+        clones.push(cloned);
+      }
+    } else {
+      for (const obj of activeObjects) {
+        const cloned = await obj.clone();
+        cloned.set({ left: obj.left, top: obj.top });
+        clones.push(cloned);
+      }
     }
     clipboardRef.current = clones;
   }, []);
@@ -732,6 +745,11 @@ export function useCanvas() {
       canvas.add(cloned);
       clonedObjects.push(cloned);
     }
+    // Update clipboard positions so next paste offsets further
+    clipboardRef.current = clipboardRef.current.map(obj => {
+      obj.set({ left: (obj.left ?? 0) + 20, top: (obj.top ?? 0) + 20 });
+      return obj;
+    });
 
     if (clonedObjects.length === 1) {
       canvas.setActiveObject(clonedObjects[0]);
