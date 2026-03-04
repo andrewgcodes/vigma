@@ -144,10 +144,9 @@ export async function prepareObjectJsonForSync(objJson: Record<string, unknown>)
  */
 export function needsCompressionForSync(obj: any): boolean {
   if (!obj || (typeof obj.type === 'string' ? obj.type.toLowerCase() : '') !== 'image') return false
-  // Check if the object has a large src via Fabric.js public toJSON() serialization.
-  // We use obj.src (which Fabric.js Image exposes as a public property) rather than
-  // relying on internal _element. For Fabric.js Image objects loaded via fromURL/fromFile,
-  // the .src property contains the data URL.
-  const src = obj.src
+  // Fabric.js v6 FabricImage does NOT expose .src as a property — the image
+  // source is only accessible via the getSrc() method (which reads the
+  // underlying HTMLImageElement.src or canvas.toDataURL()).
+  const src = typeof obj.getSrc === 'function' ? obj.getSrc() : obj.src
   return typeof src === 'string' && src.startsWith('data:') && src.length > MAX_SYNC_BASE64_LENGTH
 }
