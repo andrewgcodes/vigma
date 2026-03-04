@@ -331,7 +331,7 @@ export default function DesignPage() {
     }))
     // Re-check collab is still active after async compression
     if (collabRef.current) {
-      collab.pushCanvasState(items)
+      collabRef.current.pushCanvasState(items)
     }
   }, [])
 
