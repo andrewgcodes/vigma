@@ -52,6 +52,10 @@ interface PropertiesPanelProps {
   onCropImage?: (crop: { left: number, top: number, width: number, height: number }) => void
   onResetCrop?: () => void
   onFlatten?: () => void
+  onStrokeLineCapChange?: (cap: CanvasLineCap) => void
+  onStrokeLineJoinChange?: (join: CanvasLineJoin) => void
+  onAutoLayout?: (direction: 'horizontal' | 'vertical' | 'wrap' | 'grid', gap?: number) => void
+  onGenerateCode?: (format: 'css' | 'svg' | 'react') => string
 }
 
 const BLEND_MODES = [
@@ -104,6 +108,10 @@ export default function PropertiesPanel({
   onCropImage,
   onResetCrop,
   onFlatten,
+  onStrokeLineCapChange,
+  onStrokeLineJoinChange,
+  onAutoLayout,
+  onGenerateCode,
 }: PropertiesPanelProps) {
   const [activeTab, setActiveTab] = useState<"design" | "prototype">("design")
   const [shadowEnabled, setShadowEnabled] = useState(false)
@@ -131,6 +139,13 @@ export default function PropertiesPanel({
   const [savedFillColor, setSavedFillColor] = useState("#4A90D9")
   const [savedStrokeWidth, setSavedStrokeWidth] = useState(1)
   const [comingSoonToast, setComingSoonToast] = useState("")
+  const [codeExportOpen, setCodeExportOpen] = useState(false)
+  const [codeExportFormat, setCodeExportFormat] = useState<'css' | 'svg' | 'react'>('css')
+  const [codeExportContent, setCodeExportContent] = useState('')
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false)
+  const [textResizeMode, setTextResizeMode] = useState<'fixed' | 'auto-width' | 'auto-height'>('auto-height')
+  const [verticalTextAlign, setVerticalTextAlign] = useState<'top' | 'middle' | 'bottom'>('top')
+  const [typographySettingsOpen, setTypographySettingsOpen] = useState(false)
 
   // Show a brief "coming soon" toast
   const showComingSoon = useCallback((feature: string) => {
@@ -363,17 +378,46 @@ export default function PropertiesPanel({
           <div className="flex items-center justify-between px-4 py-2.5 border-b border-canvas-border">
             <span className="text-sm font-medium text-canvas-text">{objectType}</span>
             <div className="flex items-center gap-1">
-              <button onClick={() => showComingSoon("Code export")} className="p-1 rounded hover:bg-canvas-hover text-canvas-text-secondary" title="Export as code (coming soon)">
+              <button onClick={() => {
+                const code = onGenerateCode?.(codeExportFormat) || '// No object selected'
+                setCodeExportContent(code)
+                setCodeExportOpen(!codeExportOpen)
+              }} className={`p-1 rounded hover:bg-canvas-hover ${codeExportOpen ? 'text-canvas-accent' : 'text-canvas-text-secondary'}`} title="Export as code (CSS, SVG, or React)">
                 <Code size={14} />
               </button>
-              <button onClick={() => showComingSoon("Component settings")} className="p-1 rounded hover:bg-canvas-hover text-canvas-text-secondary" title="Component settings (coming soon)">
+              <button onClick={onDuplicate} className="p-1 rounded hover:bg-canvas-hover text-canvas-text-secondary" title="Duplicate this object">
                 <Settings size={14} />
               </button>
-              <button onClick={() => showComingSoon("More options")} className="p-1 rounded hover:bg-canvas-hover text-canvas-text-secondary" title="More options (coming soon)">
-                <MoreHorizontal size={14} />
-              </button>
+              <div className="relative">
+                <button onClick={() => setMoreMenuOpen(!moreMenuOpen)} className={`p-1 rounded hover:bg-canvas-hover ${moreMenuOpen ? 'text-canvas-accent' : 'text-canvas-text-secondary'}`} title="More options">
+                  <MoreHorizontal size={14} />
+                </button>
+                {moreMenuOpen && (
+                  <div className="absolute right-0 top-8 w-40 bg-white border border-canvas-border rounded-lg shadow-lg z-50 py-1">
+                    <button onClick={() => { onDuplicate(); setMoreMenuOpen(false) }} className="w-full text-left px-3 py-1.5 text-xs hover:bg-canvas-hover text-canvas-text">Duplicate</button>
+                    <button onClick={() => { onFlipH(); setMoreMenuOpen(false) }} className="w-full text-left px-3 py-1.5 text-xs hover:bg-canvas-hover text-canvas-text">Flip horizontal</button>
+                    <button onClick={() => { onFlipV(); setMoreMenuOpen(false) }} className="w-full text-left px-3 py-1.5 text-xs hover:bg-canvas-hover text-canvas-text">Flip vertical</button>
+                    <button onClick={() => { onLock(!objectProps.locked); setMoreMenuOpen(false) }} className="w-full text-left px-3 py-1.5 text-xs hover:bg-canvas-hover text-canvas-text">{objectProps.locked ? 'Unlock' : 'Lock'}</button>
+                    <hr className="my-1 border-canvas-border" />
+                    <button onClick={() => { onDelete(); setMoreMenuOpen(false) }} className="w-full text-left px-3 py-1.5 text-xs hover:bg-canvas-hover text-red-500">Delete</button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
+
+          {/* Code export panel */}
+          {codeExportOpen && (
+            <div className="px-4 py-3 border-b border-canvas-border bg-canvas-bg/50">
+              <div className="flex items-center gap-1 mb-2">
+                <button onClick={() => { setCodeExportFormat('css'); setCodeExportContent(onGenerateCode?.('css') || '') }} className={`flex-1 text-xxs py-1 rounded-md border ${codeExportFormat === 'css' ? 'bg-canvas-accent text-white border-canvas-accent' : 'bg-canvas-bg border-canvas-border text-canvas-text-secondary'}`} title="CSS code">CSS</button>
+                <button onClick={() => { setCodeExportFormat('svg'); setCodeExportContent(onGenerateCode?.('svg') || '') }} className={`flex-1 text-xxs py-1 rounded-md border ${codeExportFormat === 'svg' ? 'bg-canvas-accent text-white border-canvas-accent' : 'bg-canvas-bg border-canvas-border text-canvas-text-secondary'}`} title="SVG markup">SVG</button>
+                <button onClick={() => { setCodeExportFormat('react'); setCodeExportContent(onGenerateCode?.('react') || '') }} className={`flex-1 text-xxs py-1 rounded-md border ${codeExportFormat === 'react' ? 'bg-canvas-accent text-white border-canvas-accent' : 'bg-canvas-bg border-canvas-border text-canvas-text-secondary'}`} title="React JSX code">React</button>
+              </div>
+              <pre className="text-[10px] bg-gray-900 text-green-400 p-2 rounded-lg overflow-auto max-h-40 whitespace-pre-wrap font-mono">{codeExportContent}</pre>
+              <button onClick={() => { navigator.clipboard.writeText(codeExportContent); setComingSoonToast('Copied to clipboard!'); setTimeout(() => setComingSoonToast(''), 1500) }} className="mt-1.5 w-full text-xxs py-1.5 rounded-md border border-canvas-border text-canvas-text-secondary hover:bg-canvas-hover" title="Copy code to clipboard">Copy to clipboard</button>
+            </div>
+          )}
 
           {/* ===== POSITION SECTION ===== */}
           <Section title="Position">
@@ -424,10 +468,10 @@ export default function PropertiesPanel({
               <div className="mb-3">
                 <span className="text-xxs text-canvas-text-tertiary mb-1 block">Auto layout</span>
                 <div className="flex items-center gap-0.5">
-                  <FlowBtn icon={<LayoutGrid size={14} />} active={false} onClick={() => showComingSoon("Wrap layout")} title="Wrap layout (coming soon)" />
-                  <FlowBtn icon={<Columns3 size={14} />} active={false} onClick={() => showComingSoon("Vertical layout")} title="Vertical auto layout (coming soon)" />
-                  <FlowBtn icon={<Rows3 size={14} />} active={false} onClick={() => showComingSoon("Horizontal layout")} title="Horizontal auto layout (coming soon)" />
-                  <FlowBtn icon={<Grid3X3 size={14} />} active={false} onClick={() => showComingSoon("Grid layout")} title="Grid layout (coming soon)" />
+                  <FlowBtn icon={<LayoutGrid size={14} />} active={false} onClick={() => onAutoLayout?.('wrap')} title="Wrap auto layout - arrange children in wrapping rows" />
+                  <FlowBtn icon={<Columns3 size={14} />} active={false} onClick={() => onAutoLayout?.('vertical')} title="Vertical auto layout - stack children vertically" />
+                  <FlowBtn icon={<Rows3 size={14} />} active={false} onClick={() => onAutoLayout?.('horizontal')} title="Horizontal auto layout - arrange children horizontally" />
+                  <FlowBtn icon={<Grid3X3 size={14} />} active={false} onClick={() => onAutoLayout?.('grid')} title="Grid layout - arrange children in a grid" />
                 </div>
               </div>
             )}
@@ -435,13 +479,13 @@ export default function PropertiesPanel({
               <div className="mb-3">
                 <span className="text-xxs text-canvas-text-tertiary mb-1 block">Text resizing</span>
                 <div className="flex items-center bg-canvas-bg rounded-lg border border-canvas-border p-0.5">
-                  <button onClick={() => showComingSoon("Fixed size text")} className="flex-1 p-1.5 rounded text-canvas-text-secondary hover:bg-canvas-hover text-center" title="Fixed size - text box stays the same size (coming soon)">
+                  <button onClick={() => { setTextResizeMode('fixed'); onTextPropertyChange('splitByGrapheme', false) }} className={`flex-1 p-1.5 rounded text-center ${textResizeMode === 'fixed' ? 'bg-canvas-hover text-canvas-text' : 'text-canvas-text-secondary hover:bg-canvas-hover'}`} title="Fixed size - text box stays the same size">
                     <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" className="mx-auto"><line x1="3" y1="4" x2="3" y2="10" /><line x1="3" y1="7" x2="11" y2="7" /><polyline points="8,5 11,7 8,9" /></svg>
                   </button>
-                  <button onClick={() => showComingSoon("Auto width text")} className="flex-1 p-1.5 rounded text-canvas-text-secondary hover:bg-canvas-hover text-center" title="Auto width - width adjusts to fit text (coming soon)">
+                  <button onClick={() => { setTextResizeMode('auto-width'); onTextPropertyChange('splitByGrapheme', true) }} className={`flex-1 p-1.5 rounded text-center ${textResizeMode === 'auto-width' ? 'bg-canvas-hover text-canvas-text' : 'text-canvas-text-secondary hover:bg-canvas-hover'}`} title="Auto width - width adjusts to fit text">
                     <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" className="mx-auto"><line x1="3" y1="4" x2="3" y2="10" /><line x1="7" y1="4" x2="7" y2="10" /><line x1="11" y1="4" x2="11" y2="10" /></svg>
                   </button>
-                  <button onClick={() => showComingSoon("Auto height text")} className="flex-1 p-1.5 rounded bg-canvas-hover text-canvas-text text-center" title="Auto height - height adjusts to fit text (coming soon)">
+                  <button onClick={() => { setTextResizeMode('auto-height'); onTextPropertyChange('splitByGrapheme', false) }} className={`flex-1 p-1.5 rounded text-center ${textResizeMode === 'auto-height' ? 'bg-canvas-hover text-canvas-text' : 'text-canvas-text-secondary hover:bg-canvas-hover'}`} title="Auto height - height adjusts to fit text">
                     <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" className="mx-auto"><rect x="2" y="3" width="10" height="8" rx="1" /></svg>
                   </button>
                 </div>
@@ -535,7 +579,7 @@ export default function PropertiesPanel({
           {/* ===== TYPOGRAPHY (Text only) ===== */}
           {isText && (
             <Section title="Typography" headerRight={
-              <button onClick={() => showComingSoon("Advanced type settings")} className="p-0.5 rounded hover:bg-canvas-hover text-canvas-text-secondary" title="Advanced typography settings (coming soon)"><Settings size={13} /></button>
+              <button onClick={() => setTypographySettingsOpen(!typographySettingsOpen)} className={`p-0.5 rounded hover:bg-canvas-hover ${typographySettingsOpen ? 'text-canvas-accent' : 'text-canvas-text-secondary'}`} title="Toggle advanced typography settings"><Settings size={13} /></button>
             }>
               <div className="space-y-2">
                 <select value={objectProps.fontFamily || "Inter"} onChange={(e) => onTextPropertyChange("fontFamily", e.target.value)} className="w-full text-xs bg-canvas-bg border border-canvas-border rounded-lg px-2 py-1.5 focus:outline-none focus:border-canvas-accent" title="Font family">
@@ -580,9 +624,9 @@ export default function PropertiesPanel({
                       <TextStyleBtn icon={<AlignRight size={14} />} active={objectProps.textAlign === "right"} onClick={() => onTextPropertyChange("textAlign", "right")} title="Align text right" />
                     </div>
                     <div className="flex items-center gap-0.5 pl-1">
-                      <TextStyleBtn icon={<AlignVerticalJustifyStart size={14} />} active={false} onClick={() => showComingSoon("Vertical text alignment")} title="Align text to top (coming soon)" />
-                      <TextStyleBtn icon={<AlignVerticalJustifyCenter size={14} />} active={false} onClick={() => showComingSoon("Vertical text alignment")} title="Align text to middle (coming soon)" />
-                      <TextStyleBtn icon={<AlignVerticalJustifyEnd size={14} />} active={false} onClick={() => showComingSoon("Vertical text alignment")} title="Align text to bottom (coming soon)" />
+                      <TextStyleBtn icon={<AlignVerticalJustifyStart size={14} />} active={verticalTextAlign === 'top'} onClick={() => { setVerticalTextAlign('top'); onPropertyChange('verticalAlign', 'top') }} title="Align text to top" />
+                      <TextStyleBtn icon={<AlignVerticalJustifyCenter size={14} />} active={verticalTextAlign === 'middle'} onClick={() => { setVerticalTextAlign('middle'); onPropertyChange('verticalAlign', 'middle') }} title="Align text to middle" />
+                      <TextStyleBtn icon={<AlignVerticalJustifyEnd size={14} />} active={verticalTextAlign === 'bottom'} onClick={() => { setVerticalTextAlign('bottom'); onPropertyChange('verticalAlign', 'bottom') }} title="Align text to bottom" />
                     </div>
                   </div>
                 </div>
@@ -592,6 +636,36 @@ export default function PropertiesPanel({
                   <TextStyleBtn icon={<Underline size={14} />} active={objectProps.underline} onClick={() => onTextPropertyChange("underline", !objectProps.underline)} title="Underline (Ctrl+U)" />
                   <TextStyleBtn icon={<Strikethrough size={14} />} active={objectProps.linethrough} onClick={() => onTextPropertyChange("linethrough", !objectProps.linethrough)} title="Strikethrough" />
                 </div>
+                {typographySettingsOpen && (
+                  <div className="space-y-2 pt-2 border-t border-canvas-border">
+                    <span className="text-xxs text-canvas-text-tertiary block">Advanced settings</span>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <span className="text-xxs text-canvas-text-tertiary mb-0.5 block">Paragraph spacing</span>
+                        <input type="number" value={0} onChange={(e) => onTextPropertyChange('paragraphSpacing', parseFloat(e.target.value) || 0)} min={0} step={1} className="w-full text-xs bg-canvas-bg border border-canvas-border rounded-lg px-2 py-1.5 focus:outline-none focus:border-canvas-accent text-canvas-text" title="Space between paragraphs" />
+                      </div>
+                      <div>
+                        <span className="text-xxs text-canvas-text-tertiary mb-0.5 block">Text transform</span>
+                        <select onChange={(e) => {
+                          const text = objectProps.text || ''
+                          const val = e.target.value
+                          if (val === 'uppercase') onTextPropertyChange('text', text.toUpperCase())
+                          else if (val === 'lowercase') onTextPropertyChange('text', text.toLowerCase())
+                          else if (val === 'capitalize') onTextPropertyChange('text', text.replace(/\b\w/g, (c: string) => c.toUpperCase()))
+                        }} className="w-full text-xs bg-canvas-bg border border-canvas-border rounded-lg px-2 py-1.5 focus:outline-none focus:border-canvas-accent text-canvas-text" title="Transform text case">
+                          <option value="none">None</option>
+                          <option value="uppercase">UPPERCASE</option>
+                          <option value="lowercase">lowercase</option>
+                          <option value="capitalize">Capitalize</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-xxs text-canvas-text-tertiary mb-0.5 block">Overline</span>
+                      <button onClick={() => onTextPropertyChange('overline', !objectProps.overline)} className={`text-xxs py-1 px-3 rounded-md border ${objectProps.overline ? 'bg-canvas-accent text-white border-canvas-accent' : 'bg-canvas-bg border-canvas-border text-canvas-text-secondary'}`} title="Toggle overline decoration">{objectProps.overline ? 'On' : 'Off'}</button>
+                    </div>
+                  </div>
+                )}
               </div>
             </Section>
           )}
@@ -679,14 +753,23 @@ export default function PropertiesPanel({
                     </div>
                   </div>
                 </div>
-                <div>
-                  <span className="text-xxs text-canvas-text-tertiary mb-0.5 block">End points</span>
-                  <select onChange={() => showComingSoon("Stroke endpoints")} className="w-full text-xs bg-canvas-bg border border-canvas-border rounded-lg px-2 py-1.5 focus:outline-none focus:border-canvas-accent text-canvas-text" title="Stroke line cap and arrow style (coming soon)">
-                    <option value="none">None</option>
-                    <option value="arrow">Arrow</option>
-                    <option value="circle">Circle</option>
-                    <option value="square">Square</option>
-                  </select>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <span className="text-xxs text-canvas-text-tertiary mb-0.5 block">Line cap</span>
+                    <select value={objectProps.strokeLineCap || 'butt'} onChange={(e) => onStrokeLineCapChange?.(e.target.value as CanvasLineCap)} className="w-full text-xs bg-canvas-bg border border-canvas-border rounded-lg px-2 py-1.5 focus:outline-none focus:border-canvas-accent text-canvas-text" title="Stroke line cap style - how line endpoints look">
+                      <option value="butt">Butt</option>
+                      <option value="round">Round</option>
+                      <option value="square">Square</option>
+                    </select>
+                  </div>
+                  <div>
+                    <span className="text-xxs text-canvas-text-tertiary mb-0.5 block">Line join</span>
+                    <select value={objectProps.strokeLineJoin || 'miter'} onChange={(e) => onStrokeLineJoinChange?.(e.target.value as CanvasLineJoin)} className="w-full text-xs bg-canvas-bg border border-canvas-border rounded-lg px-2 py-1.5 focus:outline-none focus:border-canvas-accent text-canvas-text" title="Stroke line join style - how corners look">
+                      <option value="miter">Miter</option>
+                      <option value="round">Round</option>
+                      <option value="bevel">Bevel</option>
+                    </select>
+                  </div>
                 </div>
                 <div className="flex gap-1">
                   <button onClick={() => onStrokeDashChange([])} className={`flex-1 text-xxs py-1 rounded-md border ${!objectProps.strokeDashArray || objectProps.strokeDashArray.length === 0 ? "bg-canvas-accent text-white border-canvas-accent" : "bg-canvas-bg border-canvas-border text-canvas-text-secondary"}`} title="Solid stroke line">Solid</button>
