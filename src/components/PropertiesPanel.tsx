@@ -340,7 +340,7 @@ export default function PropertiesPanel({
             <button
               onClick={() => {
                 setFillType('solid')
-                const colorToApply = (fillType === 'none' || fillColor === 'transparent') ? lastSolidColor : fillColor
+                const colorToApply = (fillType === 'none' || fillType === 'gradient' || fillColor === 'transparent') ? lastSolidColor : fillColor
                 onFillChange(colorToApply)
               }}
               className={`flex-1 text-xxs py-1 rounded-md border ${fillType === 'solid' ? 'bg-canvas-accent text-white border-canvas-accent' : 'bg-canvas-bg border-canvas-border text-canvas-text-secondary'}`}
