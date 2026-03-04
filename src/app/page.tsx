@@ -14,6 +14,7 @@ import CursorOverlay from '@/components/CursorOverlay'
 import CommentPins from '@/components/CommentPins'
 import CommentsPanel from '@/components/CommentsPanel'
 import { CollaborationManager, generateRoomId, getRoomIdFromHash, setRoomIdInHash, clearRoomFromHash, prewarmSignalingServer } from '@/lib/collaboration'
+import { prepareObjectJsonForSync, needsCompressionForSync } from '@/lib/imageSync'
 import { persistGet, persistSet, persistRemove } from '@/lib/persistence'
 import type { Comment, CommentReply, RemoteUser } from '@/lib/collaboration'
 import { getUserIdentity } from '@/lib/userIdentity'
@@ -282,6 +283,9 @@ export default function DesignPage() {
 
   // === COLLABORATION ===
 
+  // Property list used when serializing Fabric.js objects for sync
+  const SYNC_PROPS = ['id', 'name', 'isFrame', 'lockMovementX', 'lockMovementY', 'lockRotation', 'lockScalingX', 'lockScalingY', 'hasControls', 'selectable', 'evented']
+
   // Sync a single canvas object to Yjs
   const syncObjectToCollab = useCallback((obj: any) => {
     const collab = collabRef.current
@@ -290,27 +294,45 @@ export default function DesignPage() {
     // Skip if this object is currently being applied from a remote peer
     if ((remoteObjectIdsRef.current.get(obj.id) ?? 0) > 0) return
     try {
-      const json = JSON.stringify(obj.toJSON(['id', 'name', 'isFrame', 'lockMovementX', 'lockMovementY', 'lockRotation', 'lockScalingX', 'lockScalingY', 'hasControls', 'selectable', 'evented']))
-      collab.syncObjectToYjs(obj.id, json)
+      const objJson = obj.toJSON(SYNC_PROPS)
+      // For images with large base64 src, compress asynchronously before syncing
+      // to avoid exceeding the WebRTC data channel ~256KB message size limit.
+      if (needsCompressionForSync(obj)) {
+        prepareObjectJsonForSync(objJson).then((json) => {
+          // Re-check collab is still active after async compression
+          if (collabRef.current) {
+            collabRef.current.syncObjectToYjs(obj.id, json)
+          }
+        }).catch((e) => {
+          console.warn('Failed to compress image for sync', e)
+        })
+      } else {
+        const json = JSON.stringify(objJson)
+        collab.syncObjectToYjs(obj.id, json)
+      }
     } catch (e) {
       console.warn('Failed to sync object to collab', e)
     }
   }, [])
 
-  // Sync all canvas objects to Yjs
-  const syncAllObjectsToCollab = useCallback(() => {
+  // Sync all canvas objects to Yjs (compresses large images asynchronously)
+  const syncAllObjectsToCollab = useCallback(async () => {
     const collab = collabRef.current
     const engine = engineRef.current
     if (!collab || !engine || remoteObjectIdsRef.current.size > 0) return  // Map.size > 0 means some IDs still being processed
     const objects = engine.canvas.getObjects().filter((o: any) => !o.isPreview && !o.isGrid)
-    const items = objects.map((obj: any) => {
+    const items = await Promise.all(objects.map(async (obj: any) => {
       if (!obj.id) obj.id = uuidv4()
-      return {
-        id: obj.id,
-        json: JSON.stringify(obj.toJSON(['id', 'name', 'isFrame', 'lockMovementX', 'lockMovementY', 'lockRotation', 'lockScalingX', 'lockScalingY', 'hasControls', 'selectable', 'evented'])),
-      }
-    })
-    collab.pushCanvasState(items)
+      const objJson = obj.toJSON(SYNC_PROPS)
+      const json = needsCompressionForSync(obj)
+        ? await prepareObjectJsonForSync(objJson)
+        : JSON.stringify(objJson)
+      return { id: obj.id, json }
+    }))
+    // Re-check collab is still active after async compression
+    if (collabRef.current) {
+      collab.pushCanvasState(items)
+    }
   }, [])
 
   /** Sync all currently-selected canvas objects to Yjs (for property panel changes).
