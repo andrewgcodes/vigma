@@ -403,7 +403,7 @@ export default function PropertiesPanel({
               }} className={`p-1 rounded hover:bg-canvas-hover ${codeExportOpen ? 'text-canvas-accent' : 'text-canvas-text-secondary'}`} title="Export as code (CSS, SVG, or React)">
                 <Code size={14} />
               </button>
-              <button onClick={onDuplicate} className="p-1 rounded hover:bg-canvas-hover text-canvas-text-secondary" title="Duplicate this object">
+              <button onClick={() => showComingSoon('Object settings')} className="p-1 rounded hover:bg-canvas-hover text-canvas-text-secondary" title="Object settings">
                 <Settings size={14} />
               </button>
               <div className="relative">
