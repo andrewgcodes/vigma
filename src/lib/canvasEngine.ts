@@ -1304,6 +1304,7 @@ export class CanvasEngine {
       props.isRect = true
     }
     if (active instanceof Textbox) {
+      props.isText = true
       props.fontFamily = active.fontFamily
       props.fontSize = active.fontSize
       props.fontWeight = active.fontWeight

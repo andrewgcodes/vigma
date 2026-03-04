@@ -130,6 +130,10 @@ export default function PropertiesPanel({
   const [clipContent, setClipContent] = useState(false)
   const [fillOpacity, setFillOpacity] = useState(100)
   const [strokeOpacity, setStrokeOpacity] = useState(100)
+  const [fillHexInput, setFillHexInput] = useState('')
+  const [strokeHexInput, setStrokeHexInput] = useState('')
+  const [isFillHexFocused, setIsFillHexFocused] = useState(false)
+  const [isStrokeHexFocused, setIsStrokeHexFocused] = useState(false)
   const [hasStroke, setHasStroke] = useState(false)
   const [hasFill, setHasFill] = useState(true)
   const [effects, setEffects] = useState<Array<{ type: string, enabled: boolean }>>([])
@@ -234,17 +238,18 @@ export default function PropertiesPanel({
   // Sync effects from shadow/inner shadow
   useEffect(() => {
     const effs: Array<{ type: string, enabled: boolean }> = []
-    if (shadowEnabled) {
-      effs.push({ type: "Drop shadow", enabled: true })
+    // Always include effects that have been added, even when disabled
+    if (shadowEnabled || objectProps?.shadow) {
+      effs.push({ type: "Drop shadow", enabled: shadowEnabled })
     }
-    if (innerShadowEnabled) {
-      effs.push({ type: "Inner shadow", enabled: true })
+    if (innerShadowEnabled || objectProps?.innerShadow) {
+      effs.push({ type: "Inner shadow", enabled: innerShadowEnabled })
     }
     if (objectProps?.blurAmount && objectProps.blurAmount > 0) {
       effs.push({ type: "Layer blur", enabled: true })
     }
     setEffects(effs)
-  }, [shadowEnabled, innerShadowEnabled, objectProps?.blurAmount, objectProps?.id])
+  }, [shadowEnabled, innerShadowEnabled, objectProps?.blurAmount, objectProps?.shadow, objectProps?.innerShadow, objectProps?.id])
 
   // Handle fill visibility toggle - actually affects canvas
   const handleToggleFillVisible = useCallback(() => {
@@ -308,7 +313,7 @@ export default function PropertiesPanel({
   // Handle clip content toggle
   const handleToggleClipContent = useCallback((checked: boolean) => {
     setClipContent(checked)
-    onPropertyChange("clipPath", checked ? "inset" : null)
+    onPropertyChange("_clipContent", checked)
   }, [onPropertyChange])
 
   if (!objectProps) {
@@ -679,9 +684,9 @@ export default function PropertiesPanel({
                 <div className="flex items-center gap-1.5">
                   <div className="w-6 h-6 rounded-md border border-canvas-border shadow-sm flex-shrink-0 cursor-pointer" style={{ backgroundColor: fillVisible ? fillColor : "transparent", backgroundImage: !fillVisible ? "repeating-conic-gradient(#ccc 0% 25%, transparent 0% 50%) 50% / 8px 8px" : "none" }} title={`Fill color: ${fillColor}`} />
                   <div className="flex-1 flex items-center bg-canvas-bg border border-canvas-border rounded-lg overflow-hidden" title="Fill color hex value">
-                    <input type="text" value={displayFillColor} onChange={(e) => { const hex = e.target.value.replace("#", ""); if (/^[0-9A-Fa-f]{6}$/.test(hex)) { onFillChange("#" + hex) } }} className="flex-1 text-xs bg-transparent px-2 py-1 focus:outline-none text-canvas-text font-mono min-w-0" title="Enter hex color code" />
+                    <input type="text" value={isFillHexFocused ? fillHexInput : displayFillColor} onFocus={() => { setFillHexInput(displayFillColor); setIsFillHexFocused(true) }} onBlur={() => { setIsFillHexFocused(false); const hex = fillHexInput.replace("#", ""); if (/^[0-9A-Fa-f]{6}$/.test(hex)) { onFillChange("#" + hex) } }} onChange={(e) => { const hex = e.target.value.replace("#", ""); setFillHexInput(hex); if (/^[0-9A-Fa-f]{6}$/.test(hex)) { onFillChange("#" + hex) } }} className="flex-1 text-xs bg-transparent px-2 py-1 focus:outline-none text-canvas-text font-mono min-w-0" title="Enter hex color code" />
                     <div className="flex items-center border-l border-canvas-border px-1.5 py-1" title="Fill opacity percentage">
-                      <input type="number" value={fillOpacity} onChange={(e) => setFillOpacity(Math.max(0, Math.min(100, parseInt(e.target.value) || 0)))} min={0} max={100} className="w-8 text-xs bg-transparent border-none focus:outline-none text-canvas-text text-right" title="Fill opacity (0-100%)" />
+                      <input type="number" value={fillOpacity} onChange={(e) => { const v = Math.max(0, Math.min(100, parseInt(e.target.value) || 0)); setFillOpacity(v); onOpacityChange(v / 100) }} min={0} max={100} className="w-8 text-xs bg-transparent border-none focus:outline-none text-canvas-text text-right" title="Fill opacity (0-100%)" />
                       <span className="text-xs text-canvas-text-tertiary ml-0.5">%</span>
                     </div>
                   </div>
@@ -724,9 +729,9 @@ export default function PropertiesPanel({
                 <div className="flex items-center gap-1.5">
                   <div className="w-6 h-6 rounded-md border border-canvas-border shadow-sm flex-shrink-0" style={{ backgroundColor: objectProps.stroke || "#000000" }} title={`Stroke color: ${objectProps.stroke || "#000000"}`} />
                   <div className="flex-1 flex items-center bg-canvas-bg border border-canvas-border rounded-lg overflow-hidden" title="Stroke color hex value">
-                    <input type="text" value={(objectProps.stroke || "#000000").replace("#", "").toUpperCase()} onChange={(e) => { const hex = e.target.value.replace("#", ""); if (/^[0-9A-Fa-f]{6}$/.test(hex)) { onStrokeChange("#" + hex, objectProps.strokeWidth || 1) } }} className="flex-1 text-xs bg-transparent px-2 py-1 focus:outline-none text-canvas-text font-mono min-w-0" title="Enter stroke hex color" />
+                    <input type="text" value={isStrokeHexFocused ? strokeHexInput : (objectProps.stroke || "#000000").replace("#", "").toUpperCase()} onFocus={() => { setStrokeHexInput((objectProps.stroke || "#000000").replace("#", "").toUpperCase()); setIsStrokeHexFocused(true) }} onBlur={() => { setIsStrokeHexFocused(false); const hex = strokeHexInput.replace("#", ""); if (/^[0-9A-Fa-f]{6}$/.test(hex)) { onStrokeChange("#" + hex, objectProps.strokeWidth || 1) } }} onChange={(e) => { const hex = e.target.value.replace("#", ""); setStrokeHexInput(hex); if (/^[0-9A-Fa-f]{6}$/.test(hex)) { onStrokeChange("#" + hex, objectProps.strokeWidth || 1) } }} className="flex-1 text-xs bg-transparent px-2 py-1 focus:outline-none text-canvas-text font-mono min-w-0" title="Enter stroke hex color" />
                     <div className="flex items-center border-l border-canvas-border px-1.5 py-1" title="Stroke opacity percentage">
-                      <input type="number" value={strokeOpacity} onChange={(e) => setStrokeOpacity(Math.max(0, Math.min(100, parseInt(e.target.value) || 0)))} min={0} max={100} className="w-8 text-xs bg-transparent border-none focus:outline-none text-canvas-text text-right" title="Stroke opacity (0-100%)" />
+                      <input type="number" value={strokeOpacity} onChange={(e) => { const v = Math.max(0, Math.min(100, parseInt(e.target.value) || 0)); setStrokeOpacity(v); onPropertyChange('strokeOpacity', v / 100) }} min={0} max={100} className="w-8 text-xs bg-transparent border-none focus:outline-none text-canvas-text text-right" title="Stroke opacity (0-100%)" />
                       <span className="text-xs text-canvas-text-tertiary ml-0.5">%</span>
                     </div>
                   </div>
@@ -793,7 +798,8 @@ export default function PropertiesPanel({
                     <div className="flex items-center gap-1.5">
                       <input type="checkbox" checked={effect.enabled} onChange={(e) => {
                         if (effect.type === "Drop shadow") { if (e.target.checked) { setShadowEnabled(true); onShadowChange(shadowConfig) } else { setShadowEnabled(false); onShadowRemove() } }
-                        else if (effect.type === "Inner shadow") { if (e.target.checked) { setInnerShadowEnabled(true); onInnerShadowChange?.(innerShadowConfig) } else { setInnerShadowEnabled(false); onShadowRemove() } }
+                        else if (effect.type === "Inner shadow") { if (e.target.checked) { setInnerShadowEnabled(true); onInnerShadowChange?.(innerShadowConfig) } else { setInnerShadowEnabled(false); onPropertyChange('_innerShadow', null) } }
+                        else if (effect.type === "Layer blur") { if (!e.target.checked) { onBlurChange?.(0) } }
                       }} className="w-3.5 h-3.5 rounded accent-canvas-accent" title={`Toggle ${effect.type} on/off`} />
                       <select value={effect.type} onChange={(e) => {
                         const t = e.target.value
@@ -810,13 +816,18 @@ export default function PropertiesPanel({
                         if (effect.type === "Drop shadow") {
                           const newEnabled = !effect.enabled
                           if (newEnabled) { setShadowEnabled(true); onShadowChange(shadowConfig) } else { setShadowEnabled(false); onShadowRemove() }
+                        } else if (effect.type === "Inner shadow") {
+                          const newEnabled = !effect.enabled
+                          if (newEnabled) { setInnerShadowEnabled(true); onInnerShadowChange?.(innerShadowConfig) } else { setInnerShadowEnabled(false); onPropertyChange('_innerShadow', null) }
+                        } else if (effect.type === "Layer blur") {
+                          if (effect.enabled) { onBlurChange?.(0) } else { onBlurChange?.(10) }
                         }
                       }} className="p-1 rounded hover:bg-canvas-hover text-canvas-text-secondary" title={`Toggle ${effect.type} visibility`}>
                         {effect.enabled ? <Eye size={13} /> : <EyeOff size={13} />}
                       </button>
                       <button onClick={() => {
                         if (effect.type === "Drop shadow") { setShadowEnabled(false); onShadowRemove() }
-                        else if (effect.type === "Inner shadow") { setInnerShadowEnabled(false); onShadowRemove() }
+                        else if (effect.type === "Inner shadow") { setInnerShadowEnabled(false); onPropertyChange('_innerShadow', null) }
                         else if (effect.type === "Layer blur") { onBlurChange?.(0) }
                       }} className="p-1 rounded hover:bg-canvas-hover text-canvas-text-secondary" title={`Remove ${effect.type}`}><Minus size={13} /></button>
                     </div>
