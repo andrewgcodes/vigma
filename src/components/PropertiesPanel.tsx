@@ -235,6 +235,19 @@ export default function PropertiesPanel({
     }
   }, [objectProps?.strokeWidth, objectProps?.id])
 
+  // Sync fill/stroke opacity from objectProps on selection change
+  useEffect(() => {
+    if (objectProps?.opacity !== undefined) {
+      setFillOpacity(Math.round((objectProps.opacity ?? 1) * 100))
+    }
+  }, [objectProps?.opacity, objectProps?.id])
+
+  useEffect(() => {
+    if (objectProps?.strokeOpacity !== undefined) {
+      setStrokeOpacity(Math.round((objectProps.strokeOpacity ?? 1) * 100))
+    }
+  }, [objectProps?.strokeOpacity, objectProps?.id])
+
   // Sync effects from shadow/inner shadow
   useEffect(() => {
     const effs: Array<{ type: string, enabled: boolean }> = []

@@ -1321,6 +1321,7 @@ export class CanvasEngine {
       props.charSpacing = active.charSpacing
       props.text = active.text
       props.splitByGrapheme = (active as any).splitByGrapheme || false
+      props.paragraphSpacing = (active as any).paragraphSpacing || 0
     }
     // Stroke line cap / join
     props.strokeLineCap = active.strokeLineCap || 'butt'
