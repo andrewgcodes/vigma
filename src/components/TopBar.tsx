@@ -148,7 +148,7 @@ export default function TopBar({
             {showInfoTooltip && (
               <div className="absolute top-full left-1/2 -translate-x-1/2 pt-2 z-50">
                 <div className="px-3 py-2.5 bg-gray-900 text-white text-xs rounded-lg whitespace-nowrap shadow-lg tooltip-content">
-                  <p>Made with <span className="text-red-400">❤️</span> by <a href="https://devin.ai/" target="_blank" rel="noopener noreferrer" className="text-blue-300 hover:underline">Devin</a></p>
+                  <p>Made with <span className="text-red-400">❤️</span> by <a href="https://devin.ai/?utm_source=vigma.io" target="_blank" rel="noopener noreferrer" className="text-blue-300 hover:underline">Devin</a></p>
                   <div className="flex gap-3 mt-1.5 pt-1.5 border-t border-gray-700">
                     <a href="https://forms.gle/oNS1Q1pnR8GTjJvYA" target="_blank" rel="noopener noreferrer" className="text-blue-300 hover:underline flex items-center gap-1"><MessageSquare size={10} />Feedback</a>
                     <a href="https://twitter.com/itsandrewgao" target="_blank" rel="noopener noreferrer" className="text-blue-300 hover:underline">@itsandrewgao</a>
