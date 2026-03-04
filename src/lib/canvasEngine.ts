@@ -967,6 +967,8 @@ export class CanvasEngine {
     if (objects.length < 2) return
     let x = 0, y = 0
     const cols = direction === 'grid' ? Math.ceil(Math.sqrt(objects.length)) : objects.length
+    const maxW = Math.max(...objects.map((obj: any) => (obj.width || 0) * (obj.scaleX || 1)))
+    const maxH = Math.max(...objects.map((obj: any) => (obj.height || 0) * (obj.scaleY || 1)))
     objects.forEach((obj: any, i: number) => {
       const w = (obj.width || 0) * (obj.scaleX || 1)
       const h = (obj.height || 0) * (obj.scaleY || 1)
@@ -979,7 +981,7 @@ export class CanvasEngine {
         if (x > 600) { x = 0; y += h + gap }
       } else if (direction === 'grid') {
         const col = i % cols, row = Math.floor(i / cols)
-        obj.set({ left: col * (w + gap), top: row * (h + gap) })
+        obj.set({ left: col * (maxW + gap), top: row * (maxH + gap) })
       }
       obj.setCoords()
     })
@@ -1016,8 +1018,10 @@ export class CanvasEngine {
         if (props.fontStyle === 'italic') lines.push(`  font-style: italic;`)
         if (props.textAlign) lines.push(`  text-align: ${props.textAlign};`)
         if (props.lineHeight) lines.push(`  line-height: ${props.lineHeight};`)
-        if (props.underline) lines.push(`  text-decoration: underline;`)
-        if (props.linethrough) lines.push(`  text-decoration: line-through;`)
+        const decorations: string[] = []
+        if (props.underline) decorations.push('underline')
+        if (props.linethrough) decorations.push('line-through')
+        if (decorations.length > 0) lines.push(`  text-decoration: ${decorations.join(' ')};`)
       }
       lines.push('}')
       return lines.join('\n')

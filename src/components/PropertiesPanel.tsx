@@ -647,7 +647,7 @@ export default function PropertiesPanel({
                     <div className="grid grid-cols-2 gap-2">
                       <div>
                         <span className="text-xxs text-canvas-text-tertiary mb-0.5 block">Paragraph spacing</span>
-                        <input type="number" value={0} onChange={(e) => onTextPropertyChange('paragraphSpacing', parseFloat(e.target.value) || 0)} min={0} step={1} className="w-full text-xs bg-canvas-bg border border-canvas-border rounded-lg px-2 py-1.5 focus:outline-none focus:border-canvas-accent text-canvas-text" title="Space between paragraphs" />
+                        <input type="number" value={objectProps.paragraphSpacing || 0} onChange={(e) => onTextPropertyChange('paragraphSpacing', parseFloat(e.target.value) || 0)} min={0} step={1} className="w-full text-xs bg-canvas-bg border border-canvas-border rounded-lg px-2 py-1.5 focus:outline-none focus:border-canvas-accent text-canvas-text" title="Space between paragraphs" />
                       </div>
                       <div>
                         <span className="text-xxs text-canvas-text-tertiary mb-0.5 block">Text transform</span>
