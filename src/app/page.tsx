@@ -302,8 +302,8 @@ export default function DesignPage() {
       // to avoid exceeding the WebRTC data channel ~256KB message size limit.
       if (needsCompressionForSync(obj)) {
         prepareObjectJsonForSync(objJson).then((json) => {
-          // Re-check collab is still active after async compression
-          if (collabRef.current) {
+          // Re-check collab is still active and object isn't being updated by remote peer
+          if (collabRef.current && !((remoteObjectIdsRef.current.get(obj.id) ?? 0) > 0)) {
             collabRef.current.syncObjectToYjs(obj.id, json)
           }
         }).catch((e) => {
@@ -640,6 +640,9 @@ export default function DesignPage() {
               : JSON.stringify(objJson)
             return { id: obj.id, json }
           }))
+
+        // Re-check collab is still active after async compression
+        if (collabRef.current !== collab) return
 
         if (localObjects.length > 0) {
           const { remoteOnlyIds, overlappingIds } = collab.reconcileCanvasState(localObjects)
