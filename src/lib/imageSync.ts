@@ -37,17 +37,31 @@ export function isImageTooLargeForSync(dataUrl: string): boolean {
   return dataUrl.length > MAX_SYNC_BASE64_LENGTH
 }
 
+/** Result of compressing an image for sync. */
+export interface CompressedImageResult {
+  src: string
+  /** Compressed image pixel width (differs from original if downscaled) */
+  width: number
+  /** Compressed image pixel height (differs from original if downscaled) */
+  height: number
+}
+
 /**
  * Compress a base64 image data URL to fit within WebRTC data channel limits.
- * Returns a smaller JPEG data URL, or the original if already small enough.
+ * Returns a compressed JPEG data URL with its new pixel dimensions,
+ * or the original if already small enough.
  *
  * This runs entirely in the browser using an offscreen canvas.
  */
-export function compressImageForSync(dataUrl: string): Promise<string> {
+export function compressImageForSync(dataUrl: string): Promise<CompressedImageResult> {
   return new Promise((resolve) => {
     // Already small enough — no compression needed
     if (!isImageTooLargeForSync(dataUrl)) {
-      resolve(dataUrl)
+      // Return original dimensions by loading the image
+      const probe = new Image()
+      probe.onload = () => resolve({ src: dataUrl, width: probe.naturalWidth, height: probe.naturalHeight })
+      probe.onerror = () => resolve({ src: dataUrl, width: 0, height: 0 })
+      probe.src = dataUrl
       return
     }
 
@@ -68,7 +82,7 @@ export function compressImageForSync(dataUrl: string): Promise<string> {
         if (!ctx) {
           // Canvas context unavailable — use placeholder to protect WebRTC connection
           console.warn('[imageSync] Canvas 2D context unavailable, using placeholder')
-          resolve(PLACEHOLDER_DATA_URL)
+          resolve({ src: PLACEHOLDER_DATA_URL, width: 1, height: 1 })
           return
         }
         ctx.drawImage(img, 0, 0, width, height)
@@ -83,14 +97,18 @@ export function compressImageForSync(dataUrl: string): Promise<string> {
           compressed = canvas.toDataURL('image/jpeg', Math.max(quality, 0.1))
         }
 
+        // Track final dimensions for scaleX/scaleY adjustment
+        let finalWidth = width
+        let finalHeight = height
+
         // If STILL too large, reduce dimensions further
         if (compressed.length > MAX_SYNC_BASE64_LENGTH) {
           const furtherScale = Math.sqrt(MAX_SYNC_BASE64_LENGTH / compressed.length)
-          const newWidth = Math.max(Math.round(width * furtherScale), 32)
-          const newHeight = Math.max(Math.round(height * furtherScale), 32)
-          canvas.width = newWidth
-          canvas.height = newHeight
-          ctx.drawImage(img, 0, 0, newWidth, newHeight)
+          finalWidth = Math.max(Math.round(width * furtherScale), 32)
+          finalHeight = Math.max(Math.round(height * furtherScale), 32)
+          canvas.width = finalWidth
+          canvas.height = finalHeight
+          ctx.drawImage(img, 0, 0, finalWidth, finalHeight)
           compressed = canvas.toDataURL('image/jpeg', 0.5)
         }
 
@@ -98,22 +116,22 @@ export function compressImageForSync(dataUrl: string): Promise<string> {
         // use the placeholder to protect the WebRTC connection.
         if (compressed.length > MAX_SYNC_BASE64_LENGTH) {
           console.warn('[imageSync] Image still too large after all compression attempts, using placeholder')
-          resolve(PLACEHOLDER_DATA_URL)
+          resolve({ src: PLACEHOLDER_DATA_URL, width: 1, height: 1 })
           return
         }
 
-        resolve(compressed)
+        resolve({ src: compressed, width: finalWidth, height: finalHeight })
       } catch {
         // Compression failed — strip src to avoid crashing WebRTC data channel.
         // Remote peers will see a placeholder instead of a broken connection.
         console.warn('[imageSync] Image compression failed, stripping src to protect WebRTC connection')
-        resolve(PLACEHOLDER_DATA_URL)
+        resolve({ src: PLACEHOLDER_DATA_URL, width: 1, height: 1 })
       }
     }
     img.onerror = () => {
       // Can't load image — strip src to avoid sending oversized data
       console.warn('[imageSync] Image failed to load for compression, stripping src')
-      resolve(PLACEHOLDER_DATA_URL)
+      resolve({ src: PLACEHOLDER_DATA_URL, width: 1, height: 1 })
     }
     img.src = dataUrl
   })
@@ -131,8 +149,22 @@ export async function prepareObjectJsonForSync(objJson: Record<string, unknown>)
   const objType = typeof objJson.type === 'string' ? objJson.type.toLowerCase() : ''
   if (objType === 'image' && typeof objJson.src === 'string' && objJson.src.startsWith('data:')) {
     if (isImageTooLargeForSync(objJson.src)) {
-      const compressedSrc = await compressImageForSync(objJson.src)
-      return JSON.stringify({ ...objJson, src: compressedSrc })
+      const result = await compressImageForSync(objJson.src)
+      // Adjust scaleX/scaleY to compensate for the dimension change so
+      // the image renders at the same visual size on the remote peer.
+      // Original visual size = width * scaleX, so new scaleX = (origWidth * origScaleX) / newWidth
+      const adjusted: Record<string, unknown> = { ...objJson, src: result.src }
+      const origWidth = typeof objJson.width === 'number' ? objJson.width : 0
+      const origHeight = typeof objJson.height === 'number' ? objJson.height : 0
+      const origScaleX = typeof objJson.scaleX === 'number' ? objJson.scaleX : 1
+      const origScaleY = typeof objJson.scaleY === 'number' ? objJson.scaleY : 1
+      if (result.width > 0 && result.height > 0 && origWidth > 0 && origHeight > 0) {
+        adjusted.width = result.width
+        adjusted.height = result.height
+        adjusted.scaleX = (origWidth * origScaleX) / result.width
+        adjusted.scaleY = (origHeight * origScaleY) / result.height
+      }
+      return JSON.stringify(adjusted)
     }
   }
   return JSON.stringify(objJson)
