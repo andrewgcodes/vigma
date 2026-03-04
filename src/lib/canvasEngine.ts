@@ -944,6 +944,113 @@ export class CanvasEngine {
     this.canvas.renderAll()
   }
 
+  setStrokeLineCap(cap: CanvasLineCap) {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    active.set('strokeLineCap', cap)
+    this.canvas.renderAll()
+  }
+
+  setStrokeLineJoin(join: CanvasLineJoin) {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    active.set('strokeLineJoin', join)
+    this.canvas.renderAll()
+  }
+
+  // AUTO LAYOUT — arrange children of a group/frame
+  autoLayoutChildren(direction: 'horizontal' | 'vertical' | 'wrap' | 'grid', gap: number = 10) {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    // Works on Group or ActiveSelection
+    const objects = 'getObjects' in active ? (active as any).getObjects() as any[] : []
+    if (objects.length < 2) return
+    let x = 0, y = 0
+    const cols = direction === 'grid' ? Math.ceil(Math.sqrt(objects.length)) : objects.length
+    const maxW = Math.max(...objects.map((obj: any) => (obj.width || 0) * (obj.scaleX || 1)))
+    const maxH = Math.max(...objects.map((obj: any) => (obj.height || 0) * (obj.scaleY || 1)))
+    objects.forEach((obj: any, i: number) => {
+      const w = (obj.width || 0) * (obj.scaleX || 1)
+      const h = (obj.height || 0) * (obj.scaleY || 1)
+      if (direction === 'horizontal') {
+        obj.set({ left: x, top: 0 }); x += w + gap
+      } else if (direction === 'vertical') {
+        obj.set({ left: 0, top: y }); y += h + gap
+      } else if (direction === 'wrap') {
+        obj.set({ left: x, top: y }); x += w + gap
+        if (x > 600) { x = 0; y += h + gap }
+      } else if (direction === 'grid') {
+        const col = i % cols, row = Math.floor(i / cols)
+        obj.set({ left: col * (maxW + gap), top: row * (maxH + gap) })
+      }
+      obj.setCoords()
+    })
+    this.canvas.renderAll()
+  }
+
+  // GENERATE CODE from selected object
+  generateCodeExport(format: 'css' | 'svg' | 'react'): string {
+    const active = this.canvas.getActiveObject()
+    if (!active) return '// No object selected'
+    const props = this.getActiveObjectProps()
+    if (!props) return '// No object selected'
+    if (format === 'svg') {
+      return active.toSVG() || '<!-- Could not generate SVG -->'
+    }
+    if (format === 'css') {
+      const lines: string[] = ['.element {']
+      lines.push(`  position: absolute;`)
+      lines.push(`  left: ${props.left}px;`)
+      lines.push(`  top: ${props.top}px;`)
+      lines.push(`  width: ${props.width}px;`)
+      lines.push(`  height: ${props.height}px;`)
+      if (props.angle) lines.push(`  transform: rotate(${props.angle}deg);`)
+      if (props.opacity !== undefined && props.opacity !== 1) lines.push(`  opacity: ${props.opacity};`)
+      if (typeof props.fill === 'string') lines.push(`  background-color: ${props.fill};`)
+      if (props.stroke && props.strokeWidth) {
+        lines.push(`  border: ${props.strokeWidth}px solid ${props.stroke};`)
+      }
+      if (props.rx) lines.push(`  border-radius: ${props.rx}px;`)
+      if (props.isText) {
+        if (props.fontFamily) lines.push(`  font-family: '${props.fontFamily}';`)
+        if (props.fontSize) lines.push(`  font-size: ${props.fontSize}px;`)
+        if (props.fontWeight && props.fontWeight !== 'normal') lines.push(`  font-weight: ${props.fontWeight};`)
+        if (props.fontStyle === 'italic') lines.push(`  font-style: italic;`)
+        if (props.textAlign) lines.push(`  text-align: ${props.textAlign};`)
+        if (props.lineHeight) lines.push(`  line-height: ${props.lineHeight};`)
+        const decorations: string[] = []
+        if (props.underline) decorations.push('underline')
+        if (props.linethrough) decorations.push('line-through')
+        if (decorations.length > 0) lines.push(`  text-decoration: ${decorations.join(' ')};`)
+      }
+      lines.push('}')
+      return lines.join('\n')
+    }
+    // React / JSX
+    const style: string[] = []
+    style.push(`position: 'absolute'`)
+    style.push(`left: ${props.left}`)
+    style.push(`top: ${props.top}`)
+    style.push(`width: ${props.width}`)
+    style.push(`height: ${props.height}`)
+    if (props.angle) style.push(`transform: 'rotate(${props.angle}deg)'`)
+    if (props.opacity !== undefined && props.opacity !== 1) style.push(`opacity: ${props.opacity}`)
+    if (typeof props.fill === 'string') style.push(`backgroundColor: '${props.fill}'`)
+    if (props.stroke && props.strokeWidth) style.push(`border: '${props.strokeWidth}px solid ${props.stroke}'`)
+    if (props.rx) style.push(`borderRadius: ${props.rx}`)
+    if (props.isText) {
+      if (props.fontFamily) style.push(`fontFamily: '${props.fontFamily}'`)
+      if (props.fontSize) style.push(`fontSize: ${props.fontSize}`)
+      if (props.fontWeight && props.fontWeight !== 'normal') style.push(`fontWeight: '${props.fontWeight}'`)
+      if (props.fontStyle === 'italic') style.push(`fontStyle: 'italic'`)
+      if (props.textAlign) style.push(`textAlign: '${props.textAlign}'`)
+    }
+    const isText = active instanceof Textbox
+    const tag = isText ? 'p' : 'div'
+    const content = isText ? (active as any).text || '' : ''
+    return `<${tag} style={{ ${style.join(', ')} }}>${content ? `\n  ${content}\n` : ''}</${tag}>`
+  }
+
   // STROKE POSITION (inside / center / outside)
   setStrokePosition(position: 'center' | 'inside' | 'outside') {
     const active = this.canvas.getActiveObject()
@@ -996,22 +1103,25 @@ export class CanvasEngine {
 
   // Build an SVG path string for a rect with individual corner radii
   private buildRoundedRectPath(w: number, h: number, tl: number, tr: number, br: number, bl: number): string {
-    // Clamp radii to half of the smallest dimension
-    const maxR = Math.min(w, h) / 2
-    tl = Math.min(tl, maxR)
-    tr = Math.min(tr, maxR)
-    br = Math.min(br, maxR)
-    bl = Math.min(bl, maxR)
+    // Proportionally scale radii if adjacent corners exceed edge length (per CSS border-radius spec)
+    const f = Math.min(
+      (tl + tr > 0) ? w / (tl + tr) : Infinity,
+      (tr + br > 0) ? h / (tr + br) : Infinity,
+      (br + bl > 0) ? w / (br + bl) : Infinity,
+      (bl + tl > 0) ? h / (bl + tl) : Infinity,
+      1
+    )
+    tl *= f; tr *= f; br *= f; bl *= f
     return [
       `M ${tl} 0`,
       `L ${w - tr} 0`,
-      `Q ${w} 0 ${w} ${tr}`,
+      `A ${tr} ${tr} 0 0 1 ${w} ${tr}`,
       `L ${w} ${h - br}`,
-      `Q ${w} ${h} ${w - br} ${h}`,
+      `A ${br} ${br} 0 0 1 ${w - br} ${h}`,
       `L ${bl} ${h}`,
-      `Q 0 ${h} 0 ${h - bl}`,
+      `A ${bl} ${bl} 0 0 1 0 ${h - bl}`,
       `L 0 ${tl}`,
-      `Q 0 0 ${tl} 0`,
+      `A ${tl} ${tl} 0 0 1 ${tl} 0`,
       'Z',
     ].join(' ')
   }
@@ -1201,6 +1311,7 @@ export class CanvasEngine {
       props.isRect = true
     }
     if (active instanceof Textbox) {
+      props.isText = true
       props.fontFamily = active.fontFamily
       props.fontSize = active.fontSize
       props.fontWeight = active.fontWeight
@@ -1212,7 +1323,12 @@ export class CanvasEngine {
       props.lineHeight = active.lineHeight
       props.charSpacing = active.charSpacing
       props.text = active.text
+      props.splitByGrapheme = (active as any).splitByGrapheme || false
+      props.paragraphSpacing = (active as any).paragraphSpacing || 0
     }
+    // Stroke line cap / join
+    props.strokeLineCap = active.strokeLineCap || 'butt'
+    props.strokeLineJoin = active.strokeLineJoin || 'miter'
     return props
   }
 

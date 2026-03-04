@@ -1715,6 +1715,28 @@ export default function DesignPage() {
     syncActiveToCollab()
   }, [syncActiveToCollab])
 
+  const handleStrokeLineCapChange = useCallback((cap: CanvasLineCap) => {
+    engineRef.current?.setStrokeLineCap(cap)
+    refreshObjectProps()
+    syncActiveToCollab()
+  }, [syncActiveToCollab])
+
+  const handleStrokeLineJoinChange = useCallback((join: CanvasLineJoin) => {
+    engineRef.current?.setStrokeLineJoin(join)
+    refreshObjectProps()
+    syncActiveToCollab()
+  }, [syncActiveToCollab])
+
+  const handleAutoLayout = useCallback((direction: 'horizontal' | 'vertical' | 'wrap' | 'grid', gap?: number) => {
+    engineRef.current?.autoLayoutChildren(direction, gap)
+    refreshObjectProps()
+    syncActiveToCollab()
+  }, [syncActiveToCollab])
+
+  const handleGenerateCode = useCallback((format: 'css' | 'svg' | 'react'): string => {
+    return engineRef.current?.generateCodeExport(format) || '// No object selected'
+  }, [])
+
   const handleExportSelected = useCallback((format: string, scale: number) => {
     const engine = engineRef.current
     if (!engine) return
@@ -2063,6 +2085,10 @@ export default function DesignPage() {
             onCropImage={handleCropImage}
             onResetCrop={handleResetCrop}
             onFlatten={handleFlatten}
+            onStrokeLineCapChange={handleStrokeLineCapChange}
+            onStrokeLineJoinChange={handleStrokeLineJoinChange}
+            onAutoLayout={handleAutoLayout}
+            onGenerateCode={handleGenerateCode}
           />
           {/* Resize handle */}
           <div
