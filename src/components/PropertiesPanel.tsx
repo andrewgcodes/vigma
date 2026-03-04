@@ -104,7 +104,8 @@ export default function PropertiesPanel({
 }: PropertiesPanelProps) {
   const [shadowEnabled, setShadowEnabled] = useState(false)
   const [shadowConfig, setShadowConfig] = useState({ color: 'rgba(0,0,0,0.25)', blur: 10, offsetX: 0, offsetY: 4 })
-  const [fillType, setFillType] = useState<'solid' | 'gradient'>('solid')
+  const [fillType, setFillType] = useState<'solid' | 'gradient' | 'none'>('solid')
+  const [lastSolidColor, setLastSolidColor] = useState('#4A90D9')
   const [gradientColor1, setGradientColor1] = useState('#4A90D9')
   const [gradientColor2, setGradientColor2] = useState('#50C878')
   const [showIndividualCorners, setShowIndividualCorners] = useState(false)
@@ -142,8 +143,13 @@ export default function PropertiesPanel({
         setGradientColor1(stops[0].color || '#4A90D9')
         setGradientColor2(stops[stops.length - 1].color || '#50C878')
       }
+    } else if (objectProps?.fill === 'transparent' || objectProps?.fill === '' || objectProps?.fill === null) {
+      setFillType('none')
     } else {
       setFillType('solid')
+      if (typeof objectProps?.fill === 'string' && objectProps.fill !== 'transparent') {
+        setLastSolidColor(objectProps.fill)
+      }
     }
   }, [objectProps?.fill, objectProps?.id])
 
@@ -332,27 +338,37 @@ export default function PropertiesPanel({
         <Section title="Fill">
           <div className="flex gap-1 mb-2">
             <button
-              onClick={() => setFillType('solid')}
+              onClick={() => {
+                setFillType('solid')
+                const colorToApply = (fillType === 'none' || fillType === 'gradient' || fillColor === 'transparent') ? lastSolidColor : fillColor
+                onFillChange(colorToApply)
+              }}
               className={`flex-1 text-xxs py-1 rounded-md border ${fillType === 'solid' ? 'bg-canvas-accent text-white border-canvas-accent' : 'bg-canvas-bg border-canvas-border text-canvas-text-secondary'}`}
             >
               Solid
             </button>
             <button
-              onClick={() => setFillType('gradient')}
+              onClick={() => {
+                setFillType('gradient')
+                onGradientChange({ type: 'linear', colorStops: { '0': gradientColor1, '1': gradientColor2 } })
+              }}
               className={`flex-1 text-xxs py-1 rounded-md border ${fillType === 'gradient' ? 'bg-canvas-accent text-white border-canvas-accent' : 'bg-canvas-bg border-canvas-border text-canvas-text-secondary'}`}
             >
               Gradient
             </button>
             <button
-              onClick={() => onFillChange('transparent')}
-              className="flex-1 text-xxs py-1 rounded-md border bg-canvas-bg border-canvas-border text-canvas-text-secondary"
+              onClick={() => {
+                setFillType('none')
+                onFillChange('transparent')
+              }}
+              className={`flex-1 text-xxs py-1 rounded-md border ${fillType === 'none' ? 'bg-canvas-accent text-white border-canvas-accent' : 'bg-canvas-bg border-canvas-border text-canvas-text-secondary'}`}
             >
               None
             </button>
           </div>
           {fillType === 'solid' ? (
             <ColorPicker color={fillColor} onChange={onFillChange} />
-          ) : (
+          ) : fillType === 'gradient' ? (
             <div className="space-y-2">
               <ColorPicker
                 color={gradientColor1}
@@ -385,7 +401,7 @@ export default function PropertiesPanel({
                 </button>
               </div>
             </div>
-          )}
+          ) : null}
         </Section>
 
         {/* Stroke */}
