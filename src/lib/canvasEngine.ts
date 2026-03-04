@@ -1103,22 +1103,25 @@ export class CanvasEngine {
 
   // Build an SVG path string for a rect with individual corner radii
   private buildRoundedRectPath(w: number, h: number, tl: number, tr: number, br: number, bl: number): string {
-    // Clamp radii to half of the smallest dimension
-    const maxR = Math.min(w, h) / 2
-    tl = Math.min(tl, maxR)
-    tr = Math.min(tr, maxR)
-    br = Math.min(br, maxR)
-    bl = Math.min(bl, maxR)
+    // Proportionally scale radii if adjacent corners exceed edge length (per CSS border-radius spec)
+    const f = Math.min(
+      (tl + tr > 0) ? w / (tl + tr) : Infinity,
+      (tr + br > 0) ? h / (tr + br) : Infinity,
+      (br + bl > 0) ? w / (br + bl) : Infinity,
+      (bl + tl > 0) ? h / (bl + tl) : Infinity,
+      1
+    )
+    tl *= f; tr *= f; br *= f; bl *= f
     return [
       `M ${tl} 0`,
       `L ${w - tr} 0`,
-      `Q ${w} 0 ${w} ${tr}`,
+      `A ${tr} ${tr} 0 0 1 ${w} ${tr}`,
       `L ${w} ${h - br}`,
-      `Q ${w} ${h} ${w - br} ${h}`,
+      `A ${br} ${br} 0 0 1 ${w - br} ${h}`,
       `L ${bl} ${h}`,
-      `Q 0 ${h} 0 ${h - bl}`,
+      `A ${bl} ${bl} 0 0 1 0 ${h - bl}`,
       `L 0 ${tl}`,
-      `Q 0 0 ${tl} 0`,
+      `A ${tl} ${tl} 0 0 1 ${tl} 0`,
       'Z',
     ].join(' ')
   }
