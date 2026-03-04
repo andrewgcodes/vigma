@@ -614,15 +614,16 @@ export default function DesignPage() {
       } else {
         // CREATING a new room (empty Yjs doc) — push local canvas objects to Yjs.
         // This is the "Share" flow where the user has a design and wants to collaborate.
-        const localObjects = engine.canvas.getObjects()
+        const localObjects = await Promise.all(engine.canvas.getObjects()
           .filter((o: any) => !o.isPreview && !o.isGrid)
-          .map((obj: any) => {
+          .map(async (obj: any) => {
             if (!obj.id) obj.id = uuidv4()
-            return {
-              id: obj.id,
-              json: JSON.stringify(obj.toJSON(['id', 'name', 'isFrame', 'lockMovementX', 'lockMovementY', 'lockRotation', 'lockScalingX', 'lockScalingY', 'hasControls', 'selectable', 'evented'])),
-            }
-          })
+            const objJson = obj.toJSON(SYNC_PROPS)
+            const json = needsCompressionForSync(obj)
+              ? await prepareObjectJsonForSync(objJson)
+              : JSON.stringify(objJson)
+            return { id: obj.id, json }
+          }))
 
         if (localObjects.length > 0) {
           const { remoteOnlyIds, overlappingIds } = collab.reconcileCanvasState(localObjects)

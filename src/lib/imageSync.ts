@@ -66,8 +66,9 @@ export function compressImageForSync(dataUrl: string): Promise<string> {
         canvas.height = height
         const ctx = canvas.getContext('2d')
         if (!ctx) {
-          // Fallback: return original if canvas context fails
-          resolve(dataUrl)
+          // Canvas context unavailable — use placeholder to protect WebRTC connection
+          console.warn('[imageSync] Canvas 2D context unavailable, using placeholder')
+          resolve(PLACEHOLDER_DATA_URL)
           return
         }
         ctx.drawImage(img, 0, 0, width, height)
