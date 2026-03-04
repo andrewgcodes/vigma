@@ -78,9 +78,9 @@ export function compressImageForSync(dataUrl: string): Promise<string> {
 
         // If still too large, progressively reduce quality
         let quality = SYNC_JPEG_QUALITY
-        while (compressed.length > MAX_SYNC_BASE64_LENGTH && quality > 0.1) {
+        while (compressed.length > MAX_SYNC_BASE64_LENGTH && quality > 0.15) {
           quality -= 0.1
-          compressed = canvas.toDataURL('image/jpeg', quality)
+          compressed = canvas.toDataURL('image/jpeg', Math.max(quality, 0.1))
         }
 
         // If STILL too large, reduce dimensions further
