@@ -61,6 +61,9 @@ export default function DesignPage() {
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved' | 'just-saved'>('saved')
   const [largeImageWarning, setLargeImageWarning] = useState<string | null>(null)
   const largeImageWarningTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const [peerDisconnectNotice, setPeerDisconnectNotice] = useState<string | null>(null)
+  const peerDisconnectTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const prevRemoteUsersCountRef = useRef<number>(0)
   const saveStatusTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const drawStartRef = useRef<{ x: number; y: number } | null>(null)
   const previewObjRef = useRef<any>(null)
@@ -562,6 +565,19 @@ export default function DesignPage() {
         }
       },
       onUsersChange: (users) => {
+        const prevCount = prevRemoteUsersCountRef.current
+        const newCount = users.length
+        // Detect peer disconnection: count dropped and we previously had peers
+        if (prevCount > 0 && newCount < prevCount) {
+          const dropped = prevCount - newCount
+          const msg = dropped === 1
+            ? 'A collaborator has disconnected.'
+            : `${dropped} collaborators have disconnected.`
+          setPeerDisconnectNotice(msg)
+          if (peerDisconnectTimerRef.current) clearTimeout(peerDisconnectTimerRef.current)
+          peerDisconnectTimerRef.current = setTimeout(() => setPeerDisconnectNotice(null), 6000)
+        }
+        prevRemoteUsersCountRef.current = newCount
         setRemoteUsers(users)
       },
       onConnectionStatusChange: (status) => {
@@ -783,6 +799,7 @@ export default function DesignPage() {
     setRoomId(null)
     roomIdRef.current = null
     setRemoteUsers([])
+    prevRemoteUsersCountRef.current = 0
     setComments([])
     setConnectionStatus('disconnected')
     clearRoomFromHash()
@@ -1768,6 +1785,27 @@ export default function DesignPage() {
 
   return (
     <MobileGate>
+    {/* Peer Disconnect Notification Toast */}
+    {peerDisconnectNotice && (
+      <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[9999] max-w-lg w-full mx-4 animate-in fade-in slide-in-from-top-2">
+        <div className="bg-red-50 border border-red-200 rounded-xl shadow-lg px-4 py-3 flex items-start gap-3">
+          <div className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+            <svg className="w-4 h-4 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <p className="text-sm text-red-800 flex-1">{peerDisconnectNotice}</p>
+          <button
+            onClick={() => setPeerDisconnectNotice(null)}
+            className="text-red-400 hover:text-red-600 transition-colors flex-shrink-0"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    )}
     {/* Large Image Upload Warning Toast */}
     {largeImageWarning && (
       <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[9999] max-w-lg w-full mx-4 animate-in fade-in slide-in-from-top-2">
