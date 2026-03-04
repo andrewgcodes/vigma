@@ -23,6 +23,8 @@ import { v4 as uuidv4 } from 'uuid'
 import type { ToolType } from '@/types/design'
 import WelcomeModal from '@/components/WelcomeModal'
 import MobileGate from '@/components/MobileGate'
+import KeyboardShortcutsModal from '@/components/KeyboardShortcutsModal'
+import type { SnapshotEntry, SavedComponent } from '@/types/design'
 
 /** Property list used when serializing Fabric.js objects for Yjs sync. */
 const SYNC_PROPS = ['id', 'name', 'isFrame', 'lockMovementX', 'lockMovementY', 'lockRotation', 'lockScalingX', 'lockScalingY', 'hasControls', 'selectable', 'evented']
@@ -49,6 +51,12 @@ export default function DesignPage() {
     snapToGrid, toggleSnapToGrid,
     gridSize,
     viewport, setViewport,
+    theme,
+    addRecentColor,
+    canvasBackground, setCanvasBackground,
+    showShortcutsModal, setShowShortcutsModal,
+    snapshots, addSnapshot, removeSnapshot,
+    savedComponents, addSavedComponent, removeSavedComponent,
   } = useDesignStore()
 
   const [layers, setLayers] = useState<any[]>([])
@@ -1291,6 +1299,12 @@ export default function DesignPage() {
         setContextMenu({ visible: false, x: 0, y: 0, hasSelection: false, multipleSelected: false, isLocked: false })
       }
 
+      // ? for shortcuts modal (Feature 6)
+      if (e.key === '?' || (shift && e.key === '/')) {
+        setShowShortcutsModal(!showShortcutsModal)
+        e.preventDefault()
+      }
+
       // Space bar for temporary hand tool
       if (e.key === ' ' && !e.repeat) {
         setActiveTool('hand')
@@ -1615,12 +1629,14 @@ export default function DesignPage() {
   const handleFillChange = useCallback((color: string) => {
     engineRef.current?.setObjectFill(color)
     setFill({ color })
+    addRecentColor(color)
     refreshObjectProps()
     syncActiveToCollab()
   }, [syncActiveToCollab])
 
   const handleStrokeChange = useCallback((color: string, width?: number) => {
     engineRef.current?.setObjectStroke(color, width)
+    addRecentColor(color)
     refreshObjectProps()
     syncActiveToCollab()
   }, [syncActiveToCollab])
@@ -1751,6 +1767,112 @@ export default function DesignPage() {
       syncActiveToCollab()
     })
   }, [syncActiveToCollab])
+
+  // Feature 1: Theme effect - apply dark class to html element
+  useEffect(() => {
+    if (theme === 'dark') {
+      document.documentElement.classList.add('dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+    }
+  }, [theme])
+
+  // Feature 2: Smart guides - enable when engine is ready
+  useEffect(() => {
+    const engine = engineRef.current
+    if (engine) {
+      engine.enableSmartGuides()
+    }
+    return () => {
+      engine?.disableSmartGuides()
+    }
+  }, [engineRef.current])
+
+  // Feature 7: Measure / Distance tool - enable when engine is ready
+  useEffect(() => {
+    const engine = engineRef.current
+    if (engine) {
+      engine.enableMeasureTool()
+    }
+    return () => {
+      engine?.disableMeasureTool()
+    }
+  }, [engineRef.current])
+
+  // Feature 4: Canvas background color effect
+  useEffect(() => {
+    const engine = engineRef.current
+    if (engine) {
+      engine.setCanvasBackgroundColor(canvasBackground)
+    }
+  }, [canvasBackground, engineRef.current])
+
+  // Feature 8: Save snapshot handler
+  const handleSaveSnapshot = useCallback(() => {
+    const engine = engineRef.current
+    if (!engine) return
+    const name = prompt('Snapshot name:', `Snapshot ${snapshots.length + 1}`)
+    if (!name) return
+    const canvasJSON = engine.exportToJSON()
+    const snapshot: SnapshotEntry = {
+      id: uuidv4(),
+      name,
+      canvasJSON,
+      timestamp: Date.now(),
+    }
+    addSnapshot(snapshot)
+  }, [snapshots.length, addSnapshot])
+
+  // Feature 8: Restore snapshot handler
+  const handleRestoreSnapshot = useCallback((snapshot: SnapshotEntry) => {
+    const engine = engineRef.current
+    if (!engine) return
+    engine.loadFromJSON(snapshot.canvasJSON).then(() => {
+      refreshLayers()
+      refreshObjectProps()
+    })
+  }, [])
+
+  // Feature 10: Save component handler
+  const handleSaveComponent = useCallback(() => {
+    const engine = engineRef.current
+    if (!engine) return
+    const active = engine.canvas.getActiveObject()
+    if (!active) return
+    const name = prompt('Component name:', (active as any).name || 'Component')
+    if (!name) return
+    const objectJSON = JSON.stringify(active.toObject(SYNC_PROPS))
+    const component: SavedComponent = {
+      id: uuidv4(),
+      name,
+      objectJSON,
+      createdAt: Date.now(),
+    }
+    addSavedComponent(component)
+  }, [addSavedComponent])
+
+  // Feature 10: Place component on canvas
+  const handlePlaceComponent = useCallback(async (component: SavedComponent) => {
+    const engine = engineRef.current
+    if (!engine) return
+    const { FabricObject } = await import('fabric')
+    const objects = await (FabricObject as any).fromObject(JSON.parse(component.objectJSON))
+    if (objects) {
+      ;(objects as any).id = uuidv4()
+      ;(objects as any).name = component.name
+      objects.set({ left: 100 + Math.random() * 200, top: 100 + Math.random() * 200 })
+      engine.canvas.add(objects)
+      engine.canvas.setActiveObject(objects)
+      engine.canvas.renderAll()
+      refreshLayers()
+    }
+  }, [])
+
+  // Feature 4: Canvas background change handler
+  const handleCanvasBackgroundChange = useCallback((color: string) => {
+    setCanvasBackground(color)
+    engineRef.current?.setCanvasBackgroundColor(color)
+  }, [setCanvasBackground])
 
   // DROP handler for images
   useEffect(() => {
@@ -1942,16 +2064,19 @@ export default function DesignPage() {
         connectionStatus={connectionStatus}
         onShare={handleShare}
         onLeaveRoom={handleLeaveRoom}
+        onSaveSnapshot={handleSaveSnapshot}
       />
 
       {/* Left Panel */}
       {leftPanelOpen && (
-        <div className="fixed left-0 top-11 bottom-0 bg-white/95 backdrop-blur-xl border-r border-canvas-border z-40 flex flex-col panel-slide-in" style={{ width: leftPanelWidth }}>
+        <div className="fixed left-0 top-11 bottom-0 bg-canvas-surface/95 backdrop-blur-xl border-r border-canvas-border z-40 flex flex-col panel-slide-in" style={{ width: leftPanelWidth }}>
           {/* Tab buttons */}
           <div className="flex border-b border-canvas-border">
             <TabButton active={leftPanelTab === 'layers'} onClick={() => setLeftPanelTab('layers')}>Layers</TabButton>
             <TabButton active={leftPanelTab === 'pages'} onClick={() => setLeftPanelTab('pages')}>Pages</TabButton>
             <TabButton active={leftPanelTab === 'comments'} onClick={() => setLeftPanelTab('comments')}><span className="flex items-center gap-0.5 whitespace-nowrap">Chat{comments.filter(c => !c.resolved).length > 0 && <span className="text-xxs bg-canvas-accent text-white rounded-full w-4 h-4 flex items-center justify-center">{comments.filter(c => !c.resolved).length}</span>}</span></TabButton>
+            <TabButton active={leftPanelTab === 'snapshots'} onClick={() => setLeftPanelTab('snapshots')}>Snapshots</TabButton>
+            <TabButton active={leftPanelTab === 'assets'} onClick={() => setLeftPanelTab('assets')}>Assets</TabButton>
           </div>
 
           {/* Tab content */}
@@ -2013,6 +2138,78 @@ export default function DesignPage() {
                 onToggleShowResolved={() => setShowResolved(prev => !prev)}
               />
             )}
+            {/* Feature 8: Snapshots Panel */}
+            {leftPanelTab === 'snapshots' && (
+              <div className="p-3 space-y-2 overflow-y-auto flex-1">
+                <button
+                  onClick={handleSaveSnapshot}
+                  className="w-full px-3 py-2 text-xs font-medium bg-canvas-accent text-white rounded-lg hover:opacity-90 transition-opacity"
+                >
+                  Save Snapshot
+                </button>
+                {snapshots.length === 0 && (
+                  <p className="text-xs text-canvas-text-tertiary text-center py-4">No snapshots yet</p>
+                )}
+                {snapshots.map((snap) => (
+                  <div key={snap.id} className="flex items-center justify-between p-2 rounded-lg bg-canvas-hover group">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-canvas-text truncate">{snap.name}</p>
+                      <p className="text-xxs text-canvas-text-tertiary">{new Date(snap.timestamp).toLocaleString()}</p>
+                    </div>
+                    <div className="flex gap-1">
+                      <button
+                        onClick={() => handleRestoreSnapshot(snap)}
+                        className="text-xxs px-2 py-1 bg-canvas-accent text-white rounded hover:opacity-90"
+                      >
+                        Restore
+                      </button>
+                      <button
+                        onClick={() => removeSnapshot(snap.id)}
+                        className="text-xxs px-2 py-1 text-red-500 hover:bg-red-50 rounded"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {/* Feature 10: Assets / Components Panel */}
+            {leftPanelTab === 'assets' && (
+              <div className="p-3 space-y-2 overflow-y-auto flex-1">
+                <button
+                  onClick={handleSaveComponent}
+                  className="w-full px-3 py-2 text-xs font-medium bg-canvas-accent text-white rounded-lg hover:opacity-90 transition-opacity"
+                >
+                  Save Selected as Component
+                </button>
+                {savedComponents.length === 0 && (
+                  <p className="text-xs text-canvas-text-tertiary text-center py-4">No saved components</p>
+                )}
+                {savedComponents.map((comp) => (
+                  <div key={comp.id} className="flex items-center justify-between p-2 rounded-lg bg-canvas-hover group">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-canvas-text truncate">{comp.name}</p>
+                      <p className="text-xxs text-canvas-text-tertiary">{new Date(comp.createdAt).toLocaleString()}</p>
+                    </div>
+                    <div className="flex gap-1">
+                      <button
+                        onClick={() => handlePlaceComponent(comp)}
+                        className="text-xxs px-2 py-1 bg-canvas-accent text-white rounded hover:opacity-90"
+                      >
+                        Place
+                      </button>
+                      <button
+                        onClick={() => removeSavedComponent(comp.id)}
+                        className="text-xxs px-2 py-1 text-red-500 hover:bg-red-50 rounded"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
           {/* Resize handle */}
           <div
@@ -2024,7 +2221,7 @@ export default function DesignPage() {
 
       {/* Right Panel */}
       {rightPanelOpen && (
-        <div className="fixed right-0 top-11 bottom-0 bg-white/95 backdrop-blur-xl border-l border-canvas-border z-40 overflow-hidden" style={{ width: rightPanelWidth }}>
+        <div className="fixed right-0 top-11 bottom-0 bg-canvas-surface/95 backdrop-blur-xl border-l border-canvas-border z-40 overflow-hidden" style={{ width: rightPanelWidth }}>
           <PropertiesPanel
             objectProps={objectProps}
             onPropertyChange={(prop, value) => {
@@ -2063,6 +2260,8 @@ export default function DesignPage() {
             onCropImage={handleCropImage}
             onResetCrop={handleResetCrop}
             onFlatten={handleFlatten}
+            canvasBackground={canvasBackground}
+            onCanvasBackgroundChange={handleCanvasBackgroundChange}
           />
           {/* Resize handle */}
           <div
@@ -2222,6 +2421,7 @@ export default function DesignPage() {
         onBooleanExclude={() => { engineRef.current?.booleanExclude(); refreshLayers(); refreshObjectProps() }}
         onMask={() => { engineRef.current?.applyMask(); refreshLayers(); refreshObjectProps() }}
         onRemoveMask={() => { engineRef.current?.removeMask(); refreshLayers(); refreshObjectProps() }}
+        onSaveComponent={handleSaveComponent}
         hasSelection={contextMenu.hasSelection}
         isLocked={contextMenu.isLocked}
         multipleSelected={contextMenu.multipleSelected}
@@ -2229,6 +2429,9 @@ export default function DesignPage() {
 
       {/* Welcome modal for first-time visitors */}
       <WelcomeModal />
+
+      {/* Feature 6: Keyboard Shortcuts Modal */}
+      <KeyboardShortcutsModal />
     </div>
     </MobileGate>
   )

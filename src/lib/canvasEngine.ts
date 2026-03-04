@@ -14,6 +14,9 @@ export class CanvasEngine {
   private guidelines: FabricObject[] = []
   private snapThreshold = 5
   private snapHandler: ((e: any) => void) | null = null
+  private smartGuideHandler: ((e: any) => void) | null = null
+  private smartGuideRenderHandler: (() => void) | null = null
+  private smartGuideLines: { x?: number; y?: number }[] = []
   private onSelectionChange?: (ids: string[]) => void
   private onObjectModified?: () => void
   private onHistoryChange?: (canUndo: boolean, canRedo: boolean) => void
@@ -871,6 +874,180 @@ export class CanvasEngine {
     }
     this.gridLines.forEach(l => this.canvas.remove(l))
     this.gridLines = []
+    this.canvas.renderAll()
+  }
+
+  // SMART GUIDES (Feature 2)
+  enableSmartGuides() {
+    this.disableSmartGuides()
+    const threshold = 5
+    this.smartGuideHandler = (e: any) => {
+      const moving = e.target
+      if (!moving) return
+      const guides: { x?: number; y?: number }[] = []
+      const mBound = moving.getBoundingRect()
+      const mCx = mBound.left + mBound.width / 2
+      const mCy = mBound.top + mBound.height / 2
+      const objects = this.canvas.getObjects().filter((o: any) =>
+        o !== moving && !o.isGrid && !o.isPreview && o.visible !== false
+      )
+      for (const obj of objects) {
+        const oBound = obj.getBoundingRect()
+        const oCx = oBound.left + oBound.width / 2
+        const oCy = oBound.top + oBound.height / 2
+        // Vertical center alignment
+        if (Math.abs(mCx - oCx) < threshold) {
+          guides.push({ x: oCx })
+          moving.set('left', (moving.left || 0) + (oCx - mCx))
+        }
+        // Horizontal center alignment
+        if (Math.abs(mCy - oCy) < threshold) {
+          guides.push({ y: oCy })
+          moving.set('top', (moving.top || 0) + (oCy - mCy))
+        }
+        // Left edge alignment
+        if (Math.abs(mBound.left - oBound.left) < threshold) {
+          guides.push({ x: oBound.left })
+        }
+        // Right edge alignment
+        if (Math.abs(mBound.left + mBound.width - (oBound.left + oBound.width)) < threshold) {
+          guides.push({ x: oBound.left + oBound.width })
+        }
+        // Top edge alignment
+        if (Math.abs(mBound.top - oBound.top) < threshold) {
+          guides.push({ y: oBound.top })
+        }
+        // Bottom edge alignment
+        if (Math.abs(mBound.top + mBound.height - (oBound.top + oBound.height)) < threshold) {
+          guides.push({ y: oBound.top + oBound.height })
+        }
+      }
+      this.smartGuideLines = guides
+      this.canvas.requestRenderAll()
+    }
+    this.smartGuideRenderHandler = () => {
+      if (this.smartGuideLines.length === 0) return
+      const ctx = this.canvas.getContext()
+      if (!ctx) return
+      ctx.save()
+      ctx.strokeStyle = '#ff3b30'
+      ctx.lineWidth = 1
+      ctx.setLineDash([4, 4])
+      const w = this.canvas.getWidth()
+      const h = this.canvas.getHeight()
+      for (const guide of this.smartGuideLines) {
+        ctx.beginPath()
+        if (guide.x !== undefined) {
+          ctx.moveTo(guide.x, 0)
+          ctx.lineTo(guide.x, h)
+        }
+        if (guide.y !== undefined) {
+          ctx.moveTo(0, guide.y)
+          ctx.lineTo(w, guide.y)
+        }
+        ctx.stroke()
+      }
+      ctx.restore()
+    }
+    const clearGuides = () => {
+      this.smartGuideLines = []
+      this.canvas.requestRenderAll()
+    }
+    this.canvas.on('object:moving', this.smartGuideHandler)
+    this.canvas.on('after:render', this.smartGuideRenderHandler)
+    this.canvas.on('mouse:up', clearGuides)
+  }
+
+  disableSmartGuides() {
+    if (this.smartGuideHandler) {
+      this.canvas.off('object:moving', this.smartGuideHandler)
+      this.smartGuideHandler = null
+    }
+    if (this.smartGuideRenderHandler) {
+      this.canvas.off('after:render', this.smartGuideRenderHandler)
+      this.smartGuideRenderHandler = null
+    }
+    this.smartGuideLines = []
+  }
+
+  // MEASURE / DISTANCE TOOL (Feature 7)
+  private measureHandler: ((e: any) => void) | null = null
+  private measureRenderHandler: (() => void) | null = null
+  private measureData: { x1: number; y1: number; x2: number; y2: number; dist: number } | null = null
+
+  enableMeasureTool() {
+    this.disableMeasureTool()
+    this.measureHandler = (e: any) => {
+      const active = this.canvas.getActiveObject()
+      if (!active || !e.target || e.target === active) {
+        this.measureData = null
+        this.canvas.requestRenderAll()
+        return
+      }
+      const aBound = active.getBoundingRect()
+      const bBound = e.target.getBoundingRect()
+      const aCx = aBound.left + aBound.width / 2
+      const aCy = aBound.top + aBound.height / 2
+      const bCx = bBound.left + bBound.width / 2
+      const bCy = bBound.top + bBound.height / 2
+      const dist = Math.sqrt(Math.pow(bCx - aCx, 2) + Math.pow(bCy - aCy, 2))
+      this.measureData = { x1: aCx, y1: aCy, x2: bCx, y2: bCy, dist: Math.round(dist) }
+      this.canvas.requestRenderAll()
+    }
+    this.measureRenderHandler = () => {
+      if (!this.measureData) return
+      const ctx = this.canvas.getContext()
+      if (!ctx) return
+      const { x1, y1, x2, y2, dist } = this.measureData
+      ctx.save()
+      ctx.strokeStyle = '#ff9500'
+      ctx.lineWidth = 1
+      ctx.setLineDash([6, 3])
+      ctx.beginPath()
+      ctx.moveTo(x1, y1)
+      ctx.lineTo(x2, y2)
+      ctx.stroke()
+      // Draw distance label
+      const mx = (x1 + x2) / 2
+      const my = (y1 + y2) / 2
+      ctx.setLineDash([])
+      ctx.fillStyle = '#ff9500'
+      ctx.font = 'bold 11px -apple-system, BlinkMacSystemFont, sans-serif'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      const text = `${dist}px`
+      const tw = ctx.measureText(text).width + 8
+      ctx.fillStyle = '#ff9500'
+      ctx.beginPath()
+      ctx.roundRect(mx - tw / 2, my - 9, tw, 18, 4)
+      ctx.fill()
+      ctx.fillStyle = '#fff'
+      ctx.fillText(text, mx, my)
+      ctx.restore()
+    }
+    this.canvas.on('mouse:over', this.measureHandler)
+    this.canvas.on('mouse:out', () => {
+      this.measureData = null
+      this.canvas.requestRenderAll()
+    })
+    this.canvas.on('after:render', this.measureRenderHandler)
+  }
+
+  disableMeasureTool() {
+    if (this.measureHandler) {
+      this.canvas.off('mouse:over', this.measureHandler)
+      this.measureHandler = null
+    }
+    if (this.measureRenderHandler) {
+      this.canvas.off('after:render', this.measureRenderHandler)
+      this.measureRenderHandler = null
+    }
+    this.measureData = null
+  }
+
+  // Set canvas background color (Feature 4)
+  setCanvasBackgroundColor(color: string) {
+    this.canvas.backgroundColor = color
     this.canvas.renderAll()
   }
 

@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import type {
   ToolType, FillConfig, StrokeConfig, ShadowConfig, TextStyle,
   BrushSettings, PageData, HistoryEntry, CanvasViewport, ExportSettings,
-  LayerItem, GuideLineData,
+  LayerItem, GuideLineData, ThemeMode, SnapshotEntry, SavedComponent,
 } from '@/types/design'
 
 interface DesignState {
@@ -79,8 +79,8 @@ interface DesignState {
   toggleLeftPanel: () => void
   rightPanelOpen: boolean
   toggleRightPanel: () => void
-  leftPanelTab: 'layers' | 'pages' | 'assets' | 'comments'
-  setLeftPanelTab: (tab: 'layers' | 'pages' | 'assets' | 'comments') => void
+  leftPanelTab: 'layers' | 'pages' | 'assets' | 'comments' | 'snapshots'
+  setLeftPanelTab: (tab: 'layers' | 'pages' | 'assets' | 'comments' | 'snapshots') => void
   leftPanelWidth: number
   setLeftPanelWidth: (w: number) => void
   rightPanelWidth: number
@@ -115,6 +115,32 @@ interface DesignState {
   // Alignment
   lastAlignAction: string | null
   setLastAlignAction: (action: string | null) => void
+
+  // Theme (Feature 1)
+  theme: ThemeMode
+  toggleTheme: () => void
+
+  // Recent Colors (Feature 3)
+  recentColors: string[]
+  addRecentColor: (color: string) => void
+
+  // Canvas Background (Feature 4)
+  canvasBackground: string
+  setCanvasBackground: (color: string) => void
+
+  // Keyboard Shortcuts Modal (Feature 6)
+  showShortcutsModal: boolean
+  setShowShortcutsModal: (show: boolean) => void
+
+  // Snapshots (Feature 8)
+  snapshots: SnapshotEntry[]
+  addSnapshot: (snapshot: SnapshotEntry) => void
+  removeSnapshot: (id: string) => void
+
+  // Components / Symbols (Feature 10)
+  savedComponents: SavedComponent[]
+  addSavedComponent: (component: SavedComponent) => void
+  removeSavedComponent: (id: string) => void
 }
 
 const defaultPageId = 'page-1'
@@ -218,4 +244,33 @@ export const useDesignStore = create<DesignState>((set) => ({
 
   lastAlignAction: null,
   setLastAlignAction: (action) => set({ lastAlignAction: action }),
+
+  // Theme (Feature 1)
+  theme: 'light',
+  toggleTheme: () => set((s) => ({ theme: s.theme === 'light' ? 'dark' : 'light' })),
+
+  // Recent Colors (Feature 3)
+  recentColors: [],
+  addRecentColor: (color) => set((s) => {
+    const filtered = s.recentColors.filter(c => c !== color)
+    return { recentColors: [color, ...filtered].slice(0, 20) }
+  }),
+
+  // Canvas Background (Feature 4)
+  canvasBackground: '#f5f5f7',
+  setCanvasBackground: (color) => set({ canvasBackground: color }),
+
+  // Keyboard Shortcuts Modal (Feature 6)
+  showShortcutsModal: false,
+  setShowShortcutsModal: (show) => set({ showShortcutsModal: show }),
+
+  // Snapshots (Feature 8)
+  snapshots: [],
+  addSnapshot: (snapshot) => set((s) => ({ snapshots: [snapshot, ...s.snapshots].slice(0, 50) })),
+  removeSnapshot: (id) => set((s) => ({ snapshots: s.snapshots.filter(snap => snap.id !== id) })),
+
+  // Components / Symbols (Feature 10)
+  savedComponents: [],
+  addSavedComponent: (component) => set((s) => ({ savedComponents: [...s.savedComponents, component] })),
+  removeSavedComponent: (id) => set((s) => ({ savedComponents: s.savedComponents.filter(c => c.id !== id) })),
 }))

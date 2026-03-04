@@ -5,7 +5,8 @@ import {
   Copy, Clipboard, Scissors, Trash2, Lock, Unlock,
   ArrowUpToLine, ArrowDownToLine, ArrowUp, ArrowDown,
   FlipHorizontal, FlipVertical, Group, Ungroup,
-  Eye, EyeOff, CopyPlus, Combine, Minus, Merge, X
+  Eye, EyeOff, CopyPlus, Combine, Minus, Merge, X,
+  Component
 } from 'lucide-react'
 
 interface ContextMenuProps {
@@ -34,6 +35,7 @@ interface ContextMenuProps {
   onBooleanExclude?: () => void
   onMask?: () => void
   onRemoveMask?: () => void
+  onSaveComponent?: () => void
   hasSelection: boolean
   isLocked: boolean
   multipleSelected?: boolean
@@ -45,7 +47,7 @@ export default function ContextMenu({
   onBringToFront, onSendToBack, onBringForward, onSendBackward,
   onGroup, onUngroup, onFlipH, onFlipV, onLock,
   onBooleanUnion, onBooleanSubtract, onBooleanIntersect, onBooleanExclude,
-  onMask, onRemoveMask,
+  onMask, onRemoveMask, onSaveComponent,
   hasSelection, isLocked, multipleSelected,
 }: ContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null)
@@ -70,7 +72,7 @@ export default function ContextMenu({
   return (
     <div
       ref={menuRef}
-      className="context-menu fixed z-[100] bg-white rounded-xl shadow-panel-lg py-1 w-52 border border-canvas-border/50"
+      className="context-menu fixed z-[100] bg-canvas-surface rounded-xl shadow-panel-lg py-1 w-52 border border-canvas-border/50"
       style={{ left: adjustedX, top: adjustedY }}
     >
       {hasSelection && (
@@ -121,6 +123,12 @@ export default function ContextMenu({
             shortcut="Del"
             onClick={() => { onDelete(); onClose() }}
             danger
+          />
+          <Divider />
+          <CtxItem
+            icon={<Component size={14} />}
+            label="Save as Component"
+            onClick={() => { onSaveComponent?.(); onClose() }}
           />
         </>
       )}

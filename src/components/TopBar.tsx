@@ -5,8 +5,10 @@ import {
   Undo2, Redo2, ZoomIn, ZoomOut, Maximize2,
   Download, Upload, Menu, Grid3X3, Ruler, Magnet,
   LayoutDashboard, PanelLeft, PanelRight, RotateCcw,
-  Save, FileJson, FileImage, FileCode, Info, Share2, Users, Copy, Check, LogOut, MessageSquare, HelpCircle, Cloud, Loader2
+  Save, FileJson, FileImage, FileCode, Info, Share2, Users, Copy, Check, LogOut, MessageSquare, HelpCircle, Cloud, Loader2,
+  Moon, Sun, Keyboard, Camera
 } from 'lucide-react'
+import { useDesignStore } from '@/store/useDesignStore'
 import type { RemoteUser } from '@/lib/collaboration'
 
 interface TopBarProps {
@@ -42,6 +44,8 @@ interface TopBarProps {
   connectionStatus?: 'connecting' | 'connected' | 'disconnected'
   onShare?: () => void
   onLeaveRoom?: () => void
+  // Snapshots (Feature 8)
+  onSaveSnapshot?: () => void
 }
 
 export default function TopBar({
@@ -76,7 +80,9 @@ export default function TopBar({
   connectionStatus = 'disconnected',
   onShare,
   onLeaveRoom,
+  onSaveSnapshot,
 }: TopBarProps) {
+  const { theme, toggleTheme, showShortcutsModal, setShowShortcutsModal } = useDesignStore()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const jsonInputRef = useRef<HTMLInputElement>(null)
   const [showExportMenu, setShowExportMenu] = React.useState(false)
@@ -114,7 +120,7 @@ export default function TopBar({
   }
 
   return (
-    <div className="fixed top-0 left-0 right-0 h-11 bg-white/90 backdrop-blur-xl border-b border-canvas-border z-50 flex items-center justify-between px-3">
+    <div className="fixed top-0 left-0 right-0 h-11 bg-canvas-surface/90 backdrop-blur-xl border-b border-canvas-border z-50 flex items-center justify-between px-3">
       {/* Left section */}
       <div className="flex items-center gap-1">
         {/* Logo */}
@@ -147,7 +153,7 @@ export default function TopBar({
             <Info size={13} className="text-canvas-text-tertiary hover:text-canvas-text-secondary cursor-pointer transition-colors" />
             {showInfoTooltip && (
               <div className="absolute top-full left-1/2 -translate-x-1/2 pt-2 z-50">
-                <div className="px-3 py-2.5 bg-gray-900 text-white text-xs rounded-lg whitespace-nowrap shadow-lg tooltip-content">
+                <div className="px-3 py-2.5 bg-gray-900 text-white text-xs rounded-lg whitespace-nowrap shadow-lg tooltip-content" style={{ color: '#fff' }}>
                   <p>Made with <span className="text-red-400">❤️</span> by <a href="https://devin.ai/?utm_source=vigma.io" target="_blank" rel="noopener noreferrer" className="text-blue-300 hover:underline">Devin</a></p>
                   <div className="flex gap-3 mt-1.5 pt-1.5 border-t border-gray-700">
                     <a href="https://forms.gle/oNS1Q1pnR8GTjJvYA" target="_blank" rel="noopener noreferrer" className="text-blue-300 hover:underline flex items-center gap-1"><MessageSquare size={10} />Feedback</a>
@@ -201,7 +207,7 @@ export default function TopBar({
           {showViewMenu && (
             <>
               <div className="fixed inset-0 z-40" onClick={() => setShowViewMenu(false)} />
-              <div className="absolute top-full right-0 mt-1 z-50 bg-white rounded-xl shadow-panel-lg py-1 w-48">
+              <div className="absolute top-full right-0 mt-1 z-50 bg-canvas-surface rounded-xl shadow-panel-lg py-1 w-48">
                 <MenuItem icon={<Grid3X3 size={14} />} label="Show Grid" active={showGrid} onClick={() => { onToggleGrid(); setShowViewMenu(false) }} shortcut="Ctrl+'" />
                 <MenuItem icon={<Ruler size={14} />} label="Show Rulers" active={showRulers} onClick={() => { onToggleRulers(); setShowViewMenu(false) }} shortcut="Ctrl+R" />
                 <MenuItem icon={<Magnet size={14} />} label="Snap to Grid" active={snapToGrid} onClick={() => { onToggleSnap(); setShowViewMenu(false) }} />
@@ -244,7 +250,7 @@ export default function TopBar({
           {showExportMenu && (
             <>
               <div className="fixed inset-0 z-40" onClick={() => setShowExportMenu(false)} />
-              <div className="absolute top-full right-0 mt-1 z-50 bg-white rounded-xl shadow-panel-lg py-1 w-44">
+              <div className="absolute top-full right-0 mt-1 z-50 bg-canvas-surface rounded-xl shadow-panel-lg py-1 w-44">
                 <ExportItem icon={<FileImage size={14} />} label="PNG (2x)" onClick={() => { onExport('png'); setShowExportMenu(false) }} />
                 <ExportItem icon={<FileCode size={14} />} label="SVG" onClick={() => { onExport('svg'); setShowExportMenu(false) }} />
                 <ExportItem icon={<FileImage size={14} />} label="JPG" onClick={() => { onExport('jpg'); setShowExportMenu(false) }} />
@@ -257,6 +263,27 @@ export default function TopBar({
             </>
           )}
         </div>
+
+        {/* Theme toggle (Feature 1) */}
+        <BarButton
+          icon={theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
+          onClick={toggleTheme}
+          title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+        />
+
+        {/* Shortcuts help (Feature 6) */}
+        <BarButton
+          icon={<Keyboard size={15} />}
+          onClick={() => setShowShortcutsModal(!showShortcutsModal)}
+          title="Keyboard shortcuts (?)"
+        />
+
+        {/* Save Snapshot (Feature 8) */}
+        <BarButton
+          icon={<Camera size={15} />}
+          onClick={() => onSaveSnapshot?.()}
+          title="Save snapshot"
+        />
 
         <div className="w-px h-5 bg-canvas-border mx-1" />
 

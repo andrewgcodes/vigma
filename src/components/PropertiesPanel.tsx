@@ -13,9 +13,12 @@ import {
   Square
 } from 'lucide-react'
 import ColorPicker from './ColorPicker'
+import { useDesignStore } from '@/store/useDesignStore'
 
 interface PropertiesPanelProps {
   objectProps: Record<string, any> | null
+  canvasBackground?: string
+  onCanvasBackgroundChange?: (color: string) => void
   onPropertyChange: (prop: string, value: any) => void
   onFillChange: (color: string) => void
   onStrokeChange: (color: string, width?: number) => void
@@ -101,7 +104,10 @@ export default function PropertiesPanel({
   onCropImage,
   onResetCrop,
   onFlatten,
+  canvasBackground,
+  onCanvasBackgroundChange,
 }: PropertiesPanelProps) {
+  const { recentColors } = useDesignStore()
   const [shadowEnabled, setShadowEnabled] = useState(false)
   const [shadowConfig, setShadowConfig] = useState({ color: 'rgba(0,0,0,0.25)', blur: 10, offsetX: 0, offsetY: 4 })
   const [fillType, setFillType] = useState<'solid' | 'gradient'>('solid')
@@ -173,8 +179,13 @@ export default function PropertiesPanel({
         <div className="flex items-center justify-between px-3 py-2 border-b border-canvas-border">
           <span className="text-xs font-semibold text-canvas-text uppercase tracking-wider">Properties</span>
         </div>
-        <div className="flex-1 flex items-center justify-center">
-          <span className="text-xs text-canvas-text-tertiary">Select an object</span>
+        <div className="p-3 space-y-4">
+          {/* Canvas Background Color (Feature 4) */}
+          <div>
+            <h3 className="text-xxs font-semibold text-canvas-text-tertiary uppercase tracking-wider mb-1.5">Canvas Background</h3>
+            <ColorPicker color={canvasBackground || '#f5f5f7'} onChange={(c) => onCanvasBackgroundChange?.(c)} />
+          </div>
+          <div className="text-xs text-canvas-text-tertiary text-center pt-4">Select an object to edit its properties</div>
         </div>
       </div>
     )
@@ -327,6 +338,23 @@ export default function PropertiesPanel({
             {BLEND_MODES.map(mode => (<option key={mode} value={mode}>{BLEND_MODE_LABELS[mode] || mode}</option>))}
           </select>
         </Section>
+
+        {/* Recent Colors (Feature 3) */}
+        {recentColors.length > 0 && (
+          <Section title="Recent Colors">
+            <div className="flex flex-wrap gap-1">
+              {recentColors.slice(0, 12).map((c, i) => (
+                <button
+                  key={`${c}-${i}`}
+                  onClick={() => onFillChange(c)}
+                  className="w-6 h-6 rounded-md border border-canvas-border hover:scale-110 transition-transform"
+                  style={{ backgroundColor: c }}
+                  title={c}
+                />
+              ))}
+            </div>
+          </Section>
+        )}
 
         {/* Fill */}
         <Section title="Fill">
@@ -496,15 +524,10 @@ export default function PropertiesPanel({
           <>
             <Section title="Typography">
               <div className="space-y-2">
-                <select
+                <FontSelector
                   value={objectProps.fontFamily || 'Inter'}
-                  onChange={(e) => onTextPropertyChange('fontFamily', e.target.value)}
-                  className="w-full text-xs bg-canvas-bg border border-canvas-border rounded-lg px-2 py-1.5 focus:outline-none focus:border-canvas-accent"
-                >
-                  {['Inter', 'Arial', 'Helvetica', 'Georgia', 'Times New Roman', 'Courier New', 'Verdana', 'Trebuchet MS', 'Palatino', 'Garamond', 'Comic Sans MS', 'Impact', 'Lucida Console', 'Tahoma'].map(f => (
-                    <option key={f} value={f}>{f}</option>
-                  ))}
-                </select>
+                  onChange={(f) => onTextPropertyChange('fontFamily', f)}
+                />
 
                 <div className="grid grid-cols-2 gap-2">
                   <select
@@ -711,5 +734,91 @@ function OrderBtn({ icon, onClick, title }: { icon: React.ReactNode, onClick: ()
     >
       <span className="flex items-center justify-center">{icon}</span>
     </button>
+  )
+}
+
+// Feature 5: Google Fonts selector with search
+const GOOGLE_FONTS = [
+  'Roboto', 'Open Sans', 'Lato', 'Montserrat', 'Poppins', 'Raleway',
+  'Nunito', 'Playfair Display', 'Merriweather', 'Source Sans Pro',
+  'Ubuntu', 'Oswald', 'Roboto Condensed', 'Roboto Mono', 'Roboto Slab',
+  'PT Sans', 'PT Serif', 'Noto Sans', 'Noto Serif', 'Fira Sans',
+  'Fira Code', 'Work Sans', 'Quicksand', 'Barlow', 'Mulish',
+  'Josefin Sans', 'Cabin', 'DM Sans', 'Karla', 'Libre Baskerville',
+  'Inconsolata', 'Space Mono', 'Space Grotesk', 'Sora', 'Outfit',
+  'Manrope', 'Plus Jakarta Sans', 'Lexend', 'Bricolage Grotesque', 'Geist',
+]
+
+const SYSTEM_FONTS = [
+  'Inter', 'Arial', 'Helvetica', 'Georgia', 'Times New Roman',
+  'Courier New', 'Verdana', 'Trebuchet MS', 'Palatino', 'Garamond',
+  'Comic Sans MS', 'Impact', 'Lucida Console', 'Tahoma',
+]
+
+const loadedFonts = new Set<string>()
+
+function loadGoogleFont(fontName: string) {
+  if (loadedFonts.has(fontName)) return
+  loadedFonts.add(fontName)
+  const link = document.createElement('link')
+  link.rel = 'stylesheet'
+  link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(fontName)}:wght@100;200;300;400;500;600;700;800;900&display=swap`
+  document.head.appendChild(link)
+}
+
+function FontSelector({ value, onChange }: { value: string, onChange: (font: string) => void }) {
+  const [search, setSearch] = React.useState('')
+  const [open, setOpen] = React.useState(false)
+
+  const allFonts = [...SYSTEM_FONTS, ...GOOGLE_FONTS]
+  const filtered = search
+    ? allFonts.filter(f => f.toLowerCase().includes(search.toLowerCase()))
+    : allFonts
+
+  const handleSelect = (font: string) => {
+    if (GOOGLE_FONTS.includes(font)) {
+      loadGoogleFont(font)
+    }
+    onChange(font)
+    setOpen(false)
+    setSearch('')
+  }
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full text-xs bg-canvas-bg border border-canvas-border rounded-lg px-2 py-1.5 text-left text-canvas-text hover:border-canvas-accent focus:outline-none focus:border-canvas-accent truncate"
+      >
+        {value}
+      </button>
+      {open && (
+        <div className="absolute top-full left-0 right-0 mt-1 bg-canvas-surface border border-canvas-border rounded-lg shadow-lg z-50 max-h-60 overflow-hidden flex flex-col">
+          <input
+            autoFocus
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search fonts..."
+            className="w-full text-xs bg-canvas-bg border-b border-canvas-border px-2 py-1.5 focus:outline-none text-canvas-text"
+          />
+          <div className="overflow-y-auto flex-1">
+            {filtered.length === 0 && (
+              <p className="text-xxs text-canvas-text-tertiary p-2 text-center">No fonts found</p>
+            )}
+            {filtered.map(f => (
+              <button
+                key={f}
+                onClick={() => handleSelect(f)}
+                className={`w-full text-left text-xs px-2 py-1 hover:bg-canvas-hover transition-colors ${
+                  f === value ? 'text-canvas-accent font-medium' : 'text-canvas-text'
+                }`}
+              >
+                {f}{GOOGLE_FONTS.includes(f) ? ' ✦' : ''}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
   )
 }

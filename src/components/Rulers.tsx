@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useEffect, useRef } from 'react'
+import { useDesignStore } from '@/store/useDesignStore'
 
 interface RulersProps {
   zoom: number
@@ -14,12 +15,13 @@ interface RulersProps {
 export default function Rulers({ zoom, panX, panY, showRulers, leftOffset, topOffset }: RulersProps) {
   const hRef = useRef<HTMLCanvasElement>(null)
   const vRef = useRef<HTMLCanvasElement>(null)
+  const theme = useDesignStore((s) => s.theme)
 
   useEffect(() => {
     if (!showRulers) return
     drawHorizontalRuler()
     drawVerticalRuler()
-  }, [zoom, panX, panY, showRulers, leftOffset, topOffset])
+  }, [zoom, panX, panY, showRulers, leftOffset, topOffset, theme])
 
   const drawHorizontalRuler = () => {
     const canvas = hRef.current
@@ -31,15 +33,16 @@ export default function Rulers({ zoom, panX, panY, showRulers, leftOffset, topOf
     canvas.width = width
     canvas.height = 20
 
-    ctx.fillStyle = '#fafafa'
+    const isDark = theme === 'dark'
+    ctx.fillStyle = isDark ? '#1e1e1e' : '#fafafa'
     ctx.fillRect(0, 0, width, 20)
-    ctx.strokeStyle = '#e5e5e7'
+    ctx.strokeStyle = isDark ? '#333' : '#e5e5e7'
     ctx.lineWidth = 1
     ctx.moveTo(0, 19.5)
     ctx.lineTo(width, 19.5)
     ctx.stroke()
 
-    ctx.fillStyle = '#999'
+    ctx.fillStyle = isDark ? '#888' : '#999'
     ctx.font = '9px -apple-system, BlinkMacSystemFont, sans-serif'
     ctx.textAlign = 'center'
 
@@ -55,13 +58,13 @@ export default function Rulers({ zoom, panX, panY, showRulers, leftOffset, topOf
       if (x % (step * 5) === 0) {
         ctx.moveTo(screenX, 8)
         ctx.lineTo(screenX, 20)
-        ctx.strokeStyle = '#bbb'
+        ctx.strokeStyle = isDark ? '#555' : '#bbb'
         ctx.stroke()
         ctx.fillText(`${Math.round(x)}`, screenX, 7)
       } else {
         ctx.moveTo(screenX, 14)
         ctx.lineTo(screenX, 20)
-        ctx.strokeStyle = '#ddd'
+        ctx.strokeStyle = isDark ? '#444' : '#ddd'
         ctx.stroke()
       }
     }
@@ -77,15 +80,16 @@ export default function Rulers({ zoom, panX, panY, showRulers, leftOffset, topOf
     canvas.width = 20
     canvas.height = height
 
-    ctx.fillStyle = '#fafafa'
+    const isDark = theme === 'dark'
+    ctx.fillStyle = isDark ? '#1e1e1e' : '#fafafa'
     ctx.fillRect(0, 0, 20, height)
-    ctx.strokeStyle = '#e5e5e7'
+    ctx.strokeStyle = isDark ? '#333' : '#e5e5e7'
     ctx.lineWidth = 1
     ctx.moveTo(19.5, 0)
     ctx.lineTo(19.5, height)
     ctx.stroke()
 
-    ctx.fillStyle = '#999'
+    ctx.fillStyle = isDark ? '#888' : '#999'
     ctx.font = '9px -apple-system, BlinkMacSystemFont, sans-serif'
 
     const step = getStep(zoom)
@@ -100,7 +104,7 @@ export default function Rulers({ zoom, panX, panY, showRulers, leftOffset, topOf
       if (y % (step * 5) === 0) {
         ctx.moveTo(8, screenY)
         ctx.lineTo(20, screenY)
-        ctx.strokeStyle = '#bbb'
+        ctx.strokeStyle = isDark ? '#555' : '#bbb'
         ctx.stroke()
         ctx.save()
         ctx.translate(7, screenY)
@@ -111,7 +115,7 @@ export default function Rulers({ zoom, panX, panY, showRulers, leftOffset, topOf
       } else {
         ctx.moveTo(14, screenY)
         ctx.lineTo(20, screenY)
-        ctx.strokeStyle = '#ddd'
+        ctx.strokeStyle = isDark ? '#444' : '#ddd'
         ctx.stroke()
       }
     }
@@ -144,7 +148,7 @@ export default function Rulers({ zoom, panX, panY, showRulers, leftOffset, topOf
       />
       {/* Corner */}
       <div
-        className="absolute z-30 bg-[#fafafa] border-r border-b border-canvas-border"
+        className="absolute z-30 bg-canvas-surface border-r border-b border-canvas-border"
         style={{ left: leftOffset, top: topOffset, width: 20, height: 20 }}
       />
     </>

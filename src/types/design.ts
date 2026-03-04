@@ -174,6 +174,23 @@ export const DEFAULT_BRUSH: BrushSettings = {
   shadowColor: 'rgba(0,0,0,0)',
 }
 
+export type ThemeMode = 'light' | 'dark'
+
+export interface SnapshotEntry {
+  id: string
+  name: string
+  canvasJSON: string
+  timestamp: number
+}
+
+export interface SavedComponent {
+  id: string
+  name: string
+  objectJSON: string
+  thumbnail?: string
+  createdAt: number
+}
+
 export const FONT_LIST = [
   'Inter',
   'Arial',
