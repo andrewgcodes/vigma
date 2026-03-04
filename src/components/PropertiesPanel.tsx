@@ -105,6 +105,7 @@ export default function PropertiesPanel({
   const [shadowEnabled, setShadowEnabled] = useState(false)
   const [shadowConfig, setShadowConfig] = useState({ color: 'rgba(0,0,0,0.25)', blur: 10, offsetX: 0, offsetY: 4 })
   const [fillType, setFillType] = useState<'solid' | 'gradient' | 'none'>('solid')
+  const [lastSolidColor, setLastSolidColor] = useState('#4A90D9')
   const [gradientColor1, setGradientColor1] = useState('#4A90D9')
   const [gradientColor2, setGradientColor2] = useState('#50C878')
   const [showIndividualCorners, setShowIndividualCorners] = useState(false)
@@ -146,6 +147,9 @@ export default function PropertiesPanel({
       setFillType('none')
     } else {
       setFillType('solid')
+      if (typeof objectProps?.fill === 'string' && objectProps.fill !== 'transparent') {
+        setLastSolidColor(objectProps.fill)
+      }
     }
   }, [objectProps?.fill, objectProps?.id])
 
@@ -336,7 +340,8 @@ export default function PropertiesPanel({
             <button
               onClick={() => {
                 setFillType('solid')
-                onFillChange(fillColor)
+                const colorToApply = (fillType === 'none' || fillColor === 'transparent') ? lastSolidColor : fillColor
+                onFillChange(colorToApply)
               }}
               className={`flex-1 text-xxs py-1 rounded-md border ${fillType === 'solid' ? 'bg-canvas-accent text-white border-canvas-accent' : 'bg-canvas-bg border-canvas-border text-canvas-text-secondary'}`}
             >
