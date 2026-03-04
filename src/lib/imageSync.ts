@@ -94,6 +94,14 @@ export function compressImageForSync(dataUrl: string): Promise<string> {
           compressed = canvas.toDataURL('image/jpeg', 0.5)
         }
 
+        // Final safety net: if compression couldn't bring it under the limit,
+        // use the placeholder to protect the WebRTC connection.
+        if (compressed.length > MAX_SYNC_BASE64_LENGTH) {
+          console.warn('[imageSync] Image still too large after all compression attempts, using placeholder')
+          resolve(PLACEHOLDER_DATA_URL)
+          return
+        }
+
         resolve(compressed)
       } catch {
         // Compression failed — strip src to avoid crashing WebRTC data channel.
