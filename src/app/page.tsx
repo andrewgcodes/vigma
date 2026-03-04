@@ -24,6 +24,9 @@ import type { ToolType } from '@/types/design'
 import WelcomeModal from '@/components/WelcomeModal'
 import MobileGate from '@/components/MobileGate'
 
+/** Property list used when serializing Fabric.js objects for Yjs sync. */
+const SYNC_PROPS = ['id', 'name', 'isFrame', 'lockMovementX', 'lockMovementY', 'lockRotation', 'lockScalingX', 'lockScalingY', 'hasControls', 'selectable', 'evented']
+
 export default function DesignPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const engineRef = useRef<CanvasEngine | null>(null)
@@ -282,9 +285,6 @@ export default function DesignPage() {
   }, [])
 
   // === COLLABORATION ===
-
-  // Property list used when serializing Fabric.js objects for sync
-  const SYNC_PROPS = ['id', 'name', 'isFrame', 'lockMovementX', 'lockMovementY', 'lockRotation', 'lockScalingX', 'lockScalingY', 'hasControls', 'selectable', 'evented']
 
   // Sync a single canvas object to Yjs
   const syncObjectToCollab = useCallback((obj: any) => {

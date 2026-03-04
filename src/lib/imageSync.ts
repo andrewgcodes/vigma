@@ -21,6 +21,15 @@ const MAX_SYNC_DIMENSION = 800
 /** JPEG quality for compressed sync images (0-1). */
 const SYNC_JPEG_QUALITY = 0.6
 
+/** Tiny 1x1 gray pixel JPEG used as placeholder when compression fails.
+ *  This prevents sending the original oversized data through WebRTC. */
+const PLACEHOLDER_DATA_URL = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgMCAgMDAwMEAwMEBQgFBQQEBQoHBwYIDAoMCwsKCwsM' +
+  'DhEQDQ4RDgsLEBYQERMUFRUVDA8XGBYUGBIUFRT/2wBDAQMEBAUEBQkFBQkUDQsNFBQUFBQUFBQUFBQU' +
+  'FBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBT/wAARCAABAAEDASIAAhEBAxEB/8QA' +
+  'FAABAAAAAAAAAAAAAAAAAAAAB//EABQQAQAAAAAAAAAAAAAAAAAAAAD/xAAUAQEAAAAAAAAAAAAAAAAAAAAA/8QAFBEBAAAAAAAAAA' +
+  'AAAAAAAAAP/aAAwDAQACEQMRAD8AJQAAAA//' +
+  ''
+
 /**
  * Check if a base64 data URL exceeds the safe sync size.
  */
@@ -86,13 +95,16 @@ export function compressImageForSync(dataUrl: string): Promise<string> {
 
         resolve(compressed)
       } catch {
-        // On any error, return original and let the caller decide
-        resolve(dataUrl)
+        // Compression failed — strip src to avoid crashing WebRTC data channel.
+        // Remote peers will see a placeholder instead of a broken connection.
+        console.warn('[imageSync] Image compression failed, stripping src to protect WebRTC connection')
+        resolve(PLACEHOLDER_DATA_URL)
       }
     }
     img.onerror = () => {
-      // Can't load image — return original
-      resolve(dataUrl)
+      // Can't load image — strip src to avoid sending oversized data
+      console.warn('[imageSync] Image failed to load for compression, stripping src')
+      resolve(PLACEHOLDER_DATA_URL)
     }
     img.src = dataUrl
   })
@@ -122,7 +134,10 @@ export async function prepareObjectJsonForSync(objJson: Record<string, unknown>)
  */
 export function needsCompressionForSync(obj: any): boolean {
   if (!obj || obj.type !== 'image') return false
-  // Check if the object has a large src
-  const src = obj.src || obj._element?.src
+  // Check if the object has a large src via Fabric.js public toJSON() serialization.
+  // We use obj.src (which Fabric.js Image exposes as a public property) rather than
+  // relying on internal _element. For Fabric.js Image objects loaded via fromURL/fromFile,
+  // the .src property contains the data URL.
+  const src = obj.src
   return typeof src === 'string' && src.startsWith('data:') && src.length > MAX_SYNC_BASE64_LENGTH
 }
