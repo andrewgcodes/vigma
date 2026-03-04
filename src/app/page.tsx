@@ -392,7 +392,7 @@ export default function DesignPage() {
         if (existing) {
           // For Image objects, .set() won't reload the src — we must replace
           // the object entirely via enlivenObjects so the bitmap is rebuilt.
-          const isImage = objData.type === 'image' && objData.src
+          const isImage = (typeof objData.type === 'string' && objData.type.toLowerCase() === 'image') && objData.src
           if (isImage) {
             const fabric = require('fabric')
             const promise = fabric.util.enlivenObjects([objData]).then((objs: any[]) => {

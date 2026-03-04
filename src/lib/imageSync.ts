@@ -128,7 +128,8 @@ export function compressImageForSync(dataUrl: string): Promise<string> {
  * @returns Promise resolving to a JSON string safe for WebRTC sync
  */
 export async function prepareObjectJsonForSync(objJson: Record<string, unknown>): Promise<string> {
-  if (objJson.type === 'image' && typeof objJson.src === 'string' && objJson.src.startsWith('data:')) {
+  const objType = typeof objJson.type === 'string' ? objJson.type.toLowerCase() : ''
+  if (objType === 'image' && typeof objJson.src === 'string' && objJson.src.startsWith('data:')) {
     if (isImageTooLargeForSync(objJson.src)) {
       const compressedSrc = await compressImageForSync(objJson.src)
       return JSON.stringify({ ...objJson, src: compressedSrc })
@@ -142,7 +143,7 @@ export async function prepareObjectJsonForSync(objJson: Record<string, unknown>)
  * Used to decide whether to use async compression path.
  */
 export function needsCompressionForSync(obj: any): boolean {
-  if (!obj || obj.type !== 'image') return false
+  if (!obj || (typeof obj.type === 'string' ? obj.type.toLowerCase() : '') !== 'image') return false
   // Check if the object has a large src via Fabric.js public toJSON() serialization.
   // We use obj.src (which Fabric.js Image exposes as a public property) rather than
   // relying on internal _element. For Fabric.js Image objects loaded via fromURL/fromFile,
