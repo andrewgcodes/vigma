@@ -14,6 +14,7 @@ import CursorOverlay from '@/components/CursorOverlay'
 import CommentPins from '@/components/CommentPins'
 import CommentsPanel from '@/components/CommentsPanel'
 import { CollaborationManager, generateRoomId, getRoomIdFromHash, setRoomIdInHash, clearRoomFromHash, prewarmSignalingServer } from '@/lib/collaboration'
+import { prepareObjectJsonForSync, needsCompressionForSync } from '@/lib/imageSync'
 import { persistGet, persistSet, persistRemove } from '@/lib/persistence'
 import type { Comment, CommentReply, RemoteUser } from '@/lib/collaboration'
 import { getUserIdentity } from '@/lib/userIdentity'
@@ -22,6 +23,9 @@ import { v4 as uuidv4 } from 'uuid'
 import type { ToolType } from '@/types/design'
 import WelcomeModal from '@/components/WelcomeModal'
 import MobileGate from '@/components/MobileGate'
+
+/** Property list used when serializing Fabric.js objects for Yjs sync. */
+const SYNC_PROPS = ['id', 'name', 'isFrame', 'lockMovementX', 'lockMovementY', 'lockRotation', 'lockScalingX', 'lockScalingY', 'hasControls', 'selectable', 'evented']
 
 export default function DesignPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -57,6 +61,9 @@ export default function DesignPage() {
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved' | 'just-saved'>('saved')
   const [largeImageWarning, setLargeImageWarning] = useState<string | null>(null)
   const largeImageWarningTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const [peerDisconnectNotice, setPeerDisconnectNotice] = useState<string | null>(null)
+  const peerDisconnectTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const prevRemoteUsersCountRef = useRef<number>(0)
   const saveStatusTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const drawStartRef = useRef<{ x: number; y: number } | null>(null)
   const previewObjRef = useRef<any>(null)
@@ -290,27 +297,45 @@ export default function DesignPage() {
     // Skip if this object is currently being applied from a remote peer
     if ((remoteObjectIdsRef.current.get(obj.id) ?? 0) > 0) return
     try {
-      const json = JSON.stringify(obj.toJSON(['id', 'name', 'isFrame', 'lockMovementX', 'lockMovementY', 'lockRotation', 'lockScalingX', 'lockScalingY', 'hasControls', 'selectable', 'evented']))
-      collab.syncObjectToYjs(obj.id, json)
+      const objJson = obj.toJSON(SYNC_PROPS)
+      // For images with large base64 src, compress asynchronously before syncing
+      // to avoid exceeding the WebRTC data channel ~256KB message size limit.
+      if (needsCompressionForSync(obj)) {
+        prepareObjectJsonForSync(objJson).then((json) => {
+          // Re-check collab is still active and object isn't being updated by remote peer
+          if (collabRef.current && !((remoteObjectIdsRef.current.get(obj.id) ?? 0) > 0)) {
+            collabRef.current.syncObjectToYjs(obj.id, json)
+          }
+        }).catch((e) => {
+          console.warn('Failed to compress image for sync', e)
+        })
+      } else {
+        const json = JSON.stringify(objJson)
+        collab.syncObjectToYjs(obj.id, json)
+      }
     } catch (e) {
       console.warn('Failed to sync object to collab', e)
     }
   }, [])
 
-  // Sync all canvas objects to Yjs
-  const syncAllObjectsToCollab = useCallback(() => {
+  // Sync all canvas objects to Yjs (compresses large images asynchronously)
+  const syncAllObjectsToCollab = useCallback(async () => {
     const collab = collabRef.current
     const engine = engineRef.current
     if (!collab || !engine || remoteObjectIdsRef.current.size > 0) return  // Map.size > 0 means some IDs still being processed
     const objects = engine.canvas.getObjects().filter((o: any) => !o.isPreview && !o.isGrid)
-    const items = objects.map((obj: any) => {
+    const items = await Promise.all(objects.map(async (obj: any) => {
       if (!obj.id) obj.id = uuidv4()
-      return {
-        id: obj.id,
-        json: JSON.stringify(obj.toJSON(['id', 'name', 'isFrame', 'lockMovementX', 'lockMovementY', 'lockRotation', 'lockScalingX', 'lockScalingY', 'hasControls', 'selectable', 'evented'])),
-      }
-    })
-    collab.pushCanvasState(items)
+      const objJson = obj.toJSON(SYNC_PROPS)
+      const json = needsCompressionForSync(obj)
+        ? await prepareObjectJsonForSync(objJson)
+        : JSON.stringify(objJson)
+      return { id: obj.id, json }
+    }))
+    // Re-check collab is still active after async compression
+    if (collabRef.current) {
+      collabRef.current.pushCanvasState(items)
+    }
   }, [])
 
   /** Sync all currently-selected canvas objects to Yjs (for property panel changes).
@@ -370,7 +395,7 @@ export default function DesignPage() {
         if (existing) {
           // For Image objects, .set() won't reload the src — we must replace
           // the object entirely via enlivenObjects so the bitmap is rebuilt.
-          const isImage = objData.type === 'image' && objData.src
+          const isImage = (typeof objData.type === 'string' && objData.type.toLowerCase() === 'image') && objData.src
           if (isImage) {
             const fabric = require('fabric')
             const promise = fabric.util.enlivenObjects([objData]).then((objs: any[]) => {
@@ -540,6 +565,19 @@ export default function DesignPage() {
         }
       },
       onUsersChange: (users) => {
+        const prevCount = prevRemoteUsersCountRef.current
+        const newCount = users.length
+        // Detect peer disconnection: count dropped and we previously had peers
+        if (prevCount > 0 && newCount < prevCount) {
+          const dropped = prevCount - newCount
+          const msg = dropped === 1
+            ? 'A collaborator has disconnected.'
+            : `${dropped} collaborators have disconnected.`
+          setPeerDisconnectNotice(msg)
+          if (peerDisconnectTimerRef.current) clearTimeout(peerDisconnectTimerRef.current)
+          peerDisconnectTimerRef.current = setTimeout(() => setPeerDisconnectNotice(null), 6000)
+        }
+        prevRemoteUsersCountRef.current = newCount
         setRemoteUsers(users)
       },
       onConnectionStatusChange: (status) => {
@@ -592,15 +630,19 @@ export default function DesignPage() {
       } else {
         // CREATING a new room (empty Yjs doc) — push local canvas objects to Yjs.
         // This is the "Share" flow where the user has a design and wants to collaborate.
-        const localObjects = engine.canvas.getObjects()
+        const localObjects = await Promise.all(engine.canvas.getObjects()
           .filter((o: any) => !o.isPreview && !o.isGrid)
-          .map((obj: any) => {
+          .map(async (obj: any) => {
             if (!obj.id) obj.id = uuidv4()
-            return {
-              id: obj.id,
-              json: JSON.stringify(obj.toJSON(['id', 'name', 'isFrame', 'lockMovementX', 'lockMovementY', 'lockRotation', 'lockScalingX', 'lockScalingY', 'hasControls', 'selectable', 'evented'])),
-            }
-          })
+            const objJson = obj.toJSON(SYNC_PROPS)
+            const json = needsCompressionForSync(obj)
+              ? await prepareObjectJsonForSync(objJson)
+              : JSON.stringify(objJson)
+            return { id: obj.id, json }
+          }))
+
+        // Re-check collab is still active after async compression
+        if (collabRef.current !== collab) return
 
         if (localObjects.length > 0) {
           const { remoteOnlyIds, overlappingIds } = collab.reconcileCanvasState(localObjects)
@@ -760,6 +802,7 @@ export default function DesignPage() {
     setRoomId(null)
     roomIdRef.current = null
     setRemoteUsers([])
+    prevRemoteUsersCountRef.current = 0
     setComments([])
     setConnectionStatus('disconnected')
     clearRoomFromHash()
@@ -1745,6 +1788,27 @@ export default function DesignPage() {
 
   return (
     <MobileGate>
+    {/* Peer Disconnect Notification Toast */}
+    {peerDisconnectNotice && (
+      <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[9999] max-w-lg w-full mx-4 animate-in fade-in slide-in-from-top-2">
+        <div className="bg-red-50 border border-red-200 rounded-xl shadow-lg px-4 py-3 flex items-start gap-3">
+          <div className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+            <svg className="w-4 h-4 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <p className="text-sm text-red-800 flex-1">{peerDisconnectNotice}</p>
+          <button
+            onClick={() => setPeerDisconnectNotice(null)}
+            className="text-red-400 hover:text-red-600 transition-colors flex-shrink-0"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    )}
     {/* Large Image Upload Warning Toast */}
     {largeImageWarning && (
       <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[9999] max-w-lg w-full mx-4 animate-in fade-in slide-in-from-top-2">
