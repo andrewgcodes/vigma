@@ -812,7 +812,7 @@ export default function PropertiesPanel({
                       <input type="checkbox" checked={effect.enabled} onChange={(e) => {
                         if (effect.type === "Drop shadow") { if (e.target.checked) { setShadowEnabled(true); onShadowChange(shadowConfig) } else { setShadowEnabled(false); onShadowRemove() } }
                         else if (effect.type === "Inner shadow") { if (e.target.checked) { setInnerShadowEnabled(true); onInnerShadowChange?.(innerShadowConfig) } else { setInnerShadowEnabled(false); onPropertyChange('_innerShadow', null) } }
-                        else if (effect.type === "Layer blur") { if (!e.target.checked) { onBlurChange?.(0) } }
+                        else if (effect.type === "Layer blur") { if (e.target.checked) { onBlurChange?.(10) } else { onBlurChange?.(0) } }
                       }} className="w-3.5 h-3.5 rounded accent-canvas-accent" title={`Toggle ${effect.type} on/off`} />
                       <select value={effect.type} onChange={(e) => {
                         const t = e.target.value
