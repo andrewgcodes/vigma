@@ -35,7 +35,7 @@ export const metadata: Metadata = {
   ],
   authors: [
     { name: 'Andrew Gao', url: 'https://twitter.com/itsandrewgao' },
-    { name: 'Devin AI', url: 'https://devin.ai' },
+    { name: 'Devin AI', url: 'https://devin.ai/?utm_source=vigma.io' },
   ],
   creator: 'Devin AI',
   publisher: 'Andrew Gao',
@@ -151,7 +151,7 @@ export default function RootLayout({
     creator: {
       '@type': 'Organization',
       name: 'Devin AI',
-      url: 'https://devin.ai',
+      url: 'https://devin.ai/?utm_source=vigma.io',
     },
     featureList: [
       'Vector shapes and drawing tools',

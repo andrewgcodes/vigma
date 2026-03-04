@@ -72,7 +72,7 @@ function WelcomeModal({ onClose }: WelcomeModalProps) {
           <div className="pt-2 border-t border-gray-100">
             <p className="text-xs text-gray-400 text-center">
               Built by{' '}
-              <a href="https://devin.ai/" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">
+              <a href="https://devin.ai/?utm_source=vigma.io" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">
                 Devin
               </a>
               {' '}&middot;{' '}
