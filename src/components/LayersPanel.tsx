@@ -177,7 +177,11 @@ export default function LayersPanel({
                 </span>
               )}
 
-              <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 flex-shrink-0">
+              <div
+                className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 flex-shrink-0"
+                onMouseDown={(e) => e.stopPropagation()}
+                onDragStart={(e) => e.preventDefault()}
+              >
                 <button
                   onClick={(e) => { e.stopPropagation(); onToggleVisibility(layer.id) }}
                   className="p-0.5 rounded hover:bg-canvas-active text-canvas-text-tertiary"
