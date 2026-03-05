@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useRef, useCallback } from 'react'
+import React, { useState, useRef } from 'react'
 import {
   Eye, EyeOff, Lock, Unlock, ChevronRight, ChevronDown,
   Type, Square, Circle, Triangle, Image, Pen, Frame, Star,
@@ -61,6 +61,12 @@ export default function LayersPanel({
   const [editValue, setEditValue] = useState('')
   const [dragId, setDragId] = useState<string | null>(null)
   const [dragOverId, setDragOverId] = useState<string | null>(null)
+  // Tracks whether the most recent mousedown happened inside an action button
+  // (eye / lock / delete). When the row is `draggable`, even a 1–2px mouse
+  // movement during a click fires `dragstart`, which cancels the pending
+  // click event — making those buttons impossible to click. We set this flag
+  // on mousedown and check it in `handleDragStart` to veto the drag.
+  const suppressDragRef = useRef(false)
 
   const startEditing = (id: string, currentName: string) => {
     setEditingId(id)
@@ -75,6 +81,13 @@ export default function LayersPanel({
   }
 
   const handleDragStart = (e: React.DragEvent, id: string) => {
+    // If mousedown landed on an action button, cancel the drag so the
+    // button's click event can fire. Without this, the draggable row
+    // swallows clicks on the eye/lock/delete icons.
+    if (suppressDragRef.current) {
+      e.preventDefault()
+      return
+    }
     setDragId(id)
     e.dataTransfer.effectAllowed = 'move'
   }
@@ -134,6 +147,10 @@ export default function LayersPanel({
               onDragOver={(e) => handleDragOver(e, layer.id)}
               onDrop={(e) => handleDrop(e, layer.id)}
               onDragEnd={() => { setDragId(null); setDragOverId(null) }}
+              onMouseDown={(e) => {
+                // Record whether this press started on a button so dragstart can be vetoed.
+                suppressDragRef.current = (e.target as HTMLElement).closest('button') !== null
+              }}
               onClick={() => onSelect(layer.id)}
               className={`
                 group flex items-center gap-1.5 px-2 py-1.5 cursor-pointer border-b border-transparent
