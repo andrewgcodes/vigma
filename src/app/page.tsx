@@ -1983,7 +1983,7 @@ export default function DesignPage() {
                 layers={layers}
                 selectedIds={selectedIds}
                 onSelect={(id) => { setActiveTool('select'); engineRef.current?.selectObjectById(id); refreshObjectProps() }}
-                onToggleVisibility={(id) => { engineRef.current?.toggleVisibility(id); refreshLayers() }}
+                onToggleVisibility={(id) => { engineRef.current?.toggleVisibility(id); refreshLayers(); persistAllPages() }}
                 onToggleLock={(id) => {
                   const obj = engineRef.current?.canvas.getObjects().find((o: any) => o.id === id)
                   if (obj) {
@@ -1995,6 +1995,7 @@ export default function DesignPage() {
                     })
                     engineRef.current?.canvas.renderAll()
                     refreshLayers()
+                    persistAllPages()
                   }
                 }}
                 onRename={(id, name) => { engineRef.current?.renameObject(id, name); refreshLayers() }}
@@ -2005,6 +2006,7 @@ export default function DesignPage() {
                     engineRef.current?.canvas.renderAll()
                     refreshLayers()
                     refreshObjectProps()
+                    persistAllPages()
                   }
                 }}
                 onReorder={(id, index) => { engineRef.current?.moveObjectToIndex(id, index); refreshLayers() }}
