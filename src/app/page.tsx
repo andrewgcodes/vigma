@@ -1268,6 +1268,8 @@ export default function DesignPage() {
       if (useDesignStore.getState().keyboardShortcutsEnabled) {
         // Feature 90: ? key opens keyboard shortcuts dialog
         if (!ctrl && (e.key === '?' || (shift && e.key === '/'))) {
+          const activeObj = engine.canvas.getActiveObject()
+          if (activeObj && (activeObj as any).isEditing) return
           setShowKeyboardShortcuts(true)
           e.preventDefault()
           return
