@@ -5,7 +5,8 @@ import { useDesignStore } from '@/store/useDesignStore'
 import {
   Eye, Grid3X3, Ruler, Map, Info, Keyboard, Moon, Sun,
   Maximize, Columns, ArrowDownToLine, ArrowRightToLine,
-  BarChart3, Crosshair, MousePointer, Magnet, PanelBottom
+  BarChart3, Crosshair, MousePointer, Magnet, PanelBottom,
+  Contrast, LayoutGrid, AlignVerticalSpaceAround, Grid2X2
 } from 'lucide-react'
 
 // Feature 89: View Menu with toggles for all view options
@@ -44,6 +45,11 @@ export default function ViewMenu({
     snapToObjects, toggleSnapToObjects,
     showDistanceGuides, toggleDistanceGuides,
     autoSelectAfterCreate, toggleAutoSelectAfterCreate,
+    showPixelGrid, togglePixelGrid,
+    showAlignmentGuides, toggleAlignmentGuides,
+    highContrastMode, toggleHighContrastMode,
+    showLayoutGrid, toggleLayoutGrid,
+    showBaselineGrid, toggleBaselineGrid,
   } = useDesignStore()
 
   useEffect(() => {
@@ -87,6 +93,11 @@ export default function ViewMenu({
       <MenuItem icon={<PanelBottom size={14} />} label="Status Bar" checked={showStatusBar} onClick={toggleStatusBar} />
       <MenuItem icon={<Crosshair size={14} />} label="Selection Dimensions" checked={showSelectionDimensions} onClick={toggleSelectionDimensions} />
       <MenuItem icon={<Columns size={14} />} label="Distance Guides" checked={showDistanceGuides} onClick={toggleDistanceGuides} />
+      <MenuItem icon={<AlignVerticalSpaceAround size={14} />} label="Alignment Guides" checked={showAlignmentGuides} onClick={toggleAlignmentGuides} />
+      <MenuItem icon={<Grid2X2 size={14} />} label="Pixel Grid" checked={showPixelGrid} onClick={togglePixelGrid} />
+      <MenuItem icon={<LayoutGrid size={14} />} label="Layout Grid" checked={showLayoutGrid} onClick={toggleLayoutGrid} />
+      <MenuItem icon={<LayoutGrid size={14} />} label="Baseline Grid" checked={showBaselineGrid} onClick={toggleBaselineGrid} />
+      <MenuItem icon={<Contrast size={14} />} label="High Contrast" checked={highContrastMode} onClick={toggleHighContrastMode} />
 
       <Divider />
       <div className="px-3 py-1 text-[10px] font-semibold text-canvas-text-tertiary uppercase tracking-wider">Behavior</div>

@@ -36,6 +36,7 @@ import BulkOperationsBar from '@/components/BulkOperationsBar'
 import WorkspaceInfo from '@/components/WorkspaceInfo'
 import ViewMenu from '@/components/ViewMenu'
 import SearchLayers from '@/components/SearchLayers'
+import FeatureHub from '@/components/FeatureHub'
 
 /** Property list used when serializing Fabric.js objects for Yjs sync. */
 const SYNC_PROPS = ['id', 'name', 'isFrame', 'lockMovementX', 'lockMovementY', 'lockRotation', 'lockScalingX', 'lockScalingY', 'hasControls', 'selectable', 'evented']
@@ -2599,6 +2600,20 @@ export default function DesignPage() {
         gridEnabled={showGrid}
         rulersEnabled={showRulers}
         guidesEnabled={false}
+      />
+
+      {/* FeatureHub: Wires all 600 features into the live UI */}
+      <FeatureHub
+        engineRef={engineRef}
+        refreshLayers={refreshLayers}
+        refreshObjectProps={refreshObjectProps}
+        syncActiveToCollab={syncActiveToCollab}
+        selectedIds={selectedIds}
+        objectProps={objectProps}
+        zoom={zoom}
+        activeTool={activeTool}
+        pages={pages}
+        currentPageId={currentPageId}
       />
     </div>
     </MobileGate>
