@@ -115,6 +115,88 @@ interface DesignState {
   // Alignment
   lastAlignAction: string | null
   setLastAlignAction: (action: string | null) => void
+
+  // Feature 51: Dark mode toggle
+  darkMode: boolean
+  toggleDarkMode: () => void
+
+  // Feature 52: Show pixel grid toggle
+  showPixelGrid: boolean
+  togglePixelGrid: () => void
+
+  // Feature 53: Auto save enabled toggle
+  autoSaveEnabled: boolean
+  toggleAutoSave: () => void
+
+  // Feature 54: Show object info overlay
+  showObjectInfo: boolean
+  toggleObjectInfo: () => void
+
+  // Feature 55: Recent colors
+  recentColors: string[]
+  addRecentColor: (color: string) => void
+
+  // Feature 56: Grid color
+  gridColor: string
+  setGridColor: (color: string) => void
+
+  // Feature 57: Canvas background color
+  canvasBackground: string
+  setCanvasBackground: (color: string) => void
+
+  // Feature 58: Show selection dimensions
+  showSelectionDimensions: boolean
+  toggleSelectionDimensions: () => void
+
+  // Feature 59: Show distance guides
+  showDistanceGuides: boolean
+  toggleDistanceGuides: () => void
+
+  // Feature 60: Keyboard shortcuts enabled
+  keyboardShortcutsEnabled: boolean
+  toggleKeyboardShortcuts: () => void
+
+  // Feature 61: Show keyboard shortcuts dialog
+  showKeyboardShortcuts: boolean
+  setShowKeyboardShortcuts: (show: boolean) => void
+
+  // Feature 62: Show minimap
+  showMinimap: boolean
+  toggleMinimap: () => void
+
+  // Feature 63: Notification toast
+  toastMessage: string | null
+  toastType: 'info' | 'success' | 'warning' | 'error'
+  showToast: (message: string, type?: 'info' | 'success' | 'warning' | 'error') => void
+  clearToast: () => void
+
+  // Feature 64: Cursor coordinates
+  cursorPosition: { x: number; y: number }
+  setCursorPosition: (pos: { x: number; y: number }) => void
+
+  // Feature 65: Search layers query
+  layerSearchQuery: string
+  setLayerSearchQuery: (query: string) => void
+
+  // Feature 66: Workspace info visible
+  showWorkspaceInfo: boolean
+  toggleWorkspaceInfo: () => void
+
+  // Feature 67: Auto select after creation
+  autoSelectAfterCreate: boolean
+  toggleAutoSelectAfterCreate: () => void
+
+  // Feature 68: Show status bar
+  showStatusBar: boolean
+  toggleStatusBar: () => void
+
+  // Feature 69: Snap to objects
+  snapToObjects: boolean
+  toggleSnapToObjects: () => void
+
+  // Feature 70: Zoom slider value (for continuous zoom)
+  zoomSliderValue: number
+  setZoomSliderValue: (value: number) => void
 }
 
 const defaultPageId = 'page-1'
@@ -218,4 +300,89 @@ export const useDesignStore = create<DesignState>((set) => ({
 
   lastAlignAction: null,
   setLastAlignAction: (action) => set({ lastAlignAction: action }),
+
+  // Feature 51: Dark mode
+  darkMode: false,
+  toggleDarkMode: () => set((s) => ({ darkMode: !s.darkMode })),
+
+  // Feature 52: Pixel grid
+  showPixelGrid: false,
+  togglePixelGrid: () => set((s) => ({ showPixelGrid: !s.showPixelGrid })),
+
+  // Feature 53: Auto save
+  autoSaveEnabled: true,
+  toggleAutoSave: () => set((s) => ({ autoSaveEnabled: !s.autoSaveEnabled })),
+
+  // Feature 54: Object info overlay
+  showObjectInfo: false,
+  toggleObjectInfo: () => set((s) => ({ showObjectInfo: !s.showObjectInfo })),
+
+  // Feature 55: Recent colors
+  recentColors: [],
+  addRecentColor: (color) => set((s) => {
+    const filtered = s.recentColors.filter(c => c !== color)
+    return { recentColors: [color, ...filtered].slice(0, 12) }
+  }),
+
+  // Feature 56: Grid color
+  gridColor: '#e0e0e0',
+  setGridColor: (color) => set({ gridColor: color }),
+
+  // Feature 57: Canvas background
+  canvasBackground: '#f5f5f7',
+  setCanvasBackground: (color) => set({ canvasBackground: color }),
+
+  // Feature 58: Selection dimensions
+  showSelectionDimensions: true,
+  toggleSelectionDimensions: () => set((s) => ({ showSelectionDimensions: !s.showSelectionDimensions })),
+
+  // Feature 59: Distance guides
+  showDistanceGuides: false,
+  toggleDistanceGuides: () => set((s) => ({ showDistanceGuides: !s.showDistanceGuides })),
+
+  // Feature 60: Keyboard shortcuts
+  keyboardShortcutsEnabled: true,
+  toggleKeyboardShortcuts: () => set((s) => ({ keyboardShortcutsEnabled: !s.keyboardShortcutsEnabled })),
+
+  // Feature 61: Keyboard shortcuts dialog
+  showKeyboardShortcuts: false,
+  setShowKeyboardShortcuts: (show) => set({ showKeyboardShortcuts: show }),
+
+  // Feature 62: Minimap
+  showMinimap: false,
+  toggleMinimap: () => set((s) => ({ showMinimap: !s.showMinimap })),
+
+  // Feature 63: Toast notifications
+  toastMessage: null,
+  toastType: 'info',
+  showToast: (message, type = 'info') => set({ toastMessage: message, toastType: type }),
+  clearToast: () => set({ toastMessage: null }),
+
+  // Feature 64: Cursor position
+  cursorPosition: { x: 0, y: 0 },
+  setCursorPosition: (pos) => set({ cursorPosition: pos }),
+
+  // Feature 65: Layer search
+  layerSearchQuery: '',
+  setLayerSearchQuery: (query) => set({ layerSearchQuery: query }),
+
+  // Feature 66: Workspace info
+  showWorkspaceInfo: false,
+  toggleWorkspaceInfo: () => set((s) => ({ showWorkspaceInfo: !s.showWorkspaceInfo })),
+
+  // Feature 67: Auto select after creation
+  autoSelectAfterCreate: true,
+  toggleAutoSelectAfterCreate: () => set((s) => ({ autoSelectAfterCreate: !s.autoSelectAfterCreate })),
+
+  // Feature 68: Status bar
+  showStatusBar: true,
+  toggleStatusBar: () => set((s) => ({ showStatusBar: !s.showStatusBar })),
+
+  // Feature 69: Snap to objects
+  snapToObjects: false,
+  toggleSnapToObjects: () => set((s) => ({ snapToObjects: !s.snapToObjects })),
+
+  // Feature 70: Zoom slider
+  zoomSliderValue: 100,
+  setZoomSliderValue: (value) => set({ zoomSliderValue: value }),
 }))

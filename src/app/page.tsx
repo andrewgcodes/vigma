@@ -23,6 +23,19 @@ import { v4 as uuidv4 } from 'uuid'
 import type { ToolType } from '@/types/design'
 import WelcomeModal from '@/components/WelcomeModal'
 import MobileGate from '@/components/MobileGate'
+import KeyboardShortcutsDialog from '@/components/KeyboardShortcutsDialog'
+import StatusBar from '@/components/StatusBar'
+import ToastNotification from '@/components/ToastNotification'
+import MiniMap from '@/components/MiniMap'
+import ObjectInfoOverlay from '@/components/ObjectInfoOverlay'
+import GridSettingsPanel from '@/components/GridSettingsPanel'
+import ExportSettingsDialog from '@/components/ExportSettingsDialog'
+import CanvasBackgroundPicker from '@/components/CanvasBackgroundPicker'
+import SelectionInfoBadge from '@/components/SelectionInfoBadge'
+import BulkOperationsBar from '@/components/BulkOperationsBar'
+import WorkspaceInfo from '@/components/WorkspaceInfo'
+import ViewMenu from '@/components/ViewMenu'
+import SearchLayers from '@/components/SearchLayers'
 
 /** Property list used when serializing Fabric.js objects for Yjs sync. */
 const SYNC_PROPS = ['id', 'name', 'isFrame', 'lockMovementX', 'lockMovementY', 'lockRotation', 'lockScalingX', 'lockScalingY', 'hasControls', 'selectable', 'evented']
@@ -49,6 +62,20 @@ export default function DesignPage() {
     snapToGrid, toggleSnapToGrid,
     gridSize,
     viewport, setViewport,
+    showKeyboardShortcuts, setShowKeyboardShortcuts,
+    showMinimap,
+    showObjectInfo,
+    showStatusBar,
+    showWorkspaceInfo, toggleWorkspaceInfo,
+    showSelectionDimensions,
+    darkMode,
+    canvasBackground, setCanvasBackground,
+    setCursorPosition,
+    layerSearchQuery, setLayerSearchQuery,
+    showToast,
+    autoSaveEnabled,
+    addRecentColor,
+    keyboardShortcutsEnabled,
   } = useDesignStore()
 
   const [layers, setLayers] = useState<any[]>([])
@@ -58,6 +85,12 @@ export default function DesignPage() {
   const [zoom, setZoom] = useState(1)
   const [contextMenu, setContextMenu] = useState({ visible: false, x: 0, y: 0, hasSelection: false, multipleSelected: false, isLocked: false })
   const [isDrawingShape, setIsDrawingShape] = useState(false)
+  // New feature state
+  const [showGridSettings, setShowGridSettings] = useState(false)
+  const [showExportSettings, setShowExportSettings] = useState(false)
+  const [showCanvasBgPicker, setShowCanvasBgPicker] = useState(false)
+  const [showViewMenuState, setShowViewMenuState] = useState(false)
+  const [objectInfoPos, setObjectInfoPos] = useState({ x: 0, y: 0 })
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved' | 'just-saved'>('saved')
   const [largeImageWarning, setLargeImageWarning] = useState<string | null>(null)
   const largeImageWarningTimerRef = useRef<NodeJS.Timeout | null>(null)
@@ -1217,6 +1250,43 @@ export default function DesignPage() {
       const ctrl = e.ctrlKey || e.metaKey
       const shift = e.shiftKey
 
+      // Check if keyboard shortcuts are enabled
+      if (!useDesignStore.getState().keyboardShortcutsEnabled) return
+
+      // Feature 90: ? key opens keyboard shortcuts dialog
+      if (e.key === '?' || (shift && e.key === '/')) {
+        setShowKeyboardShortcuts(true)
+        e.preventDefault()
+        return
+      }
+
+      // Feature 91: Shift+R to rotate 90 degrees
+      if (shift && !ctrl && e.key.toLowerCase() === 'r') {
+        engine.rotateBy(90)
+        refreshObjectProps()
+        syncActiveToCollab()
+        e.preventDefault()
+        return
+      }
+
+      // Feature 92: Shift+H to flip horizontal
+      if (shift && !ctrl && e.key.toLowerCase() === 'h') {
+        engine.flipHorizontal()
+        refreshObjectProps()
+        syncActiveToCollab()
+        e.preventDefault()
+        return
+      }
+
+      // Feature 93: Shift+V to flip vertical
+      if (shift && !ctrl && e.key.toLowerCase() === 'v') {
+        engine.flipVertical()
+        refreshObjectProps()
+        syncActiveToCollab()
+        e.preventDefault()
+        return
+      }
+
       // Tool shortcuts
       if (!ctrl && !shift) {
         switch (e.key.toLowerCase()) {
@@ -1322,11 +1392,33 @@ export default function DesignPage() {
       }
     }
 
+    // Feature 94: Double-click to enter text editing
+    const handleDblClick = () => {
+      const engine = engineRef.current
+      if (!engine) return
+      const active = engine.canvas.getActiveObject()
+      if (active && (active.type === 'textbox' || active.type === 'i-text' || active.type === 'text')) {
+        (active as any).enterEditing()
+        engine.canvas.renderAll()
+      }
+    }
+    // Feature 95: Canvas mouse move for cursor coordinates
+    const handleCanvasMouseMove = (e: MouseEvent) => {
+      const engine = engineRef.current
+      if (!engine) return
+      const point = engine.getCanvasPointFromEvent(e)
+      setCursorPosition(point)
+    }
+
     window.addEventListener('keydown', handleKeyDown)
     window.addEventListener('keyup', handleKeyUp)
+    window.addEventListener('dblclick', handleDblClick)
+    window.addEventListener('mousemove', handleCanvasMouseMove)
     return () => {
       window.removeEventListener('keydown', handleKeyDown)
       window.removeEventListener('keyup', handleKeyUp)
+      window.removeEventListener('dblclick', handleDblClick)
+      window.removeEventListener('mousemove', handleCanvasMouseMove)
     }
   }, [])
 
@@ -1460,6 +1552,107 @@ export default function DesignPage() {
   }, [persistAllPages])
 
   // EXPORT
+  // Feature 96: Advanced export handler supporting WebP
+  const handleAdvancedExport = useCallback((format: string, scale: number, quality: number) => {
+    const engine = engineRef.current
+    if (!engine) return
+    if (format === 'webp') {
+      const dataURL = engine.exportToWebP(quality, scale)
+      downloadDataURL(dataURL, 'design.webp')
+      showToast('Exported as WebP', 'success')
+      return
+    }
+    if (format === 'png') {
+      const dataURL = engine.exportToPNG(scale)
+      downloadDataURL(dataURL, 'design.png')
+      showToast('Exported as PNG', 'success')
+      return
+    }
+    if (format === 'svg') {
+      const svg = engine.exportToSVG()
+      const blob = new Blob([svg], { type: 'image/svg+xml' })
+      downloadBlob(blob, 'design.svg')
+      showToast('Exported as SVG', 'success')
+      return
+    }
+    if (format === 'jpg') {
+      const dataURL = engine.exportToJPG(quality, scale)
+      downloadDataURL(dataURL, 'design.jpg')
+      showToast('Exported as JPG', 'success')
+      return
+    }
+  }, [showToast])
+
+  // Feature 97: Copy as PNG to clipboard
+  const handleCopyAsPNG = useCallback(async () => {
+    const engine = engineRef.current
+    if (!engine) return
+    const ok = await engine.copyAsPNG()
+    showToast(ok ? 'Copied as PNG' : 'Failed to copy', ok ? 'success' : 'error')
+  }, [showToast])
+
+  // Feature 98: Copy as SVG to clipboard
+  const handleCopyAsSVG = useCallback(async () => {
+    const engine = engineRef.current
+    if (!engine) return
+    const ok = await engine.copyAsSVG()
+    showToast(ok ? 'Copied SVG' : 'Failed to copy', ok ? 'success' : 'error')
+  }, [showToast])
+
+  // Feature 99: Copy CSS to clipboard
+  const handleCopyAsCSS = useCallback(async () => {
+    const engine = engineRef.current
+    if (!engine) return
+    const ok = await engine.copyCSSToClipboard()
+    showToast(ok ? 'Copied CSS' : 'Failed to copy', ok ? 'success' : 'error')
+  }, [showToast])
+
+  // Feature 100: Canvas background color change handler
+  const handleCanvasBackgroundChange = useCallback((color: string) => {
+    const engine = engineRef.current
+    if (!engine) return
+    engine.setCanvasBackgroundColor(color)
+    setCanvasBackground(color)
+  }, [setCanvasBackground])
+
+  // Helper: get minimap objects
+  const getMiniMapObjects = useCallback(() => {
+    const engine = engineRef.current
+    if (!engine) return []
+    return engine.canvas.getObjects()
+      .filter((o: any) => !o.isGrid && !o.isPreview)
+      .map((o: any) => ({
+        left: o.left || 0,
+        top: o.top || 0,
+        width: (o.width || 0) * (o.scaleX || 1),
+        height: (o.height || 0) * (o.scaleY || 1),
+        fill: typeof o.fill === 'string' ? o.fill : '#999',
+      }))
+  }, [])
+
+  // Helper: get canvas stats
+  const getCanvasStats = useCallback(() => {
+    const engine = engineRef.current
+    if (!engine) return { total: 0, byType: {} }
+    return engine.getCanvasStatistics()
+  }, [])
+
+  // Minimap navigate handler
+  const handleMiniMapNavigate = useCallback((x: number, y: number) => {
+    const engine = engineRef.current
+    if (!engine) return
+    const z = engine.canvas.getZoom()
+    const canvasW = engine.canvas.getWidth()
+    const canvasH = engine.canvas.getHeight()
+    const vpt = engine.canvas.viewportTransform
+    if (vpt) {
+      vpt[4] = canvasW / 2 - x * z
+      vpt[5] = canvasH / 2 - y * z
+      engine.canvas.setViewportTransform(vpt)
+      engine.onViewportChange?.(z, vpt[4], vpt[5])
+    }
+  }, [])
+
   const handleExport = useCallback((format: 'png' | 'svg' | 'jpg' | 'pdf' | 'json') => {
     const engine = engineRef.current
     if (!engine) return
@@ -2257,6 +2450,125 @@ export default function DesignPage() {
 
       {/* Welcome modal for first-time visitors */}
       <WelcomeModal />
+
+      {/* Feature 71: Keyboard Shortcuts Dialog */}
+      <KeyboardShortcutsDialog
+        open={showKeyboardShortcuts}
+        onClose={() => setShowKeyboardShortcuts(false)}
+      />
+
+      {/* Feature 72: Status Bar */}
+      <StatusBar
+        objectCount={engineRef.current?.getObjectCount() || 0}
+        zoom={zoom}
+      />
+
+      {/* Feature 73: Toast Notification */}
+      <ToastNotification />
+
+      {/* Feature 75: MiniMap */}
+      <MiniMap
+        canvasWidth={typeof window !== 'undefined' ? window.innerWidth : 1920}
+        canvasHeight={typeof window !== 'undefined' ? window.innerHeight : 1080}
+        viewportX={viewport.panX}
+        viewportY={viewport.panY}
+        zoom={zoom}
+        objects={getMiniMapObjects()}
+        onNavigate={handleMiniMapNavigate}
+        visible={showMinimap}
+      />
+
+      {/* Feature 76: Object Info Overlay */}
+      <ObjectInfoOverlay
+        visible={showObjectInfo && selectedIds.length === 1}
+        x={objectInfoPos.x}
+        y={objectInfoPos.y}
+        width={objectProps?.width || 0}
+        height={objectProps?.height || 0}
+        rotation={objectProps?.angle || 0}
+        type={objectProps?.type || ''}
+        name={objectProps?.name || ''}
+      />
+
+      {/* Feature 77: Grid Settings Panel */}
+      <GridSettingsPanel
+        open={showGridSettings}
+        onClose={() => setShowGridSettings(false)}
+        gridSize={gridSize}
+        onGridSizeChange={(size) => useDesignStore.getState().setGridSize(size)}
+        gridEnabled={showGrid}
+        onToggleGrid={toggleGrid}
+        snapEnabled={snapToGrid}
+        onToggleSnap={toggleSnapToGrid}
+      />
+
+      {/* Feature 78: Export Settings Dialog */}
+      <ExportSettingsDialog
+        open={showExportSettings}
+        onClose={() => setShowExportSettings(false)}
+        onExport={handleAdvancedExport}
+        onCopyAsPNG={handleCopyAsPNG}
+        onCopyAsSVG={handleCopyAsSVG}
+        onCopyAsCSS={handleCopyAsCSS}
+      />
+
+      {/* Feature 79: Canvas Background Picker */}
+      <CanvasBackgroundPicker
+        open={showCanvasBgPicker}
+        onClose={() => setShowCanvasBgPicker(false)}
+        color={canvasBackground}
+        onChange={handleCanvasBackgroundChange}
+      />
+
+      {/* Feature 80: Selection Info Badge */}
+      <SelectionInfoBadge
+        count={selectedIds.length}
+        type={objectProps?.type || 'object'}
+        visible={showSelectionDimensions && selectedIds.length > 0}
+      />
+
+      {/* Feature 87: Bulk Operations Bar */}
+      <BulkOperationsBar
+        selectedCount={selectedIds.length}
+        onDelete={() => { engineRef.current?.deleteSelected(); refreshLayers(); refreshObjectProps() }}
+        onDuplicate={() => { engineRef.current?.duplicate().then(() => refreshLayers()) }}
+        onLock={() => { engineRef.current?.lockObject(true); refreshLayers(); refreshObjectProps() }}
+        onUnlock={() => { engineRef.current?.lockObject(false); refreshLayers(); refreshObjectProps() }}
+        onShow={() => { /* toggle visibility handled per-object */ }}
+        onHide={() => { /* toggle visibility handled per-object */ }}
+        onFlipH={() => { engineRef.current?.flipHorizontal(); refreshObjectProps() }}
+        onFlipV={() => { engineRef.current?.flipVertical(); refreshObjectProps() }}
+        onRotate90={() => { engineRef.current?.rotateBy(90); refreshObjectProps() }}
+      />
+
+      {/* Feature 88: Workspace Info */}
+      <WorkspaceInfo
+        open={showWorkspaceInfo}
+        onClose={toggleWorkspaceInfo}
+        stats={getCanvasStats()}
+        pageCount={pages.length}
+        currentPage={pages.find(p => p.id === currentPageId)?.name || 'Page 1'}
+        zoom={zoom}
+        canvasSize={{ width: typeof window !== 'undefined' ? window.innerWidth : 1920, height: typeof window !== 'undefined' ? window.innerHeight : 1080 }}
+      />
+
+      {/* Feature 89: View Menu */}
+      <ViewMenu
+        open={showViewMenuState}
+        onClose={() => setShowViewMenuState(false)}
+        onToggleGrid={toggleGrid}
+        onToggleRulers={toggleRulers}
+        onToggleGuides={() => {}}
+        onZoomToFit={() => engineRef.current?.zoomToFit()}
+        onZoomToFitWidth={() => engineRef.current?.zoomToFitWidth()}
+        onZoomToFitHeight={() => engineRef.current?.zoomToFitHeight()}
+        onResetZoom={() => engineRef.current?.resetZoom()}
+        onOpenGridSettings={() => setShowGridSettings(true)}
+        onOpenCanvasBg={() => setShowCanvasBgPicker(true)}
+        gridEnabled={showGrid}
+        rulersEnabled={showRulers}
+        guidesEnabled={false}
+      />
     </div>
     </MobileGate>
   )

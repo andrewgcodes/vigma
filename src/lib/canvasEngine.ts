@@ -18,7 +18,7 @@ export class CanvasEngine {
   private onObjectModified?: () => void
   private onHistoryChange?: (canUndo: boolean, canRedo: boolean) => void
   private onZoomChange?: (zoom: number) => void
-  private onViewportChange?: (zoom: number, panX: number, panY: number) => void
+  onViewportChange?: (zoom: number, panX: number, panY: number) => void
 
   constructor(canvasEl: HTMLCanvasElement, options?: {
     onSelectionChange?: (ids: string[]) => void
@@ -124,7 +124,7 @@ export class CanvasEngine {
   // HISTORY
   private serializeCanvas(extraProps: string[] = []): string {
     const props = ['id', 'name', 'selectable', 'evented', 'lockMovementX', 'lockMovementY', 'lockRotation', 'lockScalingX', 'lockScalingY', 'hasControls', 'visible', 'rx', 'ry', 'isFrame', 'isGrid', 'isPreview', ...extraProps]
-    const data = this.canvas.toJSON(props)
+    const data = (this.canvas as any).toJSON(props)
     // Filter out grid lines and preview objects from serialization
     data.objects = (data.objects || []).filter((o: any) => !o.isGrid && !o.isPreview)
     return JSON.stringify(data)
@@ -1691,6 +1691,648 @@ export class CanvasEngine {
     // Convert to hex
     const toHex = (n: number) => n.toString(16).padStart(2, '0')
     return `#${toHex(pixel[0])}${toHex(pixel[1])}${toHex(pixel[2])}`
+  }
+
+  // ===== NEW FEATURES: Batch 1 - Utility Methods =====
+
+  // Feature 1: Scale selected object to fit canvas dimensions
+  scaleToFitCanvas() {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    const canvasW = this.canvas.getWidth()
+    const canvasH = this.canvas.getHeight()
+    const objW = (active.width || 1) * (active.scaleX || 1)
+    const objH = (active.height || 1) * (active.scaleY || 1)
+    const scale = Math.min(canvasW / objW, canvasH / objH) * 0.9
+    active.set({
+      scaleX: (active.scaleX || 1) * scale,
+      scaleY: (active.scaleY || 1) * scale,
+    })
+    active.setCoords()
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 2: Center selected object on canvas
+  centerOnCanvas() {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    const canvasW = this.canvas.getWidth()
+    const canvasH = this.canvas.getHeight()
+    const zoom = this.canvas.getZoom()
+    const vpt = this.canvas.viewportTransform
+    const panX = vpt ? vpt[4] : 0
+    const panY = vpt ? vpt[5] : 0
+    const objW = (active.width || 0) * (active.scaleX || 1)
+    const objH = (active.height || 0) * (active.scaleY || 1)
+    active.set({
+      left: (canvasW / 2 - panX) / zoom - objW / 2,
+      top: (canvasH / 2 - panY) / zoom - objH / 2,
+    })
+    active.setCoords()
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 3: Center selected object horizontally
+  centerHorizontally() {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    const canvasW = this.canvas.getWidth()
+    const zoom = this.canvas.getZoom()
+    const vpt = this.canvas.viewportTransform
+    const panX = vpt ? vpt[4] : 0
+    const objW = (active.width || 0) * (active.scaleX || 1)
+    active.set({ left: (canvasW / 2 - panX) / zoom - objW / 2 })
+    active.setCoords()
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 4: Center selected object vertically
+  centerVertically() {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    const canvasH = this.canvas.getHeight()
+    const zoom = this.canvas.getZoom()
+    const vpt = this.canvas.viewportTransform
+    const panY = vpt ? vpt[5] : 0
+    const objH = (active.height || 0) * (active.scaleY || 1)
+    active.set({ top: (canvasH / 2 - panY) / zoom - objH / 2 })
+    active.setCoords()
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 5: Match width of selected objects to widest
+  matchWidth() {
+    const active = this.canvas.getActiveObject()
+    if (!active || !(active instanceof ActiveSelection)) return
+    const objects = active.getObjects()
+    if (objects.length < 2) return
+    const maxWidth = Math.max(...objects.map(o => (o.width || 0) * (o.scaleX || 1)))
+    objects.forEach(o => {
+      o.set({ scaleX: maxWidth / (o.width || 1) })
+      o.setCoords()
+    })
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 6: Match height of selected objects to tallest
+  matchHeight() {
+    const active = this.canvas.getActiveObject()
+    if (!active || !(active instanceof ActiveSelection)) return
+    const objects = active.getObjects()
+    if (objects.length < 2) return
+    const maxHeight = Math.max(...objects.map(o => (o.height || 0) * (o.scaleY || 1)))
+    objects.forEach(o => {
+      o.set({ scaleY: maxHeight / (o.height || 1) })
+      o.setCoords()
+    })
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 7: Match both width and height to largest
+  matchSize() {
+    const active = this.canvas.getActiveObject()
+    if (!active || !(active instanceof ActiveSelection)) return
+    const objects = active.getObjects()
+    if (objects.length < 2) return
+    const maxWidth = Math.max(...objects.map(o => (o.width || 0) * (o.scaleX || 1)))
+    const maxHeight = Math.max(...objects.map(o => (o.height || 0) * (o.scaleY || 1)))
+    objects.forEach(o => {
+      o.set({
+        scaleX: maxWidth / (o.width || 1),
+        scaleY: maxHeight / (o.height || 1),
+      })
+      o.setCoords()
+    })
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 8: Equal spacing between selected objects
+  spacingEqual(gap: number = 20) {
+    const active = this.canvas.getActiveObject()
+    if (!active || !(active instanceof ActiveSelection)) return
+    const objects = active.getObjects().slice().sort((a, b) => (a.left || 0) - (b.left || 0))
+    if (objects.length < 2) return
+    let currentLeft = objects[0].left || 0
+    objects.forEach((obj, i) => {
+      if (i === 0) return
+      currentLeft += (objects[i - 1].width || 0) * (objects[i - 1].scaleX || 1) + gap
+      obj.set({ left: currentLeft })
+      obj.setCoords()
+    })
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 9: Rotate selected by increment
+  rotateBy(degrees: number) {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    active.set('angle', ((active.angle || 0) + degrees) % 360)
+    active.setCoords()
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 10: Scale selected by factor
+  scaleBy(factor: number) {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    active.set({
+      scaleX: (active.scaleX || 1) * factor,
+      scaleY: (active.scaleY || 1) * factor,
+    })
+    active.setCoords()
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 11: Move selected by delta
+  moveBy(dx: number, dy: number) {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    active.set({
+      left: (active.left || 0) + dx,
+      top: (active.top || 0) + dy,
+    })
+    active.setCoords()
+    this.canvas.renderAll()
+  }
+
+  // Feature 12: Set horizontal skew
+  setObjectSkewX(skew: number) {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    active.set('skewX', skew)
+    active.setCoords()
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 13: Set vertical skew
+  setObjectSkewY(skew: number) {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    active.set('skewY', skew)
+    active.setCoords()
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 14: Get total object count
+  getObjectCount(): number {
+    return this.canvas.getObjects().filter((o: any) => !o.isGrid && !o.isPreview).length
+  }
+
+  // Feature 15: Get count of selected objects
+  getSelectedCount(): number {
+    const active = this.canvas.getActiveObject()
+    if (!active) return 0
+    if (active instanceof ActiveSelection) return active.getObjects().length
+    return 1
+  }
+
+  // Feature 16: Deselect all objects
+  deselectAll() {
+    this.canvas.discardActiveObject()
+    this.canvas.renderAll()
+  }
+
+  // Feature 17: Change canvas background color
+  setCanvasBackgroundColor(color: string) {
+    this.canvas.backgroundColor = color
+    this.canvas.renderAll()
+  }
+
+  // Feature 18: Get canvas background color
+  getCanvasBackgroundColor(): string {
+    return (this.canvas.backgroundColor as string) || '#f5f5f7'
+  }
+
+  // Feature 19: Add circle convenience method
+  addCircle(options?: Partial<any>) {
+    const id = uuidv4()
+    const circle = new Circle({
+      left: 100 + Math.random() * 200,
+      top: 100 + Math.random() * 200,
+      radius: 60,
+      fill: '#50C878',
+      stroke: '',
+      strokeWidth: 0,
+      ...options,
+    })
+    ;(circle as any).id = id
+    ;(circle as any).name = options?.name || 'Circle'
+    this.canvas.add(circle)
+    this.canvas.setActiveObject(circle)
+    this.canvas.renderAll()
+    return circle
+  }
+
+  // Feature 20: Add square convenience method
+  addSquare(options?: Partial<any>) {
+    return this.addRect({ width: 150, height: 150, name: 'Square', ...options })
+  }
+
+  // Feature 21: Add horizontal line
+  addHorizontalLine(options?: Partial<any>) {
+    const id = uuidv4()
+    const line = new Line([0, 0, 300, 0], {
+      left: 100 + Math.random() * 200,
+      top: 200 + Math.random() * 100,
+      stroke: '#1d1d1f',
+      strokeWidth: 2,
+      ...options,
+    })
+    ;(line as any).id = id
+    ;(line as any).name = options?.name || 'Horizontal Line'
+    this.canvas.add(line)
+    this.canvas.setActiveObject(line)
+    this.canvas.renderAll()
+    return line
+  }
+
+  // Feature 22: Add vertical line
+  addVerticalLine(options?: Partial<any>) {
+    const id = uuidv4()
+    const line = new Line([0, 0, 0, 300], {
+      left: 200 + Math.random() * 100,
+      top: 100 + Math.random() * 200,
+      stroke: '#1d1d1f',
+      strokeWidth: 2,
+      ...options,
+    })
+    ;(line as any).id = id
+    ;(line as any).name = options?.name || 'Vertical Line'
+    this.canvas.add(line)
+    this.canvas.setActiveObject(line)
+    this.canvas.renderAll()
+    return line
+  }
+
+  // Feature 23: Add diamond shape
+  addDiamond(options?: Partial<any>) {
+    const size = options?.size || 100
+    const points = [
+      { x: size / 2, y: 0 },
+      { x: size, y: size / 2 },
+      { x: size / 2, y: size },
+      { x: 0, y: size / 2 },
+    ]
+    const id = uuidv4()
+    const poly = new Polygon(points, {
+      left: 100 + Math.random() * 200,
+      top: 100 + Math.random() * 200,
+      fill: '#FFD700',
+      stroke: '',
+      strokeWidth: 0,
+      ...options,
+    })
+    ;(poly as any).id = id
+    ;(poly as any).name = options?.name || 'Diamond'
+    this.canvas.add(poly)
+    this.canvas.setActiveObject(poly)
+    this.canvas.renderAll()
+    return poly
+  }
+
+  // Feature 24: Add pre-rounded rectangle
+  addRoundedRect(options?: Partial<any>) {
+    return this.addRect({ rx: 12, ry: 12, name: 'Rounded Rectangle', ...options })
+  }
+
+  // Feature 25: Duplicate with custom offset
+  async duplicateToOffset(dx: number = 20, dy: number = 20) {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    const cloned = await active.clone()
+    const newId = uuidv4()
+    ;(cloned as any).id = newId
+    ;(cloned as any).name = ((active as any).name || active.type || 'Object') + ' copy'
+    cloned.set({
+      left: (active.left || 0) + dx,
+      top: (active.top || 0) + dy,
+    })
+    this.canvas.add(cloned)
+    this.canvas.setActiveObject(cloned)
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 26: Export only selected objects as JSON
+  objectsToJSON(): string | null {
+    const active = this.canvas.getActiveObject()
+    if (!active) return null
+    const props = ['id', 'name', 'selectable', 'evented', 'lockMovementX', 'lockMovementY', 'lockRotation', 'lockScalingX', 'lockScalingY', 'hasControls', 'visible', 'rx', 'ry', 'isFrame', 'globalCompositeOperation', 'paintFirst', 'strokeUniform']
+    if (active instanceof ActiveSelection) {
+      const objects = active.getObjects().map(o => (o as any).toJSON(props))
+      return JSON.stringify({ objects })
+    }
+    return JSON.stringify({ objects: [(active as any).toJSON(props)] })
+  }
+
+  // Feature 27: Import objects from JSON string
+  async importObjectsFromJSON(json: string) {
+    try {
+      const data = JSON.parse(json)
+      if (!data.objects || !Array.isArray(data.objects)) return
+      // Use util.enlivenObjects to add objects without replacing existing ones
+      const fabric = await import('fabric')
+      const enlivened = await (fabric as any).util.enlivenObjects(data.objects)
+      for (const obj of enlivened) {
+        ;(obj as any).id = uuidv4()
+        this.canvas.add(obj as any)
+      }
+      this.canvas.renderAll()
+      this.saveHistory()
+    } catch {
+      console.warn('Failed to import objects from JSON')
+    }
+  }
+
+  // Feature 28: Rename active object
+  setObjectName(name: string) {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    ;(active as any).name = name
+  }
+
+  // Feature 29: Get object by ID
+  getObjectById(id: string): FabricObject | null {
+    return this.canvas.getObjects().find(o => (o as any).id === id) || null
+  }
+
+  // Feature 30: Select multiple objects by IDs
+  selectMultipleByIds(ids: string[]) {
+    const objects = this.canvas.getObjects().filter(o => ids.includes((o as any).id))
+    if (objects.length === 0) return
+    if (objects.length === 1) {
+      this.canvas.setActiveObject(objects[0])
+    } else {
+      const selection = new ActiveSelection(objects, { canvas: this.canvas })
+      this.canvas.setActiveObject(selection)
+    }
+    this.canvas.renderAll()
+  }
+
+  // Feature 31: Move viewport to center of all objects
+  moveToCenter() {
+    const bbox = this.getObjectsBoundingBox()
+    if (!bbox) return
+    const centerX = bbox.left + bbox.width / 2
+    const centerY = bbox.top + bbox.height / 2
+    const zoom = this.canvas.getZoom()
+    const canvasW = this.canvas.getWidth()
+    const canvasH = this.canvas.getHeight()
+    const vpt = this.canvas.viewportTransform
+    if (vpt) {
+      vpt[4] = canvasW / 2 - centerX * zoom
+      vpt[5] = canvasH / 2 - centerY * zoom
+      this.canvas.setViewportTransform(vpt)
+      this.onViewportChange?.(zoom, vpt[4], vpt[5])
+    }
+  }
+
+  // Feature 32: Set exact zoom percentage
+  setZoomLevel(percentage: number) {
+    const zoom = percentage / 100
+    this.setZoom(Math.max(0.01, Math.min(20, zoom)))
+  }
+
+  // Feature 33: Get zoom as percentage
+  getZoomPercentage(): number {
+    return Math.round(this.canvas.getZoom() * 100)
+  }
+
+  // Feature 34: Invert fill/stroke colors of selection
+  invertColors() {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    const invertHex = (hex: string): string => {
+      if (!hex || hex === 'transparent' || hex === '') return hex
+      const clean = hex.replace('#', '')
+      if (clean.length !== 6) return hex
+      const r = 255 - parseInt(clean.substring(0, 2), 16)
+      const g = 255 - parseInt(clean.substring(2, 4), 16)
+      const b = 255 - parseInt(clean.substring(4, 6), 16)
+      return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`
+    }
+    const fill = active.fill
+    if (typeof fill === 'string') {
+      active.set('fill', invertHex(fill))
+    }
+    const stroke = active.stroke
+    if (typeof stroke === 'string' && stroke) {
+      active.set('stroke', invertHex(stroke))
+    }
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 35: Apply random colors to selection
+  randomizeColors() {
+    const randomColor = () => '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0')
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    if (active instanceof ActiveSelection) {
+      active.getObjects().forEach(o => {
+        o.set('fill', randomColor())
+      })
+    } else {
+      active.set('fill', randomColor())
+    }
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 36: Outline stroke to selected
+  outlineStroke(color: string = '#000000', width: number = 2) {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    active.set({ stroke: color, strokeWidth: width })
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 37: Remove stroke from selected
+  removeStroke() {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    active.set({ stroke: '', strokeWidth: 0 })
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 38: Remove fill from selected
+  removeFill() {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    active.set('fill', 'transparent')
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 39: Set both fill and stroke at once
+  setFillAndStroke(fill: string, strokeColor: string, strokeWidth: number = 1) {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    active.set({ fill, stroke: strokeColor, strokeWidth })
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 40: Export to WebP format
+  exportToWebP(quality: number = 0.92, scale: number = 2): string {
+    const bbox = this.getObjectsBoundingBox()
+    if (!bbox) {
+      return this.canvas.toDataURL({ format: 'webp', quality, multiplier: scale } as any)
+    }
+    const origBg = this.canvas.backgroundColor
+    this.canvas.backgroundColor = 'transparent'
+    this.canvas.renderAll()
+    const dataURL = this.canvas.toDataURL({
+      format: 'webp',
+      quality,
+      multiplier: scale,
+      left: bbox.left,
+      top: bbox.top,
+      width: bbox.width,
+      height: bbox.height,
+    } as any)
+    this.canvas.backgroundColor = origBg
+    this.canvas.renderAll()
+    return dataURL
+  }
+
+  // Feature 41: Copy as PNG to clipboard
+  async copyAsPNG() {
+    const dataURL = this.exportToPNG(2)
+    try {
+      const response = await fetch(dataURL)
+      const blob = await response.blob()
+      await navigator.clipboard.write([
+        new ClipboardItem({ 'image/png': blob })
+      ])
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  // Feature 42: Copy as SVG to clipboard
+  async copyAsSVG() {
+    const svg = this.exportToSVG()
+    try {
+      await navigator.clipboard.writeText(svg)
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  // Feature 43: Copy CSS styles to clipboard
+  async copyCSSToClipboard() {
+    const css = this.generateCodeExport('css')
+    try {
+      await navigator.clipboard.writeText(css)
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  // Feature 44: Get canvas statistics
+  getCanvasStatistics(): { total: number; byType: Record<string, number> } {
+    const objects = this.canvas.getObjects().filter((o: any) => !o.isGrid && !o.isPreview)
+    const byType: Record<string, number> = {}
+    objects.forEach(o => {
+      const type = o.type || 'unknown'
+      byType[type] = (byType[type] || 0) + 1
+    })
+    return { total: objects.length, byType }
+  }
+
+  // Feature 45: Fit width zoom mode
+  zoomToFitWidth() {
+    const bbox = this.getObjectsBoundingBox()
+    if (!bbox) return
+    const canvasW = this.canvas.getWidth()
+    const zoom = (canvasW * 0.9) / bbox.width
+    const clampedZoom = Math.max(0.01, Math.min(20, zoom))
+    const center = new Point(bbox.left + bbox.width / 2, bbox.top + bbox.height / 2)
+    this.canvas.zoomToPoint(center, clampedZoom)
+    const vpt = this.canvas.viewportTransform
+    if (vpt) {
+      vpt[4] = canvasW / 2 - center.x * clampedZoom
+      this.canvas.setViewportTransform(vpt)
+      this.onZoomChange?.(clampedZoom)
+      this.onViewportChange?.(clampedZoom, vpt[4], vpt[5])
+    }
+  }
+
+  // Feature 46: Fit height zoom mode
+  zoomToFitHeight() {
+    const bbox = this.getObjectsBoundingBox()
+    if (!bbox) return
+    const canvasH = this.canvas.getHeight()
+    const zoom = (canvasH * 0.9) / bbox.height
+    const clampedZoom = Math.max(0.01, Math.min(20, zoom))
+    const center = new Point(bbox.left + bbox.width / 2, bbox.top + bbox.height / 2)
+    this.canvas.zoomToPoint(center, clampedZoom)
+    const vpt = this.canvas.viewportTransform
+    if (vpt) {
+      vpt[5] = canvasH / 2 - center.y * clampedZoom
+      this.canvas.setViewportTransform(vpt)
+      this.onZoomChange?.(clampedZoom)
+      this.onViewportChange?.(clampedZoom, vpt[4], vpt[5])
+    }
+  }
+
+  // Feature 47: Get cursor coordinates in canvas space
+  getCanvasPointFromEvent(e: MouseEvent): { x: number; y: number } {
+    const point = this.canvas.getScenePoint(e)
+    return { x: Math.round(point.x), y: Math.round(point.y) }
+  }
+
+  // Feature 48: Duplicate page content (returns JSON of current canvas)
+  getCanvasJSON(): string {
+    return this.exportToJSON()
+  }
+
+  // Feature 49: Select objects by type
+  selectByType(type: string) {
+    const objects = this.canvas.getObjects().filter(o => o.type === type && !(o as any).isGrid && !(o as any).isPreview)
+    if (objects.length === 0) return
+    if (objects.length === 1) {
+      this.canvas.setActiveObject(objects[0])
+    } else {
+      const selection = new ActiveSelection(objects, { canvas: this.canvas })
+      this.canvas.setActiveObject(selection)
+    }
+    this.canvas.renderAll()
+  }
+
+  // Feature 50: Add text with preset styles
+  addHeading(text: string = 'Heading', options?: Partial<any>) {
+    return this.addText({ text, fontSize: 36, fontWeight: 'bold', name: 'Heading', ...options })
+  }
+
+  addSubheading(text: string = 'Subheading', options?: Partial<any>) {
+    return this.addText({ text, fontSize: 24, fontWeight: '600', name: 'Subheading', ...options })
+  }
+
+  addBodyText(text: string = 'Body text goes here', options?: Partial<any>) {
+    return this.addText({ text, fontSize: 16, fontWeight: 'normal', name: 'Body Text', ...options })
+  }
+
+  addCaption(text: string = 'Caption', options?: Partial<any>) {
+    return this.addText({ text, fontSize: 12, fontWeight: 'normal', fill: '#6e6e73', name: 'Caption', ...options })
   }
 
   // DISPOSE
