@@ -149,7 +149,17 @@ export default function FeatureHub({
   const [imageContrast, setImageContrast] = useState(0)
   const [imageSaturation, setImageSaturation] = useState(0)
 
-  const store = useDesignStore()
+  // Selective store subscriptions to avoid re-renders on every state change (e.g. cursor position ~60fps)
+  const autoSaveEnabled = useDesignStore(s => s.autoSaveEnabled)
+  const showLayoutGrid = useDesignStore(s => s.showLayoutGrid)
+  const showBaselineGrid = useDesignStore(s => s.showBaselineGrid)
+  const recentColors = useDesignStore(s => s.recentColors)
+  const favoriteColors = useDesignStore(s => s.favoriteColors)
+  const theme = useDesignStore(s => s.theme)
+  const accentColor = useDesignStore(s => s.accentColor)
+  const uiDensity = useDesignStore(s => s.uiDensity)
+  const showAlignmentGuides = useDesignStore(s => s.showAlignmentGuides)
+  const highContrastMode = useDesignStore(s => s.highContrastMode)
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -284,17 +294,17 @@ export default function FeatureHub({
     cmds.push({ id: 'export-svg', label: 'Export as SVG', category: 'Export', action: () => runEngine('exportToSVG') })
     cmds.push({ id: 'export-webp', label: 'Export as WebP', category: 'Export', action: () => runEngine('exportToWebP') })
     cmds.push({ id: 'export-json', label: 'Export as JSON', category: 'Export', action: () => runEngine('exportToJSON') })
-    cmds.push({ id: 'toggle-dark', label: 'Toggle Dark Mode', category: 'View', action: () => store.toggleDarkMode() })
-    cmds.push({ id: 'toggle-minimap', label: 'Toggle Minimap', category: 'View', action: () => store.toggleMinimap() })
-    cmds.push({ id: 'toggle-statusbar', label: 'Toggle Status Bar', category: 'View', action: () => store.toggleStatusBar() })
-    cmds.push({ id: 'toggle-rulers', label: 'Toggle Rulers', category: 'View', action: () => store.toggleRulers() })
-    cmds.push({ id: 'toggle-grid', label: 'Toggle Grid', category: 'View', action: () => store.toggleGrid() })
-    cmds.push({ id: 'toggle-objinfo', label: 'Toggle Object Info', category: 'View', action: () => store.toggleObjectInfo() })
-    cmds.push({ id: 'toggle-guides', label: 'Toggle Distance Guides', category: 'View', action: () => store.toggleDistanceGuides() })
-    cmds.push({ id: 'toggle-snap-obj', label: 'Toggle Snap to Objects', category: 'View', action: () => store.toggleSnapToObjects() })
-    cmds.push({ id: 'toggle-high-contrast', label: 'Toggle High Contrast', category: 'View', action: () => store.toggleHighContrastMode() })
-    cmds.push({ id: 'toggle-alignment-guides', label: 'Toggle Alignment Guides', category: 'View', action: () => store.toggleAlignmentGuides() })
-    cmds.push({ id: 'toggle-pixel-grid', label: 'Toggle Pixel Grid', category: 'View', action: () => store.togglePixelGrid() })
+    cmds.push({ id: 'toggle-dark', label: 'Toggle Dark Mode', category: 'View', action: () => useDesignStore.getState().toggleDarkMode() })
+    cmds.push({ id: 'toggle-minimap', label: 'Toggle Minimap', category: 'View', action: () => useDesignStore.getState().toggleMinimap() })
+    cmds.push({ id: 'toggle-statusbar', label: 'Toggle Status Bar', category: 'View', action: () => useDesignStore.getState().toggleStatusBar() })
+    cmds.push({ id: 'toggle-rulers', label: 'Toggle Rulers', category: 'View', action: () => useDesignStore.getState().toggleRulers() })
+    cmds.push({ id: 'toggle-grid', label: 'Toggle Grid', category: 'View', action: () => useDesignStore.getState().toggleGrid() })
+    cmds.push({ id: 'toggle-objinfo', label: 'Toggle Object Info', category: 'View', action: () => useDesignStore.getState().toggleObjectInfo() })
+    cmds.push({ id: 'toggle-guides', label: 'Toggle Distance Guides', category: 'View', action: () => useDesignStore.getState().toggleDistanceGuides() })
+    cmds.push({ id: 'toggle-snap-obj', label: 'Toggle Snap to Objects', category: 'View', action: () => useDesignStore.getState().toggleSnapToObjects() })
+    cmds.push({ id: 'toggle-high-contrast', label: 'Toggle High Contrast', category: 'View', action: () => useDesignStore.getState().toggleHighContrastMode() })
+    cmds.push({ id: 'toggle-alignment-guides', label: 'Toggle Alignment Guides', category: 'View', action: () => useDesignStore.getState().toggleAlignmentGuides() })
+    cmds.push({ id: 'toggle-pixel-grid', label: 'Toggle Pixel Grid', category: 'View', action: () => useDesignStore.getState().togglePixelGrid() })
     cmds.push({ id: 'open-cmd-palette', label: 'Command Palette', shortcut: 'Ctrl+K', category: 'Panel', action: () => setShowCommandPalette(true) })
     cmds.push({ id: 'open-find', label: 'Find & Replace', shortcut: 'Ctrl+F', category: 'Panel', action: () => setShowFindReplace(true) })
     cmds.push({ id: 'open-fill-color', label: 'Fill Color Picker', category: 'Panel', action: () => { setColorPanelMode('fill'); setShowColorPanel(true) } })
@@ -337,7 +347,7 @@ export default function FeatureHub({
     cmds.push({ id: 'zoom-fit-h', label: 'Zoom to Fit Height', category: 'Zoom', action: () => { engineRef.current?.zoomToFitHeight() } })
     cmds.push({ id: 'zoom-reset', label: 'Reset Zoom (100%)', shortcut: 'Ctrl+0', category: 'Zoom', action: () => { engineRef.current?.resetZoom() } })
     return cmds
-  }, [runEngine, engineRef, store])
+  }, [runEngine, engineRef])
 
   const hasSelection = selectedIds.length > 0
   const hasMultiSelect = selectedIds.length > 1
@@ -508,16 +518,16 @@ export default function FeatureHub({
       {isTextSelected && <RecentFontsList fonts={FONT_LIST.slice(0, 5)} onSelect={(f: string) => runEngine('setFontFamily', f)} />}
 
       <QuickActionButton label="Quick Actions" icon="+" onClick={() => setShowCommandPalette(true)} />
-      <AutoSaveIndicator enabled={store.autoSaveEnabled} lastSaved={Date.now()} hasUnsaved={false} interval={30} />
+      <AutoSaveIndicator enabled={autoSaveEnabled} lastSaved={Date.now()} hasUnsaved={false} interval={30} />
       <CanvasInfoBar visible={true} width={typeof window !== 'undefined' ? window.innerWidth : 1920} height={typeof window !== 'undefined' ? window.innerHeight : 1080} zoom={zoom} objectCount={engineRef.current?.getObjectCount() || 0} selectedCount={selectedIds.length} />
-      <LayoutGridOverlay visible={store.showLayoutGrid} columns={12} gutter={20} margin={40} canvasWidth={typeof window !== 'undefined' ? window.innerWidth : 1920} />
-      <BaselineGridOverlay visible={store.showBaselineGrid} size={8} />
+      <LayoutGridOverlay visible={showLayoutGrid} columns={12} gutter={20} margin={40} canvasWidth={typeof window !== 'undefined' ? window.innerWidth : 1920} />
+      <BaselineGridOverlay visible={showBaselineGrid} size={8} />
       <BreakpointBar breakpoints={[{name:'Mobile',width:375},{name:'Tablet',width:768},{name:'Desktop',width:1440}]} active="Desktop" onSelect={() => {}} />
       <LayerFilterBar filter={layerFilter} onFilterChange={setLayerFilter} sort={layerSort} onSortChange={setLayerSort} />
       <PageThumbnails pages={pages.map(p => ({ id: p.id, name: p.name }))} currentPageId={currentPageId} onSelectPage={() => {}} showThumbnails={true} />
       <FloatingActionButton icon="+" onClick={() => setShowCommandPalette(true)} label="Quick Actions" />
 
-      <ColorPickerPanel open={showColorPanel} onClose={() => setShowColorPanel(false)} color={colorPanelMode === 'fill' ? (objectProps?.fill || '#000000') : (objectProps?.stroke || '#000000')} onChange={(c: string) => colorPanelMode === 'fill' ? runEngine('setObjectFill', c) : runEngine('setObjectStroke', c)} mode={colorPanelMode} recentColors={store.recentColors || []} favoriteColors={store.favoriteColors || []} onAddFavorite={() => {}} />
+      <ColorPickerPanel open={showColorPanel} onClose={() => setShowColorPanel(false)} color={colorPanelMode === 'fill' ? (objectProps?.fill || '#000000') : (objectProps?.stroke || '#000000')} onChange={(c: string) => colorPanelMode === 'fill' ? runEngine('setObjectFill', c) : runEngine('setObjectStroke', c)} mode={colorPanelMode} recentColors={recentColors || []} favoriteColors={favoriteColors || []} onAddFavorite={() => {}} />
       <GradientEditor open={showGradientEditor} onClose={() => setShowGradientEditor(false)} stops={[{offset:0,color:'#000000'},{offset:1,color:'#ffffff'}]} angle={0} onStopsChange={() => {}} onAngleChange={() => {}} onApply={() => {}} />
       <EffectsPanel open={showEffectsPanel} effects={[]} onToggle={() => {}} onValueChange={() => {}} onAdd={() => {}} />
       <FindReplaceDialog open={showFindReplace} onClose={() => setShowFindReplace(false)} onFind={() => {}} onReplace={() => {}} onReplaceAll={() => {}} />
@@ -542,14 +552,14 @@ export default function FeatureHub({
       {showThemeSelector && (
         <div className="fixed right-4 top-12 z-[200] bg-white rounded-lg shadow-xl border">
           <div className="flex justify-between items-center px-3 py-2 border-b"><span className="text-xs font-semibold">Theme</span><button onClick={() => setShowThemeSelector(false)} className="text-gray-400 hover:text-gray-600">&times;</button></div>
-          <ThemeSelector theme={store.theme} onThemeChange={(t: string) => store.setTheme(t as any)} accentColor={store.accentColor || '#007AFF'} onAccentChange={(c: string) => store.setAccentColor(c)} />
+          <ThemeSelector theme={theme} onThemeChange={(t: string) => useDesignStore.getState().setTheme(t as any)} accentColor={accentColor || '#007AFF'} onAccentChange={(c: string) => useDesignStore.getState().setAccentColor(c)} />
         </div>
       )}
 
       {showDensitySelector && (
         <div className="fixed right-4 top-12 z-[200] bg-white rounded-lg shadow-xl border">
           <div className="flex justify-between items-center px-3 py-2 border-b"><span className="text-xs font-semibold">UI Density</span><button onClick={() => setShowDensitySelector(false)} className="text-gray-400 hover:text-gray-600">&times;</button></div>
-          <UIDensitySelector density={store.uiDensity} onChange={(d: string) => store.setUiDensity(d as any)} />
+          <UIDensitySelector density={uiDensity} onChange={(d: string) => useDesignStore.getState().setUiDensity(d as any)} />
         </div>
       )}
 
@@ -584,7 +594,7 @@ export default function FeatureHub({
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/30" onClick={() => setShowSnapSettings(false)}>
           <div className="bg-white rounded-xl shadow-2xl w-[350px] p-4" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-3"><span className="text-sm font-semibold">Snap Settings</span><button onClick={() => setShowSnapSettings(false)} className="text-gray-400 hover:text-gray-600">&times;</button></div>
-            <SnapSettingsPanel tolerance={10} onToleranceChange={() => {}} alignGuides={store.showAlignmentGuides} onToggleAlignGuides={() => store.toggleAlignmentGuides()} smartSpacing={true} onToggleSmartSpacing={() => {}} guideColor="#FF00FF" onGuideColorChange={() => {}} />
+            <SnapSettingsPanel tolerance={10} onToleranceChange={() => {}} alignGuides={showAlignmentGuides} onToggleAlignGuides={() => useDesignStore.getState().toggleAlignmentGuides()} smartSpacing={true} onToggleSmartSpacing={() => {}} guideColor="#FF00FF" onGuideColorChange={() => {}} />
           </div>
         </div>
       )}
@@ -593,7 +603,7 @@ export default function FeatureHub({
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/30" onClick={() => setShowAccessibility(false)}>
           <div className="bg-white rounded-xl shadow-2xl w-[350px] p-4" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-3"><span className="text-sm font-semibold">Accessibility</span><button onClick={() => setShowAccessibility(false)} className="text-gray-400 hover:text-gray-600">&times;</button></div>
-            <AccessibilityPanel highContrast={store.highContrastMode} onToggleHighContrast={() => store.toggleHighContrastMode()} reducedMotion={false} onToggleReducedMotion={() => {}} screenReaderText="" />
+            <AccessibilityPanel highContrast={highContrastMode} onToggleHighContrast={() => useDesignStore.getState().toggleHighContrastMode()} reducedMotion={false} onToggleReducedMotion={() => {}} screenReaderText="" />
           </div>
         </div>
       )}
