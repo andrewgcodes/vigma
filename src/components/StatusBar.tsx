@@ -5,7 +5,8 @@ import { useDesignStore } from '@/store/useDesignStore'
 
 // Feature 72: Status Bar with cursor coordinates, object count, zoom, canvas info
 export default function StatusBar({ objectCount, zoom }: { objectCount: number; zoom: number }) {
-  const { cursorPosition, showStatusBar } = useDesignStore()
+  const cursorPosition = useDesignStore(s => s.cursorPosition)
+  const showStatusBar = useDesignStore(s => s.showStatusBar)
 
   if (!showStatusBar) return null
 

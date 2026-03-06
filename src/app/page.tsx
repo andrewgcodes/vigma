@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useRef, useEffect, useState, useCallback } from 'react'
+import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react'
 import { CanvasEngine } from '@/lib/canvasEngine'
 import { useDesignStore } from '@/store/useDesignStore'
 import Toolbar from '@/components/Toolbar'
@@ -1670,6 +1670,10 @@ export default function DesignPage() {
     return engine.getCanvasStatistics()
   }, [])
 
+  // Memoize minimap objects to avoid recomputing on every render
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const miniMapObjects = useMemo(() => getMiniMapObjects(), [layers])
+
   // Minimap navigate handler
   const handleMiniMapNavigate = useCallback((x: number, y: number) => {
     const engine = engineRef.current
@@ -2507,7 +2511,7 @@ export default function DesignPage() {
         viewportX={viewport.panX}
         viewportY={viewport.panY}
         zoom={zoom}
-        objects={getMiniMapObjects()}
+        objects={miniMapObjects}
         onNavigate={handleMiniMapNavigate}
         visible={showMinimap}
       />

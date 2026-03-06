@@ -169,7 +169,7 @@ export default function FeatureHub({
         setShowCommandPalette(prev => !prev)
       }
       if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
-        if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+        if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return
         e.preventDefault()
         setShowFindReplace(prev => !prev)
       }
