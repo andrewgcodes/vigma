@@ -1274,6 +1274,8 @@ export default function DesignPage() {
 
         // Feature 91: Shift+R to rotate 90 degrees
         if (shift && !ctrl && e.key.toLowerCase() === 'r') {
+          const activeObj = engine.canvas.getActiveObject()
+          if (activeObj && (activeObj as any).isEditing) return
           engine.rotateBy(90)
           refreshObjectProps()
           syncActiveToCollab()
@@ -1283,6 +1285,8 @@ export default function DesignPage() {
 
         // Feature 92: Shift+H to flip horizontal
         if (shift && !ctrl && e.key.toLowerCase() === 'h') {
+          const activeObj = engine.canvas.getActiveObject()
+          if (activeObj && (activeObj as any).isEditing) return
           engine.flipHorizontal()
           refreshObjectProps()
           syncActiveToCollab()
@@ -1292,6 +1296,8 @@ export default function DesignPage() {
 
         // Feature 93: Shift+V to flip vertical
         if (shift && !ctrl && e.key.toLowerCase() === 'v') {
+          const activeObj = engine.canvas.getActiveObject()
+          if (activeObj && (activeObj as any).isEditing) return
           engine.flipVertical()
           refreshObjectProps()
           syncActiveToCollab()
