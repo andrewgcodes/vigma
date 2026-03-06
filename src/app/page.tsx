@@ -1674,6 +1674,11 @@ export default function DesignPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const miniMapObjects = useMemo(() => getMiniMapObjects(), [layers])
 
+  // Memoize canvas stats and object count to avoid recomputing on every render
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const canvasStats = useMemo(() => getCanvasStats(), [layers])
+  const objectCount = useMemo(() => engineRef.current?.getObjectCount() || 0, [layers])
+
   // Minimap navigate handler
   const handleMiniMapNavigate = useCallback((x: number, y: number) => {
     const engine = engineRef.current
@@ -2497,7 +2502,7 @@ export default function DesignPage() {
 
       {/* Feature 72: Status Bar */}
       <StatusBar
-        objectCount={engineRef.current?.getObjectCount() || 0}
+        objectCount={objectCount}
         zoom={zoom}
       />
 
@@ -2583,7 +2588,7 @@ export default function DesignPage() {
       <WorkspaceInfo
         open={showWorkspaceInfo}
         onClose={toggleWorkspaceInfo}
-        stats={getCanvasStats()}
+        stats={canvasStats}
         pageCount={pages.length}
         currentPage={pages.find(p => p.id === currentPageId)?.name || 'Page 1'}
         zoom={zoom}
