@@ -1262,45 +1262,46 @@ export default function DesignPage() {
       const ctrl = e.ctrlKey || e.metaKey
       const shift = e.shiftKey
 
-      // Check if keyboard shortcuts are enabled
-      if (!useDesignStore.getState().keyboardShortcutsEnabled) return
+      // Feature shortcuts gated by keyboardShortcutsEnabled
+      // (Critical shortcuts like Ctrl+Z, Ctrl+S, Delete, Escape, arrow keys remain active)
+      if (useDesignStore.getState().keyboardShortcutsEnabled) {
+        // Feature 90: ? key opens keyboard shortcuts dialog
+        if (e.key === '?' || (shift && e.key === '/')) {
+          setShowKeyboardShortcuts(true)
+          e.preventDefault()
+          return
+        }
 
-      // Feature 90: ? key opens keyboard shortcuts dialog
-      if (e.key === '?' || (shift && e.key === '/')) {
-        setShowKeyboardShortcuts(true)
-        e.preventDefault()
-        return
+        // Feature 91: Shift+R to rotate 90 degrees
+        if (shift && !ctrl && e.key.toLowerCase() === 'r') {
+          engine.rotateBy(90)
+          refreshObjectProps()
+          syncActiveToCollab()
+          e.preventDefault()
+          return
+        }
+
+        // Feature 92: Shift+H to flip horizontal
+        if (shift && !ctrl && e.key.toLowerCase() === 'h') {
+          engine.flipHorizontal()
+          refreshObjectProps()
+          syncActiveToCollab()
+          e.preventDefault()
+          return
+        }
+
+        // Feature 93: Shift+V to flip vertical
+        if (shift && !ctrl && e.key.toLowerCase() === 'v') {
+          engine.flipVertical()
+          refreshObjectProps()
+          syncActiveToCollab()
+          e.preventDefault()
+          return
+        }
       }
 
-      // Feature 91: Shift+R to rotate 90 degrees
-      if (shift && !ctrl && e.key.toLowerCase() === 'r') {
-        engine.rotateBy(90)
-        refreshObjectProps()
-        syncActiveToCollab()
-        e.preventDefault()
-        return
-      }
-
-      // Feature 92: Shift+H to flip horizontal
-      if (shift && !ctrl && e.key.toLowerCase() === 'h') {
-        engine.flipHorizontal()
-        refreshObjectProps()
-        syncActiveToCollab()
-        e.preventDefault()
-        return
-      }
-
-      // Feature 93: Shift+V to flip vertical
-      if (shift && !ctrl && e.key.toLowerCase() === 'v') {
-        engine.flipVertical()
-        refreshObjectProps()
-        syncActiveToCollab()
-        e.preventDefault()
-        return
-      }
-
-      // Tool shortcuts
-      if (!ctrl && !shift) {
+      // Tool shortcuts (also gated by keyboardShortcutsEnabled)
+      if (!ctrl && !shift && useDesignStore.getState().keyboardShortcutsEnabled) {
         switch (e.key.toLowerCase()) {
           case 'v': setActiveTool('select'); e.preventDefault(); return
           case 'h': setActiveTool('hand'); e.preventDefault(); return
@@ -1404,8 +1405,10 @@ export default function DesignPage() {
       }
     }
 
-    // Feature 94: Double-click to enter text editing
-    const handleDblClick = () => {
+    // Feature 94: Double-click to enter text editing (canvas-only, not window)
+    const handleDblClick = (e: MouseEvent) => {
+      // Only handle double-clicks on the canvas element, not UI elements
+      if (!(e.target instanceof HTMLCanvasElement)) return
       const engine = engineRef.current
       if (!engine) return
       const active = engine.canvas.getActiveObject()
@@ -1414,12 +1417,19 @@ export default function DesignPage() {
         engine.canvas.renderAll()
       }
     }
-    // Feature 95: Canvas mouse move for cursor coordinates
+    // Feature 95: Canvas mouse move for cursor coordinates (throttled, canvas container only)
+    let rafId: number | null = null
     const handleCanvasMouseMove = (e: MouseEvent) => {
-      const engine = engineRef.current
-      if (!engine) return
-      const point = engine.getCanvasPointFromEvent(e)
-      setCursorPosition(point)
+      // Only track cursor when over canvas element
+      if (!(e.target instanceof HTMLCanvasElement)) return
+      if (rafId !== null) return
+      rafId = requestAnimationFrame(() => {
+        rafId = null
+        const engine = engineRef.current
+        if (!engine) return
+        const point = engine.getCanvasPointFromEvent(e)
+        setCursorPosition(point)
+      })
     }
 
     window.addEventListener('keydown', handleKeyDown)
@@ -1431,6 +1441,7 @@ export default function DesignPage() {
       window.removeEventListener('keyup', handleKeyUp)
       window.removeEventListener('dblclick', handleDblClick)
       window.removeEventListener('mousemove', handleCanvasMouseMove)
+      if (rafId !== null) cancelAnimationFrame(rafId)
     }
   }, [])
 
