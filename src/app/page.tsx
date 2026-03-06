@@ -71,7 +71,6 @@ export default function DesignPage() {
     showSelectionDimensions,
     darkMode,
     canvasBackground, setCanvasBackground,
-    setCursorPosition,
     layerSearchQuery, setLayerSearchQuery,
     showToast,
     autoSaveEnabled,
@@ -1437,7 +1436,7 @@ export default function DesignPage() {
         const engine = engineRef.current
         if (!engine) return
         const point = engine.getCanvasPointFromEvent(e)
-        setCursorPosition(point)
+        useDesignStore.getState().setCursorPosition(point)
       })
     }
 
