@@ -170,7 +170,9 @@ export default function DesignPage() {
         const active = engine.canvas.getActiveObject()
         if (active) {
           const bound = active.getBoundingRect()
-          setObjectInfoPos({ x: bound.left, y: bound.top })
+          const canvasEl = canvasRef.current
+          const canvasRect = canvasEl ? canvasEl.getBoundingClientRect() : { left: 0, top: 0 }
+          setObjectInfoPos({ x: bound.left + canvasRect.left, y: bound.top + canvasRect.top })
         }
       },
       onObjectModified: () => {
@@ -180,7 +182,9 @@ export default function DesignPage() {
         const active = engine.canvas.getActiveObject()
         if (active) {
           const bound = active.getBoundingRect()
-          setObjectInfoPos({ x: bound.left, y: bound.top })
+          const canvasEl = canvasRef.current
+          const canvasRect = canvasEl ? canvasEl.getBoundingClientRect() : { left: 0, top: 0 }
+          setObjectInfoPos({ x: bound.left + canvasRect.left, y: bound.top + canvasRect.top })
         }
       },
       onHistoryChange: (undo, redo) => {

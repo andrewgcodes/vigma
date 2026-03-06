@@ -165,6 +165,7 @@ export default function FeatureHub({
     const handler = (e: KeyboardEvent) => {
       if (!useDesignStore.getState().keyboardShortcutsEnabled) return
       if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return
         e.preventDefault()
         setShowCommandPalette(prev => !prev)
       }
