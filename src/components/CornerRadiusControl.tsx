@@ -1,0 +1,6 @@
+'use client'
+interface Props { radius: number; onChange: (r: number) => void; individual: boolean; onToggleIndividual: () => void; topLeft?: number; topRight?: number; bottomRight?: number; bottomLeft?: number; onIndividualChange?: (corner: string, val: number) => void }
+// Feature 461: CornerRadiusControl
+export default function CornerRadiusControl({ radius, onChange, individual, onToggleIndividual, topLeft, topRight, bottomRight, bottomLeft, onIndividualChange }: Props) {
+  return (<div className="p-3 border-b"><div className="flex items-center justify-between mb-2"><span className="text-xs font-semibold text-gray-500 uppercase">Corner Radius</span><button onClick={onToggleIndividual} className="text-xs text-blue-500">{individual?'Uniform':'Individual'}</button></div>{individual?<div className="grid grid-cols-2 gap-2">{[{l:'TL',v:topLeft,c:'topLeft'},{l:'TR',v:topRight,c:'topRight'},{l:'BL',v:bottomLeft,c:'bottomLeft'},{l:'BR',v:bottomRight,c:'bottomRight'}].map(({l,v,c})=><div key={c}><label className="text-[10px] text-gray-400">{l}</label><input type="number" value={v||0} onChange={e => onIndividualChange?.(c,Number(e.target.value))} className="w-full px-1 py-0.5 text-xs border rounded" /></div>)}</div>:<input type="range" min={0} max={100} value={radius} onChange={e => onChange(Number(e.target.value))} className="w-full" />}</div>)
+}

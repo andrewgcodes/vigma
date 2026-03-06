@@ -1,0 +1,6 @@
+'use client'
+interface Props { brightness: number; contrast: number; saturation: number; onBrightnessChange: (v: number) => void; onContrastChange: (v: number) => void; onSaturationChange: (v: number) => void; onReset: () => void }
+// Feature 466: ImageFiltersPanel
+export default function ImageFiltersPanel({ brightness, contrast, saturation, onBrightnessChange, onContrastChange, onSaturationChange, onReset }: Props) {
+  return (<div className="p-3 border-b"><div className="flex justify-between items-center mb-2"><span className="text-xs font-semibold text-gray-500 uppercase">Filters</span><button onClick={onReset} className="text-xs text-blue-500">Reset</button></div>{[{l:'Brightness',v:brightness,fn:onBrightnessChange},{l:'Contrast',v:contrast,fn:onContrastChange},{l:'Saturation',v:saturation,fn:onSaturationChange}].map(f=><div key={f.l} className="flex items-center gap-2 mb-2"><span className="text-xs w-16">{f.l}</span><input type="range" min={-100} max={100} value={f.v} onChange={e => f.fn(Number(e.target.value))} className="flex-1" /><span className="text-xs w-8 text-right">{f.v}</span></div>)}</div>)
+}

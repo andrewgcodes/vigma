@@ -1,0 +1,7 @@
+'use client'
+interface Props { open: boolean; onClose: () => void; onImportFile: () => void; onImportUrl: (url: string) => void; onPaste: () => void }
+// Feature 588: ImportDialog
+export default function ImportDialog({ open, onClose, onImportFile, onImportUrl, onPaste }: Props) {
+  if (!open) return null
+  return (<div className="fixed inset-0 z-[9999] flex items-center justify-center"><div className="absolute inset-0 bg-black/30" onClick={onClose} /><div className="relative w-[400px] bg-white rounded-xl shadow-2xl p-4"><div className="flex justify-between items-center mb-3"><span className="text-sm font-semibold">Import</span><button onClick={onClose} className="text-gray-400">&times;</button></div><div className="space-y-2"><button onClick={onImportFile} className="w-full p-3 border-2 border-dashed rounded-lg text-center hover:bg-gray-50"><div className="text-xs font-medium">Upload File</div><div className="text-[10px] text-gray-400">PNG, SVG, JPG, JSON</div></button><div className="flex gap-1"><input placeholder="Paste URL..." id="import-url" className="flex-1 text-xs border rounded px-2 py-1.5" /><button onClick={() => {const i=document.getElementById('import-url') as HTMLInputElement;if(i)onImportUrl(i.value)}} className="px-3 py-1.5 text-xs bg-blue-500 text-white rounded">Import</button></div><button onClick={onPaste} className="w-full px-3 py-1.5 text-xs bg-gray-100 rounded">Paste from Clipboard</button></div></div></div>)
+}

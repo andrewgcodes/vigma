@@ -1,0 +1,6 @@
+'use client'
+interface Props { templateCols: string; templateRows: string; gap: number; onColsChange: (c: string) => void; onRowsChange: (r: string) => void; onGapChange: (g: number) => void }
+// Feature 563: GridControls
+export default function GridControls({ templateCols, templateRows, gap, onColsChange, onRowsChange, onGapChange }: Props) {
+  return (<div className="p-3 border-b"><div className="text-xs font-semibold text-gray-500 uppercase mb-2">CSS Grid</div><div className="space-y-2 text-xs"><div><label className="text-gray-400">Columns</label><input value={templateCols} onChange={e => onColsChange(e.target.value)} className="w-full px-1 py-0.5 border rounded font-mono" placeholder="1fr 1fr 1fr" /></div><div><label className="text-gray-400">Rows</label><input value={templateRows} onChange={e => onRowsChange(e.target.value)} className="w-full px-1 py-0.5 border rounded font-mono" placeholder="auto" /></div><div><label className="text-gray-400">Gap</label><input type="number" value={gap} onChange={e => onGapChange(Number(e.target.value))} className="w-full px-1 py-0.5 border rounded" /></div></div></div>)
+}

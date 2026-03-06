@@ -1,0 +1,6 @@
+'use client'
+interface Props { files: Array<{id:string;name:string;lastOpened:number;thumbnail?:string}>; onOpen: (id: string) => void; onDelete: (id: string) => void }
+// Feature 592: RecentFilesPanel
+export default function RecentFilesPanel({ files, onOpen, onDelete }: Props) {
+  return (<div className="p-3"><div className="text-xs font-semibold text-gray-500 uppercase mb-2">Recent Files</div>{files.length===0?<div className="text-xs text-gray-400 text-center py-4">No recent files</div>:files.map(f => <div key={f.id} className="flex items-center gap-2 p-2 rounded hover:bg-gray-50 cursor-pointer" onClick={() => onOpen(f.id)}><div className="w-10 h-8 bg-gray-100 rounded border flex-shrink-0" /><div className="flex-1 min-w-0"><div className="text-xs font-medium truncate">{f.name}</div><div className="text-[10px] text-gray-400">{new Date(f.lastOpened).toLocaleDateString()}</div></div><button onClick={e => {e.stopPropagation();onDelete(f.id)}} className="text-xs text-gray-300 hover:text-red-500">&times;</button></div>)}</div>)
+}

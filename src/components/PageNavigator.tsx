@@ -1,0 +1,6 @@
+'use client'
+interface Props { pages: Array<{id:string;name:string}>; currentPageId: string; onSelectPage: (id: string) => void; onAddPage: () => void; onDeletePage: (id: string) => void; onRenamePage: (id: string) => void }
+// Feature 591: PageNavigator
+export default function PageNavigator({ pages, currentPageId, onSelectPage, onAddPage, onDeletePage, onRenamePage }: Props) {
+  return (<div className="flex items-center gap-1 px-2 py-1 border-b overflow-x-auto">{pages.map(p => <div key={p.id} className={'flex items-center gap-1 px-2 py-1 rounded text-xs ' + (currentPageId===p.id?'bg-blue-50 text-blue-600':'')}><button onClick={() => onSelectPage(p.id)}>{p.name}</button><button onClick={() => onRenamePage(p.id)} className="text-gray-300 hover:text-gray-500 text-[10px]">e</button>{pages.length>1 && <button onClick={() => onDeletePage(p.id)} className="text-gray-300 hover:text-red-500 text-[10px]">&times;</button>}</div>)}<button onClick={onAddPage} className="px-2 py-1 text-xs text-gray-400 hover:text-gray-600">+</button></div>)
+}

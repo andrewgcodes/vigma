@@ -1,0 +1,6 @@
+'use client'
+interface Props { direction: string; wrap: string; justify: string; alignItems: string; onDirectionChange: (d: string) => void; onWrapChange: (w: string) => void; onJustifyChange: (j: string) => void; onAlignChange: (a: string) => void }
+// Feature 562: FlexboxControls
+export default function FlexboxControls({ direction, wrap, justify, alignItems, onDirectionChange, onWrapChange, onJustifyChange, onAlignChange }: Props) {
+  return (<div className="p-3 border-b"><div className="text-xs font-semibold text-gray-500 uppercase mb-2">Flexbox</div><div className="space-y-2 text-xs">{[{l:'Direction',v:direction,fn:onDirectionChange,opts:['row','column','row-reverse','column-reverse']},{l:'Wrap',v:wrap,fn:onWrapChange,opts:['nowrap','wrap','wrap-reverse']},{l:'Justify',v:justify,fn:onJustifyChange,opts:['start','center','end','between','around']},{l:'Align',v:alignItems,fn:onAlignChange,opts:['start','center','end','stretch','baseline']}].map(({l,v,fn,opts}) => <div key={l}><label className="text-gray-400">{l}</label><div className="flex gap-1 mt-0.5">{opts.map(o => <button key={o} onClick={() => fn(o)} className={'px-1.5 py-0.5 rounded border text-[10px] capitalize ' + (v===o?'bg-blue-50 border-blue-300':'')}>{o}</button>)}</div></div>)}</div></div>)
+}

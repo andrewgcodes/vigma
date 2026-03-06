@@ -1,0 +1,6 @@
+'use client'
+interface Props { direction: string; gap: number; padding: number; onDirectionChange: (d: string) => void; onGapChange: (g: number) => void; onPaddingChange: (p: number) => void }
+// Feature 488: AutoLayoutSettings
+export default function AutoLayoutSettings({ direction, gap, padding, onDirectionChange, onGapChange, onPaddingChange }: Props) {
+  return (<div className="p-3 border-b"><div className="text-xs font-semibold text-gray-500 uppercase mb-2">Auto Layout</div><div className="flex gap-1 mb-2">{['horizontal','vertical','wrap'].map(d => <button key={d} onClick={() => onDirectionChange(d)} className={'flex-1 px-2 py-0.5 text-xs rounded border capitalize ' + (direction===d?'bg-blue-50 border-blue-300':'')}>{d[0].toUpperCase()}</button>)}</div><div className="flex items-center gap-2 mb-2"><span className="text-xs w-12">Gap</span><input type="number" value={gap} onChange={e => onGapChange(Number(e.target.value))} className="flex-1 px-1 py-0.5 text-xs border rounded" /></div><div className="flex items-center gap-2"><span className="text-xs w-12">Padding</span><input type="number" value={padding} onChange={e => onPaddingChange(Number(e.target.value))} className="flex-1 px-1 py-0.5 text-xs border rounded" /></div></div>)
+}

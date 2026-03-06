@@ -1,0 +1,6 @@
+'use client'
+interface Props { scrollType: string; onScrollTypeChange: (t: string) => void; overflow: string; onOverflowChange: (o: string) => void }
+// Feature 493: ScrollBehaviorPanel
+export default function ScrollBehaviorPanel({ scrollType, onScrollTypeChange, overflow, onOverflowChange }: Props) {
+  return (<div className="p-3 border-b"><div className="text-xs font-semibold text-gray-500 uppercase mb-2">Scroll</div><div className="mb-2"><div className="text-xs text-gray-400 mb-1">Scroll Type</div><div className="flex gap-1">{['none','vertical','horizontal','both'].map(t => <button key={t} onClick={() => onScrollTypeChange(t)} className={'px-2 py-0.5 text-xs rounded border capitalize ' + (scrollType===t?'bg-blue-50 border-blue-300':'')}>{t}</button>)}</div></div><div><div className="text-xs text-gray-400 mb-1">Overflow</div><div className="flex gap-1">{['visible','hidden','scroll','auto'].map(o => <button key={o} onClick={() => onOverflowChange(o)} className={'px-2 py-0.5 text-xs rounded border capitalize ' + (overflow===o?'bg-blue-50 border-blue-300':'')}>{o}</button>)}</div></div></div>)
+}

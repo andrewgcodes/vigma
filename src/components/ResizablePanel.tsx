@@ -1,0 +1,6 @@
+'use client'
+interface Props { width: number; minWidth: number; maxWidth: number; onWidthChange: (w: number) => void; children: React.ReactNode; side: string }
+// Feature 546: ResizablePanel
+export default function ResizablePanel({ width, minWidth, maxWidth, onWidthChange, children, side }: Props) {
+  return (<div className={'flex-shrink-0 relative border-r ' + (side==='right'?'border-l':'')} style={{width}}><div className="h-full overflow-auto">{children}</div><div className={'absolute top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-300 ' + (side==='right'?'left-0':'right-0')} onMouseDown={e => {const startX=e.clientX;const startW=width;const move=(ev: MouseEvent)=>{const delta=side==='right'?startX-ev.clientX:ev.clientX-startX;onWidthChange(Math.max(minWidth,Math.min(maxWidth,startW+delta)))};const up=()=>{window.removeEventListener('mousemove',move);window.removeEventListener('mouseup',up)};window.addEventListener('mousemove',move);window.addEventListener('mouseup',up)}} /></div>)
+}

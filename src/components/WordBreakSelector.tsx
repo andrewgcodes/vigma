@@ -1,0 +1,6 @@
+'use client'
+interface Props { wordBreak: string; onChange: (w: string) => void; whiteSpace: string; onWhiteSpaceChange: (w: string) => void }
+// Feature 579: WordBreakSelector
+export default function WordBreakSelector({ wordBreak, onChange, whiteSpace, onWhiteSpaceChange }: Props) {
+  return (<div className="p-3 border-b"><div className="text-xs font-semibold text-gray-500 uppercase mb-2">Text Wrapping</div><div className="mb-2"><label className="text-xs text-gray-400">Word Break</label><div className="flex gap-1">{['normal','break-all','keep-all','break-word'].map(w => <button key={w} onClick={() => onChange(w)} className={'px-1.5 py-0.5 text-[10px] rounded border ' + (wordBreak===w?'bg-blue-50 border-blue-300':'')}>{w}</button>)}</div></div><div><label className="text-xs text-gray-400">White Space</label><div className="flex gap-1">{['normal','nowrap','pre','pre-wrap','pre-line'].map(w => <button key={w} onClick={() => onWhiteSpaceChange(w)} className={'px-1.5 py-0.5 text-[10px] rounded border ' + (whiteSpace===w?'bg-blue-50 border-blue-300':'')}>{w}</button>)}</div></div></div>)
+}

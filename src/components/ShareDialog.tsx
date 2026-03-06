@@ -1,0 +1,7 @@
+'use client'
+interface Props { open: boolean; onClose: () => void; shareUrl: string; onCopy: () => void; permissions: string; onPermissionsChange: (p: string) => void }
+// Feature 585: ShareDialog
+export default function ShareDialog({ open, onClose, shareUrl, onCopy, permissions, onPermissionsChange }: Props) {
+  if (!open) return null
+  return (<div className="fixed inset-0 z-[9999] flex items-center justify-center"><div className="absolute inset-0 bg-black/30" onClick={onClose} /><div className="relative w-[400px] bg-white rounded-xl shadow-2xl p-4"><div className="text-sm font-semibold mb-3">Share</div><div className="flex gap-1 mb-3"><input readOnly value={shareUrl} className="flex-1 text-xs border rounded px-2 py-1.5 bg-gray-50" /><button onClick={onCopy} className="px-3 py-1.5 text-xs bg-blue-500 text-white rounded">Copy</button></div><div className="mb-3"><div className="text-xs text-gray-400 mb-1">Permissions</div><div className="flex gap-1">{['view','comment','edit'].map(p => <button key={p} onClick={() => onPermissionsChange(p)} className={'px-3 py-1 text-xs rounded border capitalize ' + (permissions===p?'bg-blue-50 border-blue-300':'')}>{p}</button>)}</div></div><button onClick={onClose} className="w-full px-3 py-1.5 text-xs bg-gray-100 rounded">Done</button></div></div>)
+}

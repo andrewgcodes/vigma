@@ -1,0 +1,6 @@
+'use client'
+interface Props { lockMove: boolean; lockScale: boolean; lockRotate: boolean; onToggleLockMove: () => void; onToggleLockScale: () => void; onToggleLockRotate: () => void }
+// Feature 450: ObjectConstraints
+export default function ObjectConstraints({ lockMove, lockScale, lockRotate, onToggleLockMove, onToggleLockScale, onToggleLockRotate }: Props) {
+  return (<div className="p-3 border-b"><div className="text-xs font-semibold text-gray-500 uppercase mb-2">Constraints</div><div className="space-y-1"><div className="flex items-center justify-between"><span className="text-xs">Lock Position</span><button onClick={onToggleLockMove} className={'px-2 py-0.5 text-xs rounded ' + (lockMove?'bg-red-100 text-red-600':'bg-gray-100')}>{lockMove?'Locked':'Free'}</button></div><div className="flex items-center justify-between"><span className="text-xs">Lock Scale</span><button onClick={onToggleLockScale} className={'px-2 py-0.5 text-xs rounded ' + (lockScale?'bg-red-100 text-red-600':'bg-gray-100')}>{lockScale?'Locked':'Free'}</button></div><div className="flex items-center justify-between"><span className="text-xs">Lock Rotation</span><button onClick={onToggleLockRotate} className={'px-2 py-0.5 text-xs rounded ' + (lockRotate?'bg-red-100 text-red-600':'bg-gray-100')}>{lockRotate?'Locked':'Free'}</button></div></div></div>)
+}
