@@ -1,0 +1,6 @@
+'use client'
+interface Props { decoration: string; onChange: (d: string) => void; textTransform: string; onTransformChange: (t: string) => void }
+// Feature 471: TextDecorationSelector
+export default function TextDecorationSelector({ decoration, onChange, textTransform, onTransformChange }: Props) {
+  return (<div className="p-3 border-b"><div className="text-xs font-semibold text-gray-500 uppercase mb-2">Text Style</div><div className="mb-2"><div className="text-xs text-gray-400 mb-1">Decoration</div><div className="flex gap-1">{['none','underline','overline','line-through'].map(d => <button key={d} onClick={() => onChange(d)} className={'px-2 py-0.5 text-xs rounded border capitalize ' + (decoration===d?'bg-blue-50 border-blue-300':'')}>{d}</button>)}</div></div><div><div className="text-xs text-gray-400 mb-1">Transform</div><div className="flex gap-1">{['none','uppercase','lowercase','capitalize'].map(t => <button key={t} onClick={() => onTransformChange(t)} className={'px-2 py-0.5 text-xs rounded border capitalize ' + (textTransform===t?'bg-blue-50 border-blue-300':'')}>{t}</button>)}</div></div></div>)
+}

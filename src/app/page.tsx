@@ -166,10 +166,22 @@ export default function DesignPage() {
       onSelectionChange: (ids) => {
         setSelectedIds(ids)
         refreshObjectProps()
+        // Bug fix: update object info overlay position on selection change
+        const active = engine.canvas.getActiveObject()
+        if (active) {
+          const bound = active.getBoundingRect()
+          setObjectInfoPos({ x: bound.left, y: bound.top })
+        }
       },
       onObjectModified: () => {
         refreshLayers()
         refreshObjectProps()
+        // Bug fix: update object info overlay position on object modification
+        const active = engine.canvas.getActiveObject()
+        if (active) {
+          const bound = active.getBoundingRect()
+          setObjectInfoPos({ x: bound.left, y: bound.top })
+        }
       },
       onHistoryChange: (undo, redo) => {
         setCanUndo(undo)
@@ -1529,6 +1541,8 @@ export default function DesignPage() {
   // updater — so that it always runs synchronously regardless of React batching.
   useEffect(() => {
     const interval = setInterval(() => {
+      // Bug fix: check autoSaveEnabled before persisting
+      if (!useDesignStore.getState().autoSaveEnabled) return
       persistAllPages()
       setSaveStatus(prev => {
         if (prev === 'unsaved') {

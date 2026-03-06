@@ -1,0 +1,6 @@
+'use client'
+interface Props { enabled: boolean; text: string; opacity: number; onToggle: () => void; onTextChange: (t: string) => void; onOpacityChange: (o: number) => void }
+// Feature 500: WatermarkControl
+export default function WatermarkControl({ enabled, text, opacity, onToggle, onTextChange, onOpacityChange }: Props) {
+  return (<div className="p-3 border-b"><div className="flex items-center justify-between mb-2"><span className="text-xs font-semibold text-gray-500 uppercase">Watermark</span><button onClick={onToggle} className={'px-2 py-0.5 text-xs rounded ' + (enabled?'bg-blue-100 text-blue-600':'bg-gray-100')}>{enabled?'On':'Off'}</button></div>{enabled && <><input value={text} onChange={e => onTextChange(e.target.value)} placeholder="Watermark text" className="w-full px-2 py-1 text-xs border rounded mb-2" /><div className="flex items-center gap-2"><span className="text-xs">Opacity</span><input type="range" min={5} max={100} value={opacity} onChange={e => onOpacityChange(Number(e.target.value))} className="flex-1" /><span className="text-xs w-6">{opacity}%</span></div></>}</div>)
+}

@@ -1,0 +1,6 @@
+'use client'
+interface Props { objects: Array<{id:string;name:string;type:string;visible:boolean;locked:boolean}>; selectedIds: string[]; onSelect: (id: string) => void; onToggleVisibility: (id: string) => void; onToggleLock: (id: string) => void }
+// Feature 445: ObjectListView
+export default function ObjectListView({ objects, selectedIds, onSelect, onToggleVisibility, onToggleLock }: Props) {
+  return (<div className="flex-1 overflow-y-auto">{objects.map(obj => (<div key={obj.id} onClick={() => onSelect(obj.id)} className={'flex items-center gap-2 px-3 py-1.5 cursor-pointer ' + (selectedIds.includes(obj.id)?'bg-blue-50':'')}><span className="text-[10px] text-gray-400 w-8">{obj.type}</span><span className="text-xs flex-1 truncate">{obj.name}</span><button onClick={e => {e.stopPropagation();onToggleVisibility(obj.id)}} className={'text-xs ' + (obj.visible?'text-gray-400':'text-gray-300')}>{obj.visible?'V':'H'}</button><button onClick={e => {e.stopPropagation();onToggleLock(obj.id)}} className={'text-xs ' + (obj.locked?'text-red-400':'text-gray-300')}>{obj.locked?'L':'U'}</button></div>))}</div>)
+}

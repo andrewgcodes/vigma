@@ -1,0 +1,6 @@
+'use client'
+interface Props { color: string; blur: number; offsetX: number; offsetY: number; onColorChange: (c: string) => void; onBlurChange: (b: number) => void; onOffsetXChange: (x: number) => void; onOffsetYChange: (y: number) => void }
+// Feature 462: ShadowEditor
+export default function ShadowEditor({ color, blur, offsetX, offsetY, onColorChange, onBlurChange, onOffsetXChange, onOffsetYChange }: Props) {
+  return (<div className="p-3 border-b"><div className="text-xs font-semibold text-gray-500 uppercase mb-2">Shadow</div><div className="grid grid-cols-2 gap-2 text-xs"><div><label className="text-gray-400">Color</label><input type="color" value={color} onChange={e => onColorChange(e.target.value)} className="w-full h-6" /></div><div><label className="text-gray-400">Blur</label><input type="number" value={blur} onChange={e => onBlurChange(Number(e.target.value))} className="w-full px-1 py-0.5 border rounded" /></div><div><label className="text-gray-400">X</label><input type="number" value={offsetX} onChange={e => onOffsetXChange(Number(e.target.value))} className="w-full px-1 py-0.5 border rounded" /></div><div><label className="text-gray-400">Y</label><input type="number" value={offsetY} onChange={e => onOffsetYChange(Number(e.target.value))} className="w-full px-1 py-0.5 border rounded" /></div></div></div>)
+}

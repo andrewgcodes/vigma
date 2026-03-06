@@ -1,0 +1,6 @@
+'use client'
+interface Props { format: string; onChange: (f: string) => void; pasteInPlace: boolean; onTogglePasteInPlace: () => void }
+// Feature 437: ClipboardFormatSelector
+export default function ClipboardFormatSelector({ format, onChange, pasteInPlace, onTogglePasteInPlace }: Props) {
+  return (<div className="p-3 border-b"><div className="text-xs font-semibold text-gray-500 uppercase mb-2">Clipboard</div><div className="flex items-center justify-between mb-2"><span className="text-xs">Format</span><select value={format} onChange={e => onChange(e.target.value)} className="text-xs border rounded px-2 py-1"><option value="internal">Internal</option><option value="svg">SVG</option><option value="png">PNG</option></select></div><div className="flex items-center justify-between"><span className="text-xs">Paste in Place</span><button onClick={onTogglePasteInPlace} className={'px-2 py-0.5 text-xs rounded ' + (pasteInPlace?'bg-blue-100 text-blue-600':'bg-gray-100')}>{pasteInPlace?'On':'Off'}</button></div></div>)
+}

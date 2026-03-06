@@ -1,0 +1,6 @@
+'use client'
+interface Props { trigger: string; onTriggerChange: (t: string) => void; action: string; onActionChange: (a: string) => void }
+// Feature 491: InteractionTriggerPanel
+export default function InteractionTriggerPanel({ trigger, onTriggerChange, action, onActionChange }: Props) {
+  return (<div className="p-3 border-b"><div className="text-xs font-semibold text-gray-500 uppercase mb-2">Interaction</div><div className="mb-2"><div className="text-xs text-gray-400 mb-1">Trigger</div><select value={trigger} onChange={e => onTriggerChange(e.target.value)} className="w-full text-xs border rounded px-2 py-1"><option value="click">On Click</option><option value="hover">On Hover</option><option value="press">On Press</option><option value="drag">On Drag</option></select></div><div><div className="text-xs text-gray-400 mb-1">Action</div><select value={action} onChange={e => onActionChange(e.target.value)} className="w-full text-xs border rounded px-2 py-1"><option value="navigate">Navigate</option><option value="overlay">Open Overlay</option><option value="scroll">Scroll To</option><option value="url">Open URL</option></select></div></div>)
+}

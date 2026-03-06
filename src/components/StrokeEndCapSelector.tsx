@@ -1,0 +1,6 @@
+'use client'
+interface Props { cap: string; onChange: (c: string) => void; join: string; onJoinChange: (j: string) => void }
+// Feature 460: StrokeEndCapSelector
+export default function StrokeEndCapSelector({ cap, onChange, join, onJoinChange }: Props) {
+  return (<div className="p-3 border-b"><div className="text-xs font-semibold text-gray-500 uppercase mb-2">Stroke</div><div className="mb-2"><div className="text-xs text-gray-400 mb-1">End Cap</div><div className="flex gap-1">{['butt','round','square'].map(c => <button key={c} onClick={() => onChange(c)} className={'px-2 py-0.5 text-xs rounded border capitalize ' + (cap===c?'bg-blue-50 border-blue-300':'')}>{c}</button>)}</div></div><div><div className="text-xs text-gray-400 mb-1">Join</div><div className="flex gap-1">{['miter','round','bevel'].map(j => <button key={j} onClick={() => onJoinChange(j)} className={'px-2 py-0.5 text-xs rounded border capitalize ' + (join===j?'bg-blue-50 border-blue-300':'')}>{j}</button>)}</div></div></div>)
+}

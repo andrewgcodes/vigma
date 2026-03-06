@@ -1,0 +1,7 @@
+'use client'
+interface Props { count: number; onGroup: () => void; onUngroup: () => void; onAlignLeft: () => void; onAlignCenter: () => void; onAlignRight: () => void; onDistributeH: () => void; onDistributeV: () => void; onFlatten: () => void }
+// Feature 449: MultiSelectActions
+export default function MultiSelectActions({ count, onGroup, onUngroup, onAlignLeft, onAlignCenter, onAlignRight, onDistributeH, onDistributeV, onFlatten }: Props) {
+  if (count < 2) return null
+  return (<div className="p-3 border-b"><div className="text-xs font-semibold text-gray-500 uppercase mb-2">{count} Objects Selected</div><div className="flex flex-wrap gap-1"><button onClick={onGroup} className="px-2 py-1 text-xs bg-gray-100 rounded hover:bg-gray-200">Group</button><button onClick={onUngroup} className="px-2 py-1 text-xs bg-gray-100 rounded hover:bg-gray-200">Ungroup</button><button onClick={onAlignLeft} className="px-2 py-1 text-xs bg-gray-100 rounded hover:bg-gray-200">Align L</button><button onClick={onAlignCenter} className="px-2 py-1 text-xs bg-gray-100 rounded hover:bg-gray-200">Align C</button><button onClick={onAlignRight} className="px-2 py-1 text-xs bg-gray-100 rounded hover:bg-gray-200">Align R</button><button onClick={onDistributeH} className="px-2 py-1 text-xs bg-gray-100 rounded hover:bg-gray-200">Dist H</button><button onClick={onDistributeV} className="px-2 py-1 text-xs bg-gray-100 rounded hover:bg-gray-200">Dist V</button><button onClick={onFlatten} className="px-2 py-1 text-xs bg-gray-100 rounded hover:bg-gray-200">Flatten</button></div></div>)
+}

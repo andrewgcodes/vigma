@@ -1,0 +1,6 @@
+'use client'
+interface Props { keyframes: Array<{id:string;time:number;label:string}>; currentTime: number; duration: number; onTimeChange: (t: number) => void; onSelectKeyframe: (id: string) => void }
+// Feature 507: CanvasTimeline
+export default function CanvasTimeline({ keyframes, currentTime, duration, onTimeChange, onSelectKeyframe }: Props) {
+  return (<div className="fixed bottom-0 left-16 right-0 h-12 bg-gray-900 border-t flex items-center px-4 z-[100]"><div className="relative flex-1 h-2 bg-gray-700 rounded cursor-pointer" onClick={e => {const rect=(e.target as HTMLElement).getBoundingClientRect();onTimeChange((e.clientX-rect.left)/rect.width*duration)}}><div className="absolute h-full bg-blue-500 rounded" style={{width:(currentTime/duration*100)+'%'}} />{keyframes.map(k => <button key={k.id} onClick={() => onSelectKeyframe(k.id)} className="absolute w-3 h-3 bg-yellow-400 rounded-full -top-0.5 border border-gray-900" style={{left:(k.time/duration*100)+'%'}} />)}</div><span className="text-xs text-gray-400 ml-3 w-16">{currentTime.toFixed(1)}s</span></div>)
+}

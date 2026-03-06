@@ -2335,6 +2335,2882 @@ export class CanvasEngine {
     return this.addText({ text, fontSize: 12, fontWeight: 'normal', fill: '#6e6e73', name: 'Caption', ...options })
   }
 
+  // ===== FEATURES 101-200: Additional CanvasEngine Methods =====
+
+  // Feature 101: Nudge selected object by 1px
+  nudgeLeft() { this.moveBy(-1, 0) }
+  nudgeRight() { this.moveBy(1, 0) }
+  nudgeUp() { this.moveBy(0, -1) }
+  nudgeDown() { this.moveBy(0, 1) }
+
+  // Feature 102: Nudge by 10px (shift+arrow)
+  nudgeLeftLarge() { this.moveBy(-10, 0) }
+  nudgeRightLarge() { this.moveBy(10, 0) }
+  nudgeUpLarge() { this.moveBy(0, -10) }
+  nudgeDownLarge() { this.moveBy(0, 10) }
+
+  // Feature 103: Skew object horizontally
+  skewX(angle: number) {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    active.set('skewX', angle)
+    active.setCoords()
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 104: Skew object vertically
+  skewY(angle: number) {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    active.set('skewY', angle)
+    active.setCoords()
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 105: Reset all transforms on selected object
+  resetTransforms() {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    active.set({
+      scaleX: 1,
+      scaleY: 1,
+      skewX: 0,
+      skewY: 0,
+      angle: 0,
+    })
+    active.setCoords()
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 106: Get object's absolute position (accounting for viewport)
+  getAbsolutePosition(obj?: FabricObject): { x: number; y: number } | null {
+    const target = obj || this.canvas.getActiveObject()
+    if (!target) return null
+    const point = target.getCenterPoint()
+    return { x: point.x, y: point.y }
+  }
+
+  // Feature 107: Set object's absolute center position
+  setCenterPosition(x: number, y: number) {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    const center = active.getCenterPoint()
+    const dx = x - center.x
+    const dy = y - center.y
+    active.set({
+      left: (active.left || 0) + dx,
+      top: (active.top || 0) + dy,
+    })
+    active.setCoords()
+    this.canvas.renderAll()
+  }
+
+  // Feature 108: Get bounding box of all objects
+  getAllObjectsBounds(): { left: number; top: number; width: number; height: number } | null {
+    const objects = this.canvas.getObjects().filter((o: any) => !o.isGrid && !o.isPreview)
+    if (objects.length === 0) return null
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+    objects.forEach(obj => {
+      const bound = obj.getBoundingRect()
+      minX = Math.min(minX, bound.left)
+      minY = Math.min(minY, bound.top)
+      maxX = Math.max(maxX, bound.left + bound.width)
+      maxY = Math.max(maxY, bound.top + bound.height)
+    })
+    return { left: minX, top: minY, width: maxX - minX, height: maxY - minY }
+  }
+
+  // Feature 109: Zoom to selected object
+  zoomToSelection() {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    const bound = active.getBoundingRect()
+    const canvasW = this.canvas.getWidth()
+    const canvasH = this.canvas.getHeight()
+    const scaleX = canvasW / (bound.width * 1.2)
+    const scaleY = canvasH / (bound.height * 1.2)
+    const zoom = Math.min(scaleX, scaleY, 5)
+    const center = active.getCenterPoint()
+    this.canvas.zoomToPoint(new Point(canvasW / 2, canvasH / 2), zoom)
+    const vpt = this.canvas.viewportTransform
+    if (vpt) {
+      vpt[4] = canvasW / 2 - center.x * zoom
+      vpt[5] = canvasH / 2 - center.y * zoom
+      this.canvas.setViewportTransform(vpt)
+    }
+    this.onZoomChange?.(zoom)
+    if (vpt) this.onViewportChange?.(zoom, vpt[4], vpt[5])
+  }
+
+  // Feature 110: Pan canvas to center on a specific object by ID
+  panToObjectById(id: string) {
+    const obj = this.getObjectById(id)
+    if (!obj) return
+    const center = obj.getCenterPoint()
+    const zoom = this.canvas.getZoom()
+    const canvasW = this.canvas.getWidth()
+    const canvasH = this.canvas.getHeight()
+    const vpt = this.canvas.viewportTransform
+    if (vpt) {
+      vpt[4] = canvasW / 2 - center.x * zoom
+      vpt[5] = canvasH / 2 - center.y * zoom
+      this.canvas.setViewportTransform(vpt)
+      this.onViewportChange?.(zoom, vpt[4], vpt[5])
+    }
+  }
+
+  // Feature 111: Select all objects of a specific type
+  selectByType(type: string) {
+    const objects = this.canvas.getObjects().filter(o => o.type === type && !(o as any).isGrid)
+    if (objects.length === 0) return
+    if (objects.length === 1) {
+      this.canvas.setActiveObject(objects[0])
+    } else {
+      const selection = new ActiveSelection(objects, { canvas: this.canvas })
+      this.canvas.setActiveObject(selection)
+    }
+    this.canvas.renderAll()
+  }
+
+  // Feature 112: Select all objects with matching fill color
+  selectByFill(color: string) {
+    const objects = this.canvas.getObjects().filter(o => {
+      const fill = o.fill
+      return typeof fill === 'string' && fill.toLowerCase() === color.toLowerCase() && !(o as any).isGrid
+    })
+    if (objects.length === 0) return
+    if (objects.length === 1) {
+      this.canvas.setActiveObject(objects[0])
+    } else {
+      const selection = new ActiveSelection(objects, { canvas: this.canvas })
+      this.canvas.setActiveObject(selection)
+    }
+    this.canvas.renderAll()
+  }
+
+  // Feature 113: Select all objects with matching stroke color
+  selectByStroke(color: string) {
+    const objects = this.canvas.getObjects().filter(o => {
+      const s = o.stroke
+      return typeof s === 'string' && s.toLowerCase() === color.toLowerCase() && !(o as any).isGrid
+    })
+    if (objects.length === 0) return
+    if (objects.length === 1) {
+      this.canvas.setActiveObject(objects[0])
+    } else {
+      const selection = new ActiveSelection(objects, { canvas: this.canvas })
+      this.canvas.setActiveObject(selection)
+    }
+    this.canvas.renderAll()
+  }
+
+  // Feature 114: Invert selection
+  invertSelection() {
+    const allObjects = this.canvas.getObjects().filter((o: any) => !o.isGrid && !o.isPreview)
+    const active = this.canvas.getActiveObject()
+    let currentIds: string[] = []
+    if (active) {
+      if (active instanceof ActiveSelection) {
+        currentIds = active.getObjects().map(o => (o as any).id).filter(Boolean)
+      } else {
+        currentIds = [(active as any).id].filter(Boolean)
+      }
+    }
+    const unselected = allObjects.filter(o => !currentIds.includes((o as any).id))
+    if (unselected.length === 0) {
+      this.canvas.discardActiveObject()
+    } else if (unselected.length === 1) {
+      this.canvas.setActiveObject(unselected[0])
+    } else {
+      const selection = new ActiveSelection(unselected, { canvas: this.canvas })
+      this.canvas.setActiveObject(selection)
+    }
+    this.canvas.renderAll()
+  }
+
+  // Feature 115: Deselect all objects
+  deselectAll() {
+    this.canvas.discardActiveObject()
+    this.canvas.renderAll()
+  }
+
+  // Feature 116: Count objects by type
+  countObjectsByType(): Record<string, number> {
+    const counts: Record<string, number> = {}
+    this.canvas.getObjects().forEach(obj => {
+      if ((obj as any).isGrid || (obj as any).isPreview) return
+      const type = obj.type || 'unknown'
+      counts[type] = (counts[type] || 0) + 1
+    })
+    return counts
+  }
+
+  // Feature 117: Get total canvas area used by objects
+  getUsedArea(): number {
+    let totalArea = 0
+    this.canvas.getObjects().forEach(obj => {
+      if ((obj as any).isGrid || (obj as any).isPreview) return
+      const w = (obj.width || 0) * (obj.scaleX || 1)
+      const h = (obj.height || 0) * (obj.scaleY || 1)
+      totalArea += w * h
+    })
+    return totalArea
+  }
+
+  // Feature 118: Check if two objects overlap
+  objectsOverlap(id1: string, id2: string): boolean {
+    const obj1 = this.getObjectById(id1)
+    const obj2 = this.getObjectById(id2)
+    if (!obj1 || !obj2) return false
+    const r1 = obj1.getBoundingRect()
+    const r2 = obj2.getBoundingRect()
+    return !(r1.left > r2.left + r2.width || r1.left + r1.width < r2.left ||
+             r1.top > r2.top + r2.height || r1.top + r1.height < r2.top)
+  }
+
+  // Feature 119: Get distance between two objects (center to center)
+  getDistanceBetween(id1: string, id2: string): number | null {
+    const obj1 = this.getObjectById(id1)
+    const obj2 = this.getObjectById(id2)
+    if (!obj1 || !obj2) return null
+    const c1 = obj1.getCenterPoint()
+    const c2 = obj2.getCenterPoint()
+    return Math.sqrt(Math.pow(c2.x - c1.x, 2) + Math.pow(c2.y - c1.y, 2))
+  }
+
+  // Feature 120: Get angle between two objects
+  getAngleBetween(id1: string, id2: string): number | null {
+    const obj1 = this.getObjectById(id1)
+    const obj2 = this.getObjectById(id2)
+    if (!obj1 || !obj2) return null
+    const c1 = obj1.getCenterPoint()
+    const c2 = obj2.getCenterPoint()
+    return Math.atan2(c2.y - c1.y, c2.x - c1.x) * 180 / Math.PI
+  }
+
+  // Feature 121: Arrange objects in a circle
+  arrangeInCircle(radius: number = 200) {
+    const active = this.canvas.getActiveObject()
+    if (!active || !(active instanceof ActiveSelection)) return
+    const objects = active.getObjects()
+    const centerX = this.canvas.getWidth() / 2
+    const centerY = this.canvas.getHeight() / 2
+    const angleStep = (2 * Math.PI) / objects.length
+    objects.forEach((obj, i) => {
+      const angle = i * angleStep - Math.PI / 2
+      obj.set({
+        left: centerX + radius * Math.cos(angle) - (obj.width || 0) * (obj.scaleX || 1) / 2,
+        top: centerY + radius * Math.sin(angle) - (obj.height || 0) * (obj.scaleY || 1) / 2,
+      })
+      obj.setCoords()
+    })
+    this.canvas.discardActiveObject()
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 122: Arrange objects in a grid
+  arrangeInGrid(cols: number = 3, gap: number = 20) {
+    const active = this.canvas.getActiveObject()
+    if (!active || !(active instanceof ActiveSelection)) return
+    const objects = active.getObjects()
+    let maxW = 0, maxH = 0
+    objects.forEach(obj => {
+      maxW = Math.max(maxW, (obj.width || 0) * (obj.scaleX || 1))
+      maxH = Math.max(maxH, (obj.height || 0) * (obj.scaleY || 1))
+    })
+    const startX = 100, startY = 100
+    objects.forEach((obj, i) => {
+      const col = i % cols
+      const row = Math.floor(i / cols)
+      obj.set({
+        left: startX + col * (maxW + gap),
+        top: startY + row * (maxH + gap),
+      })
+      obj.setCoords()
+    })
+    this.canvas.discardActiveObject()
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 123: Stack objects vertically with gap
+  stackVertically(gap: number = 10) {
+    const active = this.canvas.getActiveObject()
+    if (!active || !(active instanceof ActiveSelection)) return
+    const objects = active.getObjects().sort((a, b) => (a.top || 0) - (b.top || 0))
+    let currentY = objects[0]?.top || 0
+    objects.forEach(obj => {
+      obj.set({ top: currentY })
+      obj.setCoords()
+      currentY += (obj.height || 0) * (obj.scaleY || 1) + gap
+    })
+    this.canvas.discardActiveObject()
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 124: Stack objects horizontally with gap
+  stackHorizontally(gap: number = 10) {
+    const active = this.canvas.getActiveObject()
+    if (!active || !(active instanceof ActiveSelection)) return
+    const objects = active.getObjects().sort((a, b) => (a.left || 0) - (b.left || 0))
+    let currentX = objects[0]?.left || 0
+    objects.forEach(obj => {
+      obj.set({ left: currentX })
+      obj.setCoords()
+      currentX += (obj.width || 0) * (obj.scaleX || 1) + gap
+    })
+    this.canvas.discardActiveObject()
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 125: Swap positions of two selected objects
+  swapPositions() {
+    const active = this.canvas.getActiveObject()
+    if (!active || !(active instanceof ActiveSelection)) return
+    const objects = active.getObjects()
+    if (objects.length !== 2) return
+    const [a, b] = objects
+    const aLeft = a.left, aTop = a.top
+    a.set({ left: b.left, top: b.top })
+    b.set({ left: aLeft, top: aTop })
+    a.setCoords()
+    b.setCoords()
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 126: Randomize positions within canvas bounds
+  randomizePositions() {
+    const active = this.canvas.getActiveObject()
+    if (!active || !(active instanceof ActiveSelection)) return
+    const w = this.canvas.getWidth()
+    const h = this.canvas.getHeight()
+    active.getObjects().forEach(obj => {
+      obj.set({
+        left: Math.random() * (w - 100),
+        top: Math.random() * (h - 100),
+      })
+      obj.setCoords()
+    })
+    this.canvas.discardActiveObject()
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 127: Randomize colors of selected objects
+  randomizeColors() {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    const randomColor = () => '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0')
+    if (active instanceof ActiveSelection) {
+      active.getObjects().forEach(obj => {
+        obj.set('fill', randomColor())
+      })
+    } else {
+      active.set('fill', randomColor())
+    }
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 128: Set uniform opacity for all selected objects
+  setUniformOpacity(opacity: number) {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    if (active instanceof ActiveSelection) {
+      active.getObjects().forEach(obj => {
+        obj.set('opacity', opacity)
+      })
+    } else {
+      active.set('opacity', opacity)
+    }
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 129: Apply same fill to all selected objects
+  applyUniformFill(color: string) {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    if (active instanceof ActiveSelection) {
+      active.getObjects().forEach(obj => {
+        obj.set('fill', color)
+      })
+    } else {
+      active.set('fill', color)
+    }
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 130: Apply same stroke to all selected objects
+  applyUniformStroke(color: string, width: number = 1) {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    if (active instanceof ActiveSelection) {
+      active.getObjects().forEach(obj => {
+        obj.set({ stroke: color, strokeWidth: width })
+      })
+    } else {
+      active.set({ stroke: color, strokeWidth: width })
+    }
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 131: Make all objects same width as selected
+  equalizeWidths() {
+    const active = this.canvas.getActiveObject()
+    if (!active || !(active instanceof ActiveSelection)) return
+    const objects = active.getObjects()
+    if (objects.length < 2) return
+    const targetWidth = (objects[0].width || 100) * (objects[0].scaleX || 1)
+    objects.slice(1).forEach(obj => {
+      obj.set('scaleX', targetWidth / (obj.width || 1))
+      obj.setCoords()
+    })
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 132: Make all objects same height as selected
+  equalizeHeights() {
+    const active = this.canvas.getActiveObject()
+    if (!active || !(active instanceof ActiveSelection)) return
+    const objects = active.getObjects()
+    if (objects.length < 2) return
+    const targetHeight = (objects[0].height || 100) * (objects[0].scaleY || 1)
+    objects.slice(1).forEach(obj => {
+      obj.set('scaleY', targetHeight / (obj.height || 1))
+      obj.setCoords()
+    })
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 133: Equalize spacing between objects horizontally
+  equalizeHorizontalSpacing() {
+    const active = this.canvas.getActiveObject()
+    if (!active || !(active instanceof ActiveSelection)) return
+    const objects = active.getObjects().sort((a, b) => (a.left || 0) - (b.left || 0))
+    if (objects.length < 3) return
+    const first = objects[0]
+    const last = objects[objects.length - 1]
+    const totalWidth = objects.reduce((sum, obj) => sum + (obj.width || 0) * (obj.scaleX || 1), 0)
+    const firstLeft = first.left || 0
+    const lastRight = (last.left || 0) + (last.width || 0) * (last.scaleX || 1)
+    const totalSpace = lastRight - firstLeft - totalWidth
+    const gap = totalSpace / (objects.length - 1)
+    let currentX = firstLeft + (first.width || 0) * (first.scaleX || 1) + gap
+    for (let i = 1; i < objects.length - 1; i++) {
+      objects[i].set('left', currentX)
+      objects[i].setCoords()
+      currentX += (objects[i].width || 0) * (objects[i].scaleX || 1) + gap
+    }
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 134: Equalize spacing between objects vertically
+  equalizeVerticalSpacing() {
+    const active = this.canvas.getActiveObject()
+    if (!active || !(active instanceof ActiveSelection)) return
+    const objects = active.getObjects().sort((a, b) => (a.top || 0) - (b.top || 0))
+    if (objects.length < 3) return
+    const first = objects[0]
+    const last = objects[objects.length - 1]
+    const totalHeight = objects.reduce((sum, obj) => sum + (obj.height || 0) * (obj.scaleY || 1), 0)
+    const firstTop = first.top || 0
+    const lastBottom = (last.top || 0) + (last.height || 0) * (last.scaleY || 1)
+    const totalSpace = lastBottom - firstTop - totalHeight
+    const gap = totalSpace / (objects.length - 1)
+    let currentY = firstTop + (first.height || 0) * (first.scaleY || 1) + gap
+    for (let i = 1; i < objects.length - 1; i++) {
+      objects[i].set('top', currentY)
+      objects[i].setCoords()
+      currentY += (objects[i].height || 0) * (objects[i].scaleY || 1) + gap
+    }
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 135: Tighten spacing (reduce gap between objects)
+  tightenSpacing(amount: number = 5) {
+    const active = this.canvas.getActiveObject()
+    if (!active || !(active instanceof ActiveSelection)) return
+    const objects = active.getObjects().sort((a, b) => (a.left || 0) - (b.left || 0))
+    const center = objects.reduce((sum, o) => sum + (o.left || 0), 0) / objects.length
+    objects.forEach(obj => {
+      const dx = ((obj.left || 0) - center) > 0 ? -amount : amount
+      obj.set('left', (obj.left || 0) + dx)
+      obj.setCoords()
+    })
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 136: Loosen spacing (increase gap between objects)
+  loosenSpacing(amount: number = 5) {
+    this.tightenSpacing(-amount)
+  }
+
+  // Feature 137: Create a text label for selected object
+  addLabelToSelected(labelText?: string) {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    const bound = active.getBoundingRect()
+    const text = labelText || (active as any).name || active.type || 'Object'
+    this.addText({
+      text,
+      fontSize: 11,
+      fill: '#666',
+      left: bound.left,
+      top: bound.top - 20,
+      name: 'Label',
+    })
+  }
+
+  // Feature 138: Create pentagon shape
+  addPentagon(options?: Partial<any>) {
+    return this.addPolygon({ sides: 5, name: 'Pentagon', ...options })
+  }
+
+  // Feature 139: Create octagon shape
+  addOctagon(options?: Partial<any>) {
+    return this.addPolygon({ sides: 8, name: 'Octagon', ...options })
+  }
+
+  // Feature 140: Create cross/plus shape
+  addCross(options?: Partial<any>) {
+    const size = options?.width || 100
+    const arm = size / 3
+    const points = [
+      { x: arm, y: 0 }, { x: arm * 2, y: 0 },
+      { x: arm * 2, y: arm }, { x: size, y: arm },
+      { x: size, y: arm * 2 }, { x: arm * 2, y: arm * 2 },
+      { x: arm * 2, y: size }, { x: arm, y: size },
+      { x: arm, y: arm * 2 }, { x: 0, y: arm * 2 },
+      { x: 0, y: arm }, { x: arm, y: arm },
+    ]
+    const poly = new Polygon(points, {
+      left: options?.left || 100,
+      top: options?.top || 100,
+      fill: options?.fill || '#4ECDC4',
+      stroke: options?.stroke || '',
+      strokeWidth: options?.strokeWidth || 0,
+      name: 'Cross',
+      ...(options || {}),
+    })
+    ;(poly as any).id = uuidv4()
+    this.canvas.add(poly)
+    this.canvas.setActiveObject(poly)
+    this.canvas.renderAll()
+    this.saveHistory()
+    return poly
+  }
+
+  // Feature 141: Create heart shape using path
+  addHeart(options?: Partial<any>) {
+    const { Path } = require('fabric')
+    const heartPath = 'M 50 30 C 50 25 45 10 30 10 C 10 10 10 35 10 35 C 10 55 30 65 50 85 C 70 65 90 55 90 35 C 90 35 90 10 70 10 C 55 10 50 25 50 30 Z'
+    const heart = new Path(heartPath, {
+      left: options?.left || 100,
+      top: options?.top || 100,
+      fill: options?.fill || '#E74C3C',
+      stroke: options?.stroke || '',
+      strokeWidth: options?.strokeWidth || 0,
+      scaleX: (options?.width || 100) / 100,
+      scaleY: (options?.height || 100) / 95,
+      name: 'Heart',
+    })
+    ;(heart as any).id = uuidv4()
+    this.canvas.add(heart)
+    this.canvas.setActiveObject(heart)
+    this.canvas.renderAll()
+    this.saveHistory()
+    return heart
+  }
+
+  // Feature 142: Create speech bubble shape
+  addSpeechBubble(options?: Partial<any>) {
+    const { Path } = require('fabric')
+    const bubblePath = 'M 10 10 L 90 10 Q 95 10 95 15 L 95 55 Q 95 60 90 60 L 40 60 L 20 80 L 25 60 L 10 60 Q 5 60 5 55 L 5 15 Q 5 10 10 10 Z'
+    const bubble = new Path(bubblePath, {
+      left: options?.left || 100,
+      top: options?.top || 100,
+      fill: options?.fill || '#FFFFFF',
+      stroke: options?.stroke || '#333333',
+      strokeWidth: options?.strokeWidth || 2,
+      scaleX: (options?.width || 200) / 100,
+      scaleY: (options?.height || 160) / 90,
+      name: 'Speech Bubble',
+    })
+    ;(bubble as any).id = uuidv4()
+    this.canvas.add(bubble)
+    this.canvas.setActiveObject(bubble)
+    this.canvas.renderAll()
+    this.saveHistory()
+    return bubble
+  }
+
+  // Feature 143: Create cloud shape
+  addCloud(options?: Partial<any>) {
+    const { Path } = require('fabric')
+    const cloudPath = 'M 25 60 C 10 60 0 50 5 40 C 0 30 10 20 20 20 C 20 10 35 5 45 10 C 50 0 70 0 75 10 C 85 5 100 15 95 30 C 105 35 100 50 90 55 C 95 60 85 65 75 60 Z'
+    const cloud = new Path(cloudPath, {
+      left: options?.left || 100,
+      top: options?.top || 100,
+      fill: options?.fill || '#ECF0F1',
+      stroke: options?.stroke || '#BDC3C7',
+      strokeWidth: options?.strokeWidth || 1,
+      scaleX: (options?.width || 200) / 105,
+      scaleY: (options?.height || 120) / 65,
+      name: 'Cloud',
+    })
+    ;(cloud as any).id = uuidv4()
+    this.canvas.add(cloud)
+    this.canvas.setActiveObject(cloud)
+    this.canvas.renderAll()
+    this.saveHistory()
+    return cloud
+  }
+
+  // Feature 144: Create callout/annotation shape
+  addCallout(text: string = 'Note', options?: Partial<any>) {
+    const rect = this.addRect({
+      width: 160,
+      height: 40,
+      fill: '#FFF3CD',
+      stroke: '#FFC107',
+      strokeWidth: 1,
+      rx: 4,
+      ry: 4,
+      name: 'Callout',
+      ...options,
+    })
+    const left = options?.left || 100
+    const top = options?.top || 100
+    this.addText({
+      text,
+      fontSize: 13,
+      fill: '#856404',
+      left: left + 10,
+      top: top + 10,
+      name: 'Callout Text',
+    })
+    return rect
+  }
+
+  // Feature 145: Create badge/pill shape
+  addBadge(text: string = 'Badge', options?: Partial<any>) {
+    const rect = this.addRect({
+      width: 80,
+      height: 28,
+      fill: options?.fill || '#007AFF',
+      rx: 14,
+      ry: 14,
+      name: 'Badge',
+      ...options,
+    })
+    const left = options?.left || 100
+    const top = options?.top || 100
+    this.addText({
+      text,
+      fontSize: 12,
+      fill: '#FFFFFF',
+      fontWeight: 'bold',
+      left: left + 15,
+      top: top + 6,
+      name: 'Badge Text',
+    })
+    return rect
+  }
+
+  // Feature 146: Create divider line
+  addDivider(options?: Partial<any>) {
+    return this.addLine({
+      x1: 0, y1: 0,
+      x2: options?.width || 300,
+      y2: 0,
+      stroke: options?.stroke || '#E0E0E0',
+      strokeWidth: options?.strokeWidth || 1,
+      name: 'Divider',
+      ...options,
+    })
+  }
+
+  // Feature 147: Create avatar placeholder (circle)
+  addAvatarPlaceholder(options?: Partial<any>) {
+    return this.addEllipse({
+      width: options?.size || 48,
+      height: options?.size || 48,
+      fill: options?.fill || '#C4C4C4',
+      name: 'Avatar',
+      ...options,
+    })
+  }
+
+  // Feature 148: Create button shape (rounded rect with text)
+  addButton(text: string = 'Button', options?: Partial<any>) {
+    const btnWidth = options?.width || 120
+    const btnHeight = options?.height || 40
+    const rect = this.addRect({
+      width: btnWidth,
+      height: btnHeight,
+      fill: options?.fill || '#007AFF',
+      rx: 8,
+      ry: 8,
+      name: 'Button',
+      ...options,
+    })
+    const left = options?.left || 100
+    const top = options?.top || 100
+    this.addText({
+      text,
+      fontSize: 14,
+      fill: '#FFFFFF',
+      fontWeight: '600',
+      left: left + btnWidth / 4,
+      top: top + btnHeight / 4,
+      name: 'Button Text',
+    })
+    return rect
+  }
+
+  // Feature 149: Create input field placeholder
+  addInputField(options?: Partial<any>) {
+    const fieldWidth = options?.width || 240
+    const fieldHeight = options?.height || 36
+    const rect = this.addRect({
+      width: fieldWidth,
+      height: fieldHeight,
+      fill: '#FFFFFF',
+      stroke: '#D1D5DB',
+      strokeWidth: 1,
+      rx: 6,
+      ry: 6,
+      name: 'Input Field',
+      ...options,
+    })
+    const left = options?.left || 100
+    const top = options?.top || 100
+    this.addText({
+      text: options?.placeholder || 'Placeholder text...',
+      fontSize: 14,
+      fill: '#9CA3AF',
+      left: left + 12,
+      top: top + 9,
+      name: 'Input Placeholder',
+    })
+    return rect
+  }
+
+  // Feature 150: Create card component (rounded rect with shadow)
+  addCard(options?: Partial<any>) {
+    return this.addRect({
+      width: options?.width || 320,
+      height: options?.height || 200,
+      fill: '#FFFFFF',
+      rx: 12,
+      ry: 12,
+      shadow: new Shadow({ color: 'rgba(0,0,0,0.1)', blur: 10, offsetX: 0, offsetY: 4 }),
+      name: 'Card',
+      ...options,
+    })
+  }
+
+  // Feature 151: Text transform - uppercase
+  textToUpperCase() {
+    const active = this.canvas.getActiveObject()
+    if (!active || !(active as any).text) return
+    ;(active as any).set('text', (active as any).text.toUpperCase())
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 152: Text transform - lowercase
+  textToLowerCase() {
+    const active = this.canvas.getActiveObject()
+    if (!active || !(active as any).text) return
+    ;(active as any).set('text', (active as any).text.toLowerCase())
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 153: Text transform - title case
+  textToTitleCase() {
+    const active = this.canvas.getActiveObject()
+    if (!active || !(active as any).text) return
+    const text = (active as any).text as string
+    const titled = text.replace(/\w\S*/g, (txt: string) => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase())
+    ;(active as any).set('text', titled)
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 154: Increase font size by step
+  increaseFontSize(step: number = 2) {
+    const active = this.canvas.getActiveObject()
+    if (!active || !(active as any).fontSize) return
+    const currentSize = (active as any).fontSize || 16
+    ;(active as any).set('fontSize', currentSize + step)
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 155: Decrease font size by step
+  decreaseFontSize(step: number = 2) {
+    const active = this.canvas.getActiveObject()
+    if (!active || !(active as any).fontSize) return
+    const currentSize = (active as any).fontSize || 16
+    ;(active as any).set('fontSize', Math.max(1, currentSize - step))
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 156: Toggle bold on text
+  toggleBold() {
+    const active = this.canvas.getActiveObject()
+    if (!active || !(active as any).fontWeight) return
+    const current = (active as any).fontWeight
+    ;(active as any).set('fontWeight', current === 'bold' || current === '700' ? 'normal' : 'bold')
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 157: Toggle italic on text
+  toggleItalic() {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    const current = (active as any).fontStyle
+    ;(active as any).set('fontStyle', current === 'italic' ? 'normal' : 'italic')
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 158: Toggle underline on text
+  toggleUnderline() {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    ;(active as any).set('underline', !(active as any).underline)
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 159: Toggle strikethrough on text
+  toggleStrikethrough() {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    ;(active as any).set('linethrough', !(active as any).linethrough)
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 160: Set text alignment
+  setTextAlign(align: 'left' | 'center' | 'right' | 'justify') {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    ;(active as any).set('textAlign', align)
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 161: Set line height
+  setLineHeight(lineHeight: number) {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    ;(active as any).set('lineHeight', lineHeight)
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 162: Set letter spacing
+  setCharSpacing(spacing: number) {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    ;(active as any).set('charSpacing', spacing)
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 163: Set font family
+  setFontFamily(fontFamily: string) {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    ;(active as any).set('fontFamily', fontFamily)
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 164: Increase stroke width by step
+  increaseStrokeWidth(step: number = 1) {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    const current = active.strokeWidth || 0
+    active.set('strokeWidth', current + step)
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 165: Decrease stroke width
+  decreaseStrokeWidth(step: number = 1) {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    const current = active.strokeWidth || 0
+    active.set('strokeWidth', Math.max(0, current - step))
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 166: Remove stroke from object
+  removeStroke() {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    active.set({ stroke: '', strokeWidth: 0 })
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 167: Remove fill from object
+  removeFill() {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    active.set('fill', 'transparent')
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 168: Swap fill and stroke colors
+  swapFillAndStroke() {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    const currentFill = active.fill
+    const currentStroke = active.stroke
+    active.set({
+      fill: typeof currentStroke === 'string' ? currentStroke : 'transparent',
+      stroke: typeof currentFill === 'string' ? currentFill : '',
+    })
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 169: Apply color from one object to another
+  pickColorFrom(sourceId: string) {
+    const source = this.getObjectById(sourceId)
+    const active = this.canvas.getActiveObject()
+    if (!source || !active) return
+    if (typeof source.fill === 'string') {
+      active.set('fill', source.fill)
+    }
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 170: Set object's stroke to dashed
+  setDashedStroke(dashLength: number = 5, gapLength: number = 5) {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    active.set('strokeDashArray', [dashLength, gapLength])
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 171: Set object's stroke to dotted
+  setDottedStroke(dotSize: number = 2, gapSize: number = 4) {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    active.set({
+      strokeDashArray: [dotSize, gapSize],
+      strokeLineCap: 'round',
+    })
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 172: Set solid stroke (remove dash)
+  setSolidStroke() {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    active.set('strokeDashArray', [])
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 173: Darken fill color by percentage
+  darkenFill(amount: number = 10) {
+    const active = this.canvas.getActiveObject()
+    if (!active || typeof active.fill !== 'string') return
+    const color = active.fill
+    const r = parseInt(color.slice(1, 3), 16)
+    const g = parseInt(color.slice(3, 5), 16)
+    const b = parseInt(color.slice(5, 7), 16)
+    const factor = 1 - amount / 100
+    const nr = Math.max(0, Math.round(r * factor))
+    const ng = Math.max(0, Math.round(g * factor))
+    const nb = Math.max(0, Math.round(b * factor))
+    active.set('fill', `#${nr.toString(16).padStart(2, '0')}${ng.toString(16).padStart(2, '0')}${nb.toString(16).padStart(2, '0')}`)
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 174: Lighten fill color by percentage
+  lightenFill(amount: number = 10) {
+    const active = this.canvas.getActiveObject()
+    if (!active || typeof active.fill !== 'string') return
+    const color = active.fill
+    const r = parseInt(color.slice(1, 3), 16)
+    const g = parseInt(color.slice(3, 5), 16)
+    const b = parseInt(color.slice(5, 7), 16)
+    const factor = amount / 100
+    const nr = Math.min(255, Math.round(r + (255 - r) * factor))
+    const ng = Math.min(255, Math.round(g + (255 - g) * factor))
+    const nb = Math.min(255, Math.round(b + (255 - b) * factor))
+    active.set('fill', `#${nr.toString(16).padStart(2, '0')}${ng.toString(16).padStart(2, '0')}${nb.toString(16).padStart(2, '0')}`)
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 175: Invert fill color
+  invertFillColor() {
+    const active = this.canvas.getActiveObject()
+    if (!active || typeof active.fill !== 'string') return
+    const color = active.fill
+    if (!color.startsWith('#') || color.length < 7) return
+    const r = 255 - parseInt(color.slice(1, 3), 16)
+    const g = 255 - parseInt(color.slice(3, 5), 16)
+    const b = 255 - parseInt(color.slice(5, 7), 16)
+    active.set('fill', `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`)
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 176: Convert fill to grayscale
+  grayscaleFill() {
+    const active = this.canvas.getActiveObject()
+    if (!active || typeof active.fill !== 'string') return
+    const color = active.fill
+    if (!color.startsWith('#') || color.length < 7) return
+    const r = parseInt(color.slice(1, 3), 16)
+    const g = parseInt(color.slice(3, 5), 16)
+    const b = parseInt(color.slice(5, 7), 16)
+    const gray = Math.round(0.299 * r + 0.587 * g + 0.114 * b)
+    active.set('fill', `#${gray.toString(16).padStart(2, '0')}${gray.toString(16).padStart(2, '0')}${gray.toString(16).padStart(2, '0')}`)
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 177: Get hex color at canvas point
+  getPixelColor(x: number, y: number): string | null {
+    const ctx = this.canvas.getContext()
+    if (!ctx) return null
+    const pixel = ctx.getImageData(x, y, 1, 1).data
+    return `#${pixel[0].toString(16).padStart(2, '0')}${pixel[1].toString(16).padStart(2, '0')}${pixel[2].toString(16).padStart(2, '0')}`
+  }
+
+  // Feature 178: Increase object opacity
+  increaseOpacity(step: number = 0.1) {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    const current = active.opacity || 1
+    active.set('opacity', Math.min(1, current + step))
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 179: Decrease object opacity
+  decreaseOpacity(step: number = 0.1) {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    const current = active.opacity || 1
+    active.set('opacity', Math.max(0, current - step))
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 180: Lock object position only
+  lockPosition() {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    active.set({ lockMovementX: true, lockMovementY: true })
+    this.canvas.renderAll()
+  }
+
+  // Feature 181: Lock object rotation only
+  lockRotation() {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    active.set({ lockRotation: true })
+    this.canvas.renderAll()
+  }
+
+  // Feature 182: Lock object scaling only
+  lockScaling() {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    active.set({ lockScalingX: true, lockScalingY: true })
+    this.canvas.renderAll()
+  }
+
+  // Feature 183: Unlock all transforms on object
+  unlockAll() {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    active.set({
+      lockMovementX: false,
+      lockMovementY: false,
+      lockRotation: false,
+      lockScalingX: false,
+      lockScalingY: false,
+      hasControls: true,
+      selectable: true,
+      evented: true,
+    })
+    this.canvas.renderAll()
+  }
+
+  // Feature 184: Get history length
+  getHistoryLength(): number {
+    return this.history.length
+  }
+
+  // Feature 185: Get current history index
+  getHistoryIndex(): number {
+    return this.historyIndex
+  }
+
+  // Feature 186: Clear all history
+  clearHistory() {
+    const current = this.serializeCanvas()
+    this.history = [current]
+    this.historyIndex = 0
+    this.onHistoryChange?.(false, false)
+  }
+
+  // Feature 187: Scale object to specific width maintaining aspect ratio
+  scaleToWidth(targetWidth: number) {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    const currentWidth = (active.width || 1) * (active.scaleX || 1)
+    const scale = targetWidth / (active.width || 1)
+    active.set({ scaleX: scale, scaleY: scale })
+    active.setCoords()
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 188: Scale object to specific height maintaining aspect ratio
+  scaleToHeight(targetHeight: number) {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    const scale = targetHeight / (active.height || 1)
+    active.set({ scaleX: scale, scaleY: scale })
+    active.setCoords()
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 189: Fit object proportionally within a bounding box
+  fitInBox(maxWidth: number, maxHeight: number) {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    const objW = active.width || 1
+    const objH = active.height || 1
+    const scaleX = maxWidth / objW
+    const scaleY = maxHeight / objH
+    const scale = Math.min(scaleX, scaleY)
+    active.set({ scaleX: scale, scaleY: scale })
+    active.setCoords()
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 190: Get all locked objects
+  getLockedObjects(): FabricObject[] {
+    return this.canvas.getObjects().filter(o =>
+      (o as any).lockMovementX || (o as any).lockMovementY || (o as any).lockRotation
+    )
+  }
+
+  // Feature 191: Get all hidden objects
+  getHiddenObjects(): FabricObject[] {
+    return this.canvas.getObjects().filter(o => !o.visible)
+  }
+
+  // Feature 192: Show all hidden objects
+  showAllObjects() {
+    this.canvas.getObjects().forEach(o => {
+      if (!(o as any).isGrid && !(o as any).isPreview) {
+        o.set('visible', true)
+      }
+    })
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 193: Unlock all objects
+  unlockAllObjects() {
+    this.canvas.getObjects().forEach(o => {
+      o.set({
+        lockMovementX: false,
+        lockMovementY: false,
+        lockRotation: false,
+        lockScalingX: false,
+        lockScalingY: false,
+        selectable: true,
+        evented: true,
+        hasControls: true,
+      })
+    })
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 194: Get canvas as data URL at specific resolution
+  exportAtResolution(width: number, height: number): string {
+    const multiplierX = width / this.canvas.getWidth()
+    const multiplierY = height / this.canvas.getHeight()
+    const multiplier = Math.max(multiplierX, multiplierY)
+    return this.canvas.toDataURL({
+      format: 'png',
+      multiplier,
+    })
+  }
+
+  // Feature 195: Export only visible objects
+  exportVisibleOnly(): string {
+    const hiddenObjects = this.canvas.getObjects().filter(o => !o.visible)
+    // Temporarily show grid/preview objects are already hidden
+    return this.canvas.toDataURL({ format: 'png', multiplier: 2 })
+  }
+
+  // Feature 196: Get all text content from canvas
+  getAllTextContent(): string[] {
+    return this.canvas.getObjects()
+      .filter(o => (o as any).text && !(o as any).isGrid)
+      .map(o => (o as any).text as string)
+  }
+
+  // Feature 197: Find and replace text across all text objects
+  findAndReplaceText(find: string, replace: string): number {
+    let count = 0
+    this.canvas.getObjects().forEach(o => {
+      if ((o as any).text && typeof (o as any).text === 'string') {
+        const text = (o as any).text as string
+        if (text.includes(find)) {
+          ;(o as any).set('text', text.split(find).join(replace))
+          count++
+        }
+      }
+    })
+    if (count > 0) {
+      this.canvas.renderAll()
+      this.saveHistory()
+    }
+    return count
+  }
+
+  // Feature 198: Get canvas size in pixels
+  getCanvasSize(): { width: number; height: number } {
+    return {
+      width: this.canvas.getWidth(),
+      height: this.canvas.getHeight(),
+    }
+  }
+
+  // Feature 199: Set canvas size
+  setCanvasSize(width: number, height: number) {
+    this.canvas.setWidth(width)
+    this.canvas.setHeight(height)
+    this.canvas.renderAll()
+  }
+
+  // Feature 200: Get zoom level
+  getZoomLevel(): number {
+    return this.canvas.getZoom()
+  }
+
+  // ===== FEATURES 201-300: More CanvasEngine Methods =====
+
+  // Feature 201: Align selected to page center
+  alignToPageCenter() {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    const cw = this.canvas.getWidth()
+    const ch = this.canvas.getHeight()
+    const w = (active.width || 0) * (active.scaleX || 1)
+    const h = (active.height || 0) * (active.scaleY || 1)
+    active.set({ left: (cw - w) / 2, top: (ch - h) / 2 })
+    active.setCoords()
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 202: Snap object to nearest grid point
+  snapToNearestGrid(gridSize: number = 10) {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    const left = Math.round((active.left || 0) / gridSize) * gridSize
+    const top = Math.round((active.top || 0) / gridSize) * gridSize
+    active.set({ left, top })
+    active.setCoords()
+    this.canvas.renderAll()
+  }
+
+  // Feature 203: Create wireframe rectangle (no fill, thin stroke)
+  addWireframeRect(options?: Partial<any>) {
+    return this.addRect({
+      fill: 'transparent',
+      stroke: '#999999',
+      strokeWidth: 1,
+      name: 'Wireframe Rect',
+      ...options,
+    })
+  }
+
+  // Feature 204: Create placeholder image box
+  addImagePlaceholder(options?: Partial<any>) {
+    const w = options?.width || 200
+    const h = options?.height || 150
+    const rect = this.addRect({
+      width: w,
+      height: h,
+      fill: '#E5E7EB',
+      stroke: '#D1D5DB',
+      strokeWidth: 1,
+      name: 'Image Placeholder',
+      ...options,
+    })
+    this.addText({
+      text: '🖼',
+      fontSize: 24,
+      left: (options?.left || 100) + w / 2 - 12,
+      top: (options?.top || 100) + h / 2 - 12,
+      name: 'Placeholder Icon',
+    })
+    return rect
+  }
+
+  // Feature 205: Create header bar component
+  addHeaderBar(options?: Partial<any>) {
+    return this.addRect({
+      width: options?.width || 800,
+      height: options?.height || 64,
+      fill: options?.fill || '#1F2937',
+      name: 'Header Bar',
+      ...options,
+    })
+  }
+
+  // Feature 206: Create sidebar component
+  addSidebar(options?: Partial<any>) {
+    return this.addRect({
+      width: options?.width || 240,
+      height: options?.height || 600,
+      fill: options?.fill || '#F9FAFB',
+      stroke: '#E5E7EB',
+      strokeWidth: 1,
+      name: 'Sidebar',
+      ...options,
+    })
+  }
+
+  // Feature 207: Create modal/dialog overlay
+  addModalOverlay(options?: Partial<any>) {
+    const backdrop = this.addRect({
+      width: this.canvas.getWidth(),
+      height: this.canvas.getHeight(),
+      fill: 'rgba(0,0,0,0.5)',
+      left: 0,
+      top: 0,
+      selectable: false,
+      name: 'Modal Backdrop',
+    })
+    const modal = this.addRect({
+      width: options?.width || 400,
+      height: options?.height || 300,
+      fill: '#FFFFFF',
+      rx: 12,
+      ry: 12,
+      shadow: new Shadow({ color: 'rgba(0,0,0,0.25)', blur: 20, offsetX: 0, offsetY: 8 }),
+      left: (this.canvas.getWidth() - (options?.width || 400)) / 2,
+      top: (this.canvas.getHeight() - (options?.height || 300)) / 2,
+      name: 'Modal',
+      ...options,
+    })
+    return modal
+  }
+
+  // Feature 208: Create progress bar
+  addProgressBar(progress: number = 0.6, options?: Partial<any>) {
+    const totalWidth = options?.width || 200
+    const height = options?.height || 8
+    const left = options?.left || 100
+    const top = options?.top || 100
+    this.addRect({
+      width: totalWidth,
+      height,
+      fill: '#E5E7EB',
+      rx: 4,
+      ry: 4,
+      left,
+      top,
+      name: 'Progress Track',
+    })
+    return this.addRect({
+      width: totalWidth * Math.min(1, Math.max(0, progress)),
+      height,
+      fill: options?.fill || '#3B82F6',
+      rx: 4,
+      ry: 4,
+      left,
+      top,
+      name: 'Progress Fill',
+    })
+  }
+
+  // Feature 209: Create toggle/switch UI
+  addToggleSwitch(isOn: boolean = true, options?: Partial<any>) {
+    const left = options?.left || 100
+    const top = options?.top || 100
+    this.addRect({
+      width: 44,
+      height: 24,
+      fill: isOn ? '#34C759' : '#E5E7EB',
+      rx: 12,
+      ry: 12,
+      left,
+      top,
+      name: 'Toggle Track',
+    })
+    return this.addEllipse({
+      width: 20,
+      height: 20,
+      fill: '#FFFFFF',
+      left: left + (isOn ? 22 : 2),
+      top: top + 2,
+      shadow: new Shadow({ color: 'rgba(0,0,0,0.15)', blur: 4, offsetX: 0, offsetY: 2 }),
+      name: 'Toggle Knob',
+    })
+  }
+
+  // Feature 210: Create checkbox UI
+  addCheckbox(checked: boolean = false, options?: Partial<any>) {
+    const left = options?.left || 100
+    const top = options?.top || 100
+    return this.addRect({
+      width: 18,
+      height: 18,
+      fill: checked ? '#007AFF' : '#FFFFFF',
+      stroke: checked ? '#007AFF' : '#D1D5DB',
+      strokeWidth: 2,
+      rx: 4,
+      ry: 4,
+      left,
+      top,
+      name: checked ? 'Checkbox Checked' : 'Checkbox',
+    })
+  }
+
+  // Feature 211: Create radio button UI
+  addRadioButton(selected: boolean = false, options?: Partial<any>) {
+    const left = options?.left || 100
+    const top = options?.top || 100
+    this.addEllipse({
+      width: 18,
+      height: 18,
+      fill: '#FFFFFF',
+      stroke: selected ? '#007AFF' : '#D1D5DB',
+      strokeWidth: 2,
+      left,
+      top,
+      name: 'Radio Outer',
+    })
+    if (selected) {
+      this.addEllipse({
+        width: 10,
+        height: 10,
+        fill: '#007AFF',
+        left: left + 4,
+        top: top + 4,
+        name: 'Radio Inner',
+      })
+    }
+  }
+
+  // Feature 212: Create dropdown/select component
+  addDropdown(text: string = 'Select...', options?: Partial<any>) {
+    const w = options?.width || 200
+    const h = options?.height || 36
+    const left = options?.left || 100
+    const top = options?.top || 100
+    this.addRect({
+      width: w,
+      height: h,
+      fill: '#FFFFFF',
+      stroke: '#D1D5DB',
+      strokeWidth: 1,
+      rx: 6,
+      ry: 6,
+      left,
+      top,
+      name: 'Dropdown',
+    })
+    this.addText({
+      text,
+      fontSize: 14,
+      fill: '#374151',
+      left: left + 12,
+      top: top + 9,
+      name: 'Dropdown Text',
+    })
+    return this.addText({
+      text: '▾',
+      fontSize: 14,
+      fill: '#9CA3AF',
+      left: left + w - 24,
+      top: top + 8,
+      name: 'Dropdown Arrow',
+    })
+  }
+
+  // Feature 213: Create tab bar
+  addTabBar(tabs: string[] = ['Tab 1', 'Tab 2', 'Tab 3'], activeIndex: number = 0, options?: Partial<any>) {
+    const left = options?.left || 100
+    const top = options?.top || 100
+    const tabWidth = options?.tabWidth || 100
+    const h = 40
+    tabs.forEach((tab, i) => {
+      this.addRect({
+        width: tabWidth,
+        height: h,
+        fill: i === activeIndex ? '#FFFFFF' : '#F3F4F6',
+        stroke: '#E5E7EB',
+        strokeWidth: 1,
+        left: left + i * tabWidth,
+        top,
+        name: `Tab ${i + 1}`,
+      })
+      this.addText({
+        text: tab,
+        fontSize: 13,
+        fill: i === activeIndex ? '#007AFF' : '#6B7280',
+        fontWeight: i === activeIndex ? '600' : 'normal',
+        left: left + i * tabWidth + 15,
+        top: top + 12,
+        name: `Tab Label ${i + 1}`,
+      })
+    })
+  }
+
+  // Feature 214: Create breadcrumb navigation
+  addBreadcrumb(items: string[] = ['Home', 'Products', 'Detail'], options?: Partial<any>) {
+    const left = options?.left || 100
+    const top = options?.top || 100
+    let currentX = left
+    items.forEach((item, i) => {
+      this.addText({
+        text: item,
+        fontSize: 13,
+        fill: i === items.length - 1 ? '#111827' : '#6B7280',
+        fontWeight: i === items.length - 1 ? '600' : 'normal',
+        left: currentX,
+        top,
+        name: `Breadcrumb ${i + 1}`,
+      })
+      currentX += item.length * 8 + 5
+      if (i < items.length - 1) {
+        this.addText({
+          text: '/',
+          fontSize: 13,
+          fill: '#D1D5DB',
+          left: currentX,
+          top,
+          name: 'Breadcrumb Separator',
+        })
+        currentX += 12
+      }
+    })
+  }
+
+  // Feature 215: Create tooltip shape
+  addTooltip(text: string = 'Tooltip text', options?: Partial<any>) {
+    const left = options?.left || 100
+    const top = options?.top || 100
+    const padding = 8
+    const charWidth = 7
+    const w = text.length * charWidth + padding * 2
+    this.addRect({
+      width: w,
+      height: 28,
+      fill: '#1F2937',
+      rx: 4,
+      ry: 4,
+      left,
+      top,
+      name: 'Tooltip Background',
+    })
+    return this.addText({
+      text,
+      fontSize: 12,
+      fill: '#FFFFFF',
+      left: left + padding,
+      top: top + 6,
+      name: 'Tooltip Text',
+    })
+  }
+
+  // Feature 216: Create chip/tag component
+  addChip(text: string = 'Tag', options?: Partial<any>) {
+    const left = options?.left || 100
+    const top = options?.top || 100
+    const w = text.length * 8 + 24
+    this.addRect({
+      width: w,
+      height: 26,
+      fill: options?.fill || '#EFF6FF',
+      rx: 13,
+      ry: 13,
+      left,
+      top,
+      name: 'Chip',
+    })
+    return this.addText({
+      text,
+      fontSize: 12,
+      fill: options?.textColor || '#1D4ED8',
+      left: left + 12,
+      top: top + 5,
+      name: 'Chip Text',
+    })
+  }
+
+  // Feature 217: Create icon button (circle with icon placeholder)
+  addIconButton(options?: Partial<any>) {
+    return this.addEllipse({
+      width: options?.size || 40,
+      height: options?.size || 40,
+      fill: options?.fill || '#F3F4F6',
+      stroke: options?.stroke || '',
+      name: 'Icon Button',
+      ...options,
+    })
+  }
+
+  // Feature 218: Create list item
+  addListItem(text: string = 'List item', index: number = 0, options?: Partial<any>) {
+    const left = options?.left || 100
+    const top = (options?.top || 100) + index * 44
+    const w = options?.width || 300
+    this.addRect({
+      width: w,
+      height: 44,
+      fill: '#FFFFFF',
+      stroke: '#F3F4F6',
+      strokeWidth: 1,
+      left,
+      top,
+      name: `List Item ${index + 1}`,
+    })
+    return this.addText({
+      text,
+      fontSize: 14,
+      fill: '#374151',
+      left: left + 16,
+      top: top + 13,
+      name: `List Text ${index + 1}`,
+    })
+  }
+
+  // Feature 219: Create notification badge (small red circle with number)
+  addNotificationBadge(count: number = 3, options?: Partial<any>) {
+    const left = options?.left || 100
+    const top = options?.top || 100
+    const size = count > 9 ? 22 : 18
+    this.addEllipse({
+      width: size,
+      height: size,
+      fill: '#EF4444',
+      left,
+      top,
+      name: 'Notification Badge',
+    })
+    return this.addText({
+      text: count > 99 ? '99+' : String(count),
+      fontSize: 10,
+      fill: '#FFFFFF',
+      fontWeight: 'bold',
+      left: left + (count > 9 ? 3 : 5),
+      top: top + 3,
+      name: 'Badge Count',
+    })
+  }
+
+  // Feature 220: Create status indicator dot
+  addStatusDot(status: 'online' | 'offline' | 'busy' | 'away' = 'online', options?: Partial<any>) {
+    const colors: Record<string, string> = {
+      online: '#22C55E',
+      offline: '#9CA3AF',
+      busy: '#EF4444',
+      away: '#F59E0B',
+    }
+    return this.addEllipse({
+      width: 10,
+      height: 10,
+      fill: colors[status] || '#9CA3AF',
+      name: `Status: ${status}`,
+      ...options,
+    })
+  }
+
+  // Feature 221: Create separator line (horizontal)
+  addHorizontalSeparator(width: number = 300, options?: Partial<any>) {
+    return this.addLine({
+      x1: 0, y1: 0, x2: width, y2: 0,
+      stroke: '#E5E7EB',
+      strokeWidth: 1,
+      name: 'Separator',
+      ...options,
+    })
+  }
+
+  // Feature 222: Create separator line (vertical)
+  addVerticalSeparator(height: number = 300, options?: Partial<any>) {
+    return this.addLine({
+      x1: 0, y1: 0, x2: 0, y2: height,
+      stroke: '#E5E7EB',
+      strokeWidth: 1,
+      name: 'Vertical Separator',
+      ...options,
+    })
+  }
+
+  // Feature 223: Mirror object (create mirrored duplicate)
+  async mirrorHorizontal() {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    const cloned = await active.clone()
+    ;(cloned as any).id = uuidv4()
+    const w = (active.width || 0) * (active.scaleX || 1)
+    cloned.set({
+      left: (active.left || 0) + w + 20,
+      flipX: !active.flipX,
+    })
+    ;(cloned as any).name = ((active as any).name || 'Object') + ' (mirror)'
+    this.canvas.add(cloned)
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 224: Mirror object vertically (create mirrored duplicate)
+  async mirrorVertical() {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    const cloned = await active.clone()
+    ;(cloned as any).id = uuidv4()
+    const h = (active.height || 0) * (active.scaleY || 1)
+    cloned.set({
+      top: (active.top || 0) + h + 20,
+      flipY: !active.flipY,
+    })
+    ;(cloned as any).name = ((active as any).name || 'Object') + ' (mirror)'
+    this.canvas.add(cloned)
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 225: Create a pattern of duplicates
+  async createPattern(rows: number = 3, cols: number = 3, gapX: number = 10, gapY: number = 10) {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    const w = (active.width || 50) * (active.scaleX || 1)
+    const h = (active.height || 50) * (active.scaleY || 1)
+    const baseLeft = active.left || 0
+    const baseTop = active.top || 0
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        if (r === 0 && c === 0) continue
+        const cloned = await active.clone()
+        ;(cloned as any).id = uuidv4()
+        ;(cloned as any).name = ((active as any).name || 'Object') + ` (${r},${c})`
+        cloned.set({
+          left: baseLeft + c * (w + gapX),
+          top: baseTop + r * (h + gapY),
+        })
+        this.canvas.add(cloned)
+      }
+    }
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 226: Create radial pattern
+  async createRadialPattern(count: number = 8, radius: number = 150) {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    const centerX = (active.left || 0)
+    const centerY = (active.top || 0)
+    const angleStep = 360 / count
+    for (let i = 1; i < count; i++) {
+      const angle = (i * angleStep * Math.PI) / 180
+      const cloned = await active.clone()
+      ;(cloned as any).id = uuidv4()
+      ;(cloned as any).name = ((active as any).name || 'Object') + ` (radial ${i})`
+      cloned.set({
+        left: centerX + radius * Math.cos(angle),
+        top: centerY + radius * Math.sin(angle),
+        angle: i * angleStep,
+      })
+      this.canvas.add(cloned)
+    }
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 227: Measure width of selected object
+  getMeasuredWidth(): number {
+    const active = this.canvas.getActiveObject()
+    if (!active) return 0
+    return (active.width || 0) * (active.scaleX || 1)
+  }
+
+  // Feature 228: Measure height of selected object
+  getMeasuredHeight(): number {
+    const active = this.canvas.getActiveObject()
+    if (!active) return 0
+    return (active.height || 0) * (active.scaleY || 1)
+  }
+
+  // Feature 229: Get perimeter of selected object
+  getPerimeter(): number {
+    const w = this.getMeasuredWidth()
+    const h = this.getMeasuredHeight()
+    return 2 * (w + h)
+  }
+
+  // Feature 230: Get area of selected object
+  getArea(): number {
+    return this.getMeasuredWidth() * this.getMeasuredHeight()
+  }
+
+  // Feature 231: Set minimum size constraint
+  setMinSize(minW: number, minH: number) {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    ;(active as any)._minWidth = minW
+    ;(active as any)._minHeight = minH
+  }
+
+  // Feature 232: Set maximum size constraint
+  setMaxSize(maxW: number, maxH: number) {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    ;(active as any)._maxWidth = maxW
+    ;(active as any)._maxHeight = maxH
+  }
+
+  // Feature 233: Pin object to canvas corner
+  pinToCorner(corner: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right') {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    const w = (active.width || 0) * (active.scaleX || 1)
+    const h = (active.height || 0) * (active.scaleY || 1)
+    const cw = this.canvas.getWidth()
+    const ch = this.canvas.getHeight()
+    const margin = 20
+    switch (corner) {
+      case 'top-left': active.set({ left: margin, top: margin }); break
+      case 'top-right': active.set({ left: cw - w - margin, top: margin }); break
+      case 'bottom-left': active.set({ left: margin, top: ch - h - margin }); break
+      case 'bottom-right': active.set({ left: cw - w - margin, top: ch - h - margin }); break
+    }
+    active.setCoords()
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 234: Center object on canvas horizontally only
+  centerX() {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    const w = (active.width || 0) * (active.scaleX || 1)
+    active.set('left', (this.canvas.getWidth() - w) / 2)
+    active.setCoords()
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 235: Center object on canvas vertically only
+  centerY() {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    const h = (active.height || 0) * (active.scaleY || 1)
+    active.set('top', (this.canvas.getHeight() - h) / 2)
+    active.setCoords()
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 236: Flatten rotation (reset angle but keep visual appearance)
+  flattenRotation() {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    const angle = active.angle || 0
+    if (angle === 0) return
+    active.rotate(0)
+    active.setCoords()
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 237: Make object square (equalize width and height)
+  makeSquare() {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    const w = (active.width || 0) * (active.scaleX || 1)
+    const h = (active.height || 0) * (active.scaleY || 1)
+    const size = Math.max(w, h)
+    active.set({
+      scaleX: size / (active.width || 1),
+      scaleY: size / (active.height || 1),
+    })
+    active.setCoords()
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 238: Double object size
+  doubleSize() {
+    this.scaleBy(2)
+  }
+
+  // Feature 239: Halve object size
+  halveSize() {
+    this.scaleBy(0.5)
+  }
+
+  // Feature 240: Rotate object to face another object
+  rotateToFace(targetId: string) {
+    const active = this.canvas.getActiveObject()
+    const target = this.getObjectById(targetId)
+    if (!active || !target) return
+    const c1 = active.getCenterPoint()
+    const c2 = target.getCenterPoint()
+    const angle = Math.atan2(c2.y - c1.y, c2.x - c1.x) * 180 / Math.PI
+    active.set('angle', angle)
+    active.setCoords()
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 241: Set object as non-interactive (visible but can't select)
+  makeNonInteractive() {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    active.set({ selectable: false, evented: false })
+    this.canvas.discardActiveObject()
+    this.canvas.renderAll()
+  }
+
+  // Feature 242: Set object as interactive
+  makeInteractive(id: string) {
+    const obj = this.getObjectById(id)
+    if (!obj) return
+    obj.set({ selectable: true, evented: true })
+    this.canvas.renderAll()
+  }
+
+  // Feature 243: Get object opacity
+  getOpacity(): number {
+    const active = this.canvas.getActiveObject()
+    return active?.opacity || 1
+  }
+
+  // Feature 244: Get object angle/rotation
+  getRotation(): number {
+    const active = this.canvas.getActiveObject()
+    return active?.angle || 0
+  }
+
+  // Feature 245: Get object scale
+  getScale(): { scaleX: number; scaleY: number } {
+    const active = this.canvas.getActiveObject()
+    return { scaleX: active?.scaleX || 1, scaleY: active?.scaleY || 1 }
+  }
+
+  // Feature 246: Get current fill color
+  getFillColor(): string | null {
+    const active = this.canvas.getActiveObject()
+    if (!active) return null
+    return typeof active.fill === 'string' ? active.fill : null
+  }
+
+  // Feature 247: Get current stroke color
+  getStrokeColor(): string | null {
+    const active = this.canvas.getActiveObject()
+    if (!active) return null
+    return typeof active.stroke === 'string' ? active.stroke : null
+  }
+
+  // Feature 248: Get stroke width
+  getStrokeWidth(): number {
+    const active = this.canvas.getActiveObject()
+    return active?.strokeWidth || 0
+  }
+
+  // Feature 249: Check if object has shadow
+  hasShadow(): boolean {
+    const active = this.canvas.getActiveObject()
+    return !!active?.shadow
+  }
+
+  // Feature 250: Remove all shadows from all objects
+  removeAllShadows() {
+    this.canvas.getObjects().forEach(o => {
+      if (!(o as any).isGrid) {
+        o.set('shadow', null)
+      }
+    })
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 251: Apply shadow to all selected objects
+  applyShadowToAll(shadow: { color: string; blur: number; offsetX: number; offsetY: number }) {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    const s = new Shadow(shadow)
+    if (active instanceof ActiveSelection) {
+      active.getObjects().forEach(o => o.set('shadow', s))
+    } else {
+      active.set('shadow', s)
+    }
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 252: Create a simple chart bar
+  addChartBar(values: number[] = [40, 60, 30, 80, 50], options?: Partial<any>) {
+    const left = options?.left || 100
+    const top = options?.top || 100
+    const barWidth = options?.barWidth || 30
+    const gap = options?.gap || 8
+    const maxHeight = options?.maxHeight || 150
+    const maxVal = Math.max(...values)
+    const colors = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4']
+    values.forEach((val, i) => {
+      const h = (val / maxVal) * maxHeight
+      this.addRect({
+        width: barWidth,
+        height: h,
+        fill: colors[i % colors.length],
+        left: left + i * (barWidth + gap),
+        top: top + maxHeight - h,
+        rx: 2,
+        ry: 2,
+        name: `Bar ${i + 1}`,
+      })
+    })
+  }
+
+  // Feature 253: Create pie chart slice indicator
+  addPieSlice(percentage: number = 25, options?: Partial<any>) {
+    const size = options?.size || 100
+    return this.addEllipse({
+      width: size,
+      height: size,
+      fill: options?.fill || '#3B82F6',
+      name: `Pie ${percentage}%`,
+      ...options,
+    })
+  }
+
+  // Feature 254: Create color swatch
+  addColorSwatch(color: string = '#3B82F6', options?: Partial<any>) {
+    return this.addRect({
+      width: options?.size || 40,
+      height: options?.size || 40,
+      fill: color,
+      rx: 4,
+      ry: 4,
+      stroke: '#E5E7EB',
+      strokeWidth: 1,
+      name: `Swatch ${color}`,
+      ...options,
+    })
+  }
+
+  // Feature 255: Create color palette row
+  addColorPalette(colors: string[] = ['#EF4444', '#F59E0B', '#22C55E', '#3B82F6', '#8B5CF6'], options?: Partial<any>) {
+    const left = options?.left || 100
+    const top = options?.top || 100
+    const size = options?.size || 32
+    const gap = options?.gap || 4
+    colors.forEach((color, i) => {
+      this.addColorSwatch(color, {
+        size,
+        left: left + i * (size + gap),
+        top,
+      })
+    })
+  }
+
+  // Feature 256: Create smartphone frame
+  addPhoneFrame(options?: Partial<any>) {
+    const left = options?.left || 100
+    const top = options?.top || 100
+    const w = options?.width || 375
+    const h = options?.height || 812
+    // Phone body
+    this.addRect({
+      width: w + 20,
+      height: h + 40,
+      fill: '#1F2937',
+      rx: 40,
+      ry: 40,
+      left: left - 10,
+      top: top - 20,
+      name: 'Phone Frame',
+    })
+    // Screen
+    return this.addRect({
+      width: w,
+      height: h,
+      fill: '#FFFFFF',
+      rx: 30,
+      ry: 30,
+      left,
+      top,
+      name: 'Phone Screen',
+    })
+  }
+
+  // Feature 257: Create browser frame
+  addBrowserFrame(options?: Partial<any>) {
+    const left = options?.left || 100
+    const top = options?.top || 100
+    const w = options?.width || 800
+    const h = options?.height || 600
+    // Browser chrome
+    this.addRect({
+      width: w,
+      height: 36,
+      fill: '#F3F4F6',
+      rx: 8,
+      ry: 8,
+      left,
+      top,
+      name: 'Browser Chrome',
+    })
+    // Traffic lights
+    const dotY = top + 14
+    this.addEllipse({ width: 10, height: 10, fill: '#EF4444', left: left + 12, top: dotY, name: 'Close' })
+    this.addEllipse({ width: 10, height: 10, fill: '#F59E0B', left: left + 28, top: dotY, name: 'Minimize' })
+    this.addEllipse({ width: 10, height: 10, fill: '#22C55E', left: left + 44, top: dotY, name: 'Maximize' })
+    // Content area
+    return this.addRect({
+      width: w,
+      height: h - 36,
+      fill: '#FFFFFF',
+      left,
+      top: top + 36,
+      name: 'Browser Content',
+    })
+  }
+
+  // Feature 258: Create tablet frame
+  addTabletFrame(options?: Partial<any>) {
+    const left = options?.left || 100
+    const top = options?.top || 100
+    const w = options?.width || 768
+    const h = options?.height || 1024
+    this.addRect({
+      width: w + 30,
+      height: h + 50,
+      fill: '#374151',
+      rx: 24,
+      ry: 24,
+      left: left - 15,
+      top: top - 25,
+      name: 'Tablet Frame',
+    })
+    return this.addRect({
+      width: w,
+      height: h,
+      fill: '#FFFFFF',
+      rx: 4,
+      ry: 4,
+      left,
+      top,
+      name: 'Tablet Screen',
+    })
+  }
+
+  // Feature 259: Create desktop/laptop frame
+  addDesktopFrame(options?: Partial<any>) {
+    const left = options?.left || 100
+    const top = options?.top || 100
+    const w = options?.width || 1280
+    const h = options?.height || 800
+    // Monitor
+    this.addRect({
+      width: w + 40,
+      height: h + 40,
+      fill: '#1F2937',
+      rx: 12,
+      ry: 12,
+      left: left - 20,
+      top: top - 20,
+      name: 'Monitor Frame',
+    })
+    // Screen
+    this.addRect({
+      width: w,
+      height: h,
+      fill: '#FFFFFF',
+      left,
+      top,
+      name: 'Monitor Screen',
+    })
+    // Stand
+    return this.addRect({
+      width: 200,
+      height: 60,
+      fill: '#4B5563',
+      rx: 4,
+      ry: 4,
+      left: left + w / 2 - 100,
+      top: top + h + 30,
+      name: 'Monitor Stand',
+    })
+  }
+
+  // Feature 260: Create loading spinner placeholder
+  addLoadingSpinner(options?: Partial<any>) {
+    return this.addEllipse({
+      width: options?.size || 32,
+      height: options?.size || 32,
+      fill: 'transparent',
+      stroke: options?.color || '#3B82F6',
+      strokeWidth: 3,
+      strokeDashArray: [20, 10],
+      name: 'Loading Spinner',
+      ...options,
+    })
+  }
+
+  // Feature 261: Create skeleton loading placeholder
+  addSkeleton(options?: Partial<any>) {
+    return this.addRect({
+      width: options?.width || 200,
+      height: options?.height || 20,
+      fill: '#E5E7EB',
+      rx: 4,
+      ry: 4,
+      name: 'Skeleton',
+      ...options,
+    })
+  }
+
+  // Feature 262: Create a text link style
+  addTextLink(text: string = 'Click here', options?: Partial<any>) {
+    return this.addText({
+      text,
+      fontSize: 14,
+      fill: '#2563EB',
+      underline: true,
+      name: 'Link',
+      ...options,
+    })
+  }
+
+  // Feature 263: Create a code block placeholder
+  addCodeBlock(code: string = 'const x = 1;', options?: Partial<any>) {
+    const left = options?.left || 100
+    const top = options?.top || 100
+    const w = options?.width || 300
+    const h = options?.height || 100
+    this.addRect({
+      width: w,
+      height: h,
+      fill: '#1E1E1E',
+      rx: 8,
+      ry: 8,
+      left,
+      top,
+      name: 'Code Block',
+    })
+    return this.addText({
+      text: code,
+      fontSize: 13,
+      fill: '#D4D4D4',
+      fontFamily: 'monospace',
+      left: left + 16,
+      top: top + 16,
+      name: 'Code Text',
+    })
+  }
+
+  // Feature 264: Create a blockquote
+  addBlockquote(text: string = 'Quote text here', options?: Partial<any>) {
+    const left = options?.left || 100
+    const top = options?.top || 100
+    this.addRect({
+      width: 4,
+      height: 40,
+      fill: '#6B7280',
+      left,
+      top,
+      name: 'Quote Bar',
+    })
+    return this.addText({
+      text,
+      fontSize: 16,
+      fill: '#4B5563',
+      fontStyle: 'italic',
+      left: left + 16,
+      top: top + 8,
+      name: 'Quote Text',
+    })
+  }
+
+  // Feature 265: Create ordered list items
+  addOrderedList(items: string[] = ['First item', 'Second item', 'Third item'], options?: Partial<any>) {
+    const left = options?.left || 100
+    const top = options?.top || 100
+    const lineHeight = 28
+    items.forEach((item, i) => {
+      this.addText({
+        text: `${i + 1}. ${item}`,
+        fontSize: 14,
+        fill: '#374151',
+        left,
+        top: top + i * lineHeight,
+        name: `List ${i + 1}`,
+      })
+    })
+  }
+
+  // Feature 266: Create unordered list items
+  addUnorderedList(items: string[] = ['First item', 'Second item', 'Third item'], options?: Partial<any>) {
+    const left = options?.left || 100
+    const top = options?.top || 100
+    const lineHeight = 28
+    items.forEach((item, i) => {
+      this.addText({
+        text: `• ${item}`,
+        fontSize: 14,
+        fill: '#374151',
+        left,
+        top: top + i * lineHeight,
+        name: `Bullet ${i + 1}`,
+      })
+    })
+  }
+
+  // Feature 267: Create table grid
+  addTableGrid(rows: number = 4, cols: number = 3, options?: Partial<any>) {
+    const left = options?.left || 100
+    const top = options?.top || 100
+    const cellW = options?.cellWidth || 120
+    const cellH = options?.cellHeight || 36
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        this.addRect({
+          width: cellW,
+          height: cellH,
+          fill: r === 0 ? '#F3F4F6' : '#FFFFFF',
+          stroke: '#E5E7EB',
+          strokeWidth: 1,
+          left: left + c * cellW,
+          top: top + r * cellH,
+          name: `Cell ${r + 1}-${c + 1}`,
+        })
+      }
+    }
+  }
+
+  // Feature 268: Create form layout
+  addFormLayout(fields: string[] = ['Name', 'Email', 'Message'], options?: Partial<any>) {
+    const left = options?.left || 100
+    let currentY = options?.top || 100
+    fields.forEach(field => {
+      this.addText({
+        text: field,
+        fontSize: 13,
+        fill: '#374151',
+        fontWeight: '500',
+        left,
+        top: currentY,
+        name: `Label: ${field}`,
+      })
+      currentY += 22
+      this.addInputField({
+        width: options?.width || 300,
+        left,
+        top: currentY,
+        placeholder: `Enter ${field.toLowerCase()}...`,
+      })
+      currentY += 52
+    })
+    this.addButton('Submit', {
+      left,
+      top: currentY,
+      width: options?.width || 300,
+    })
+  }
+
+  // Feature 269: Create social media icon set placeholders
+  addSocialIcons(options?: Partial<any>) {
+    const left = options?.left || 100
+    const top = options?.top || 100
+    const size = 32
+    const gap = 12
+    const labels = ['Tw', 'Fb', 'Ig', 'Li', 'Gh']
+    const colors = ['#1DA1F2', '#4267B2', '#E4405F', '#0A66C2', '#333333']
+    labels.forEach((label, i) => {
+      const x = left + i * (size + gap)
+      this.addEllipse({
+        width: size,
+        height: size,
+        fill: colors[i],
+        left: x,
+        top,
+        name: label,
+      })
+      this.addText({
+        text: label,
+        fontSize: 10,
+        fill: '#FFFFFF',
+        fontWeight: 'bold',
+        left: x + 8,
+        top: top + 10,
+        name: `${label} Label`,
+      })
+    })
+  }
+
+  // Feature 270: Create pricing card
+  addPricingCard(plan: string = 'Pro', price: string = '$29', features: string[] = ['Feature 1', 'Feature 2'], options?: Partial<any>) {
+    const left = options?.left || 100
+    const top = options?.top || 100
+    const w = options?.width || 280
+    this.addCard({ width: w, height: 350, left, top })
+    this.addText({ text: plan, fontSize: 20, fontWeight: 'bold', fill: '#111827', left: left + 24, top: top + 24, name: 'Plan Name' })
+    this.addText({ text: price, fontSize: 36, fontWeight: 'bold', fill: '#111827', left: left + 24, top: top + 56, name: 'Price' })
+    this.addText({ text: '/month', fontSize: 14, fill: '#6B7280', left: left + 24 + price.length * 20, top: top + 72, name: 'Period' })
+    this.addDivider({ left: left + 24, top: top + 110, width: w - 48 })
+    features.forEach((f, i) => {
+      this.addText({ text: `✓ ${f}`, fontSize: 14, fill: '#374151', left: left + 24, top: top + 130 + i * 28, name: `Feature ${i + 1}` })
+    })
+    this.addButton('Get Started', { left: left + 24, top: top + 290, width: w - 48 })
+  }
+
+  // Feature 271: Create testimonial card
+  addTestimonialCard(quote: string = 'Great product!', author: string = 'John Doe', options?: Partial<any>) {
+    const left = options?.left || 100
+    const top = options?.top || 100
+    const w = options?.width || 320
+    this.addCard({ width: w, height: 180, left, top })
+    this.addText({ text: `"${quote}"`, fontSize: 14, fill: '#4B5563', fontStyle: 'italic', left: left + 24, top: top + 24, name: 'Quote' })
+    this.addAvatarPlaceholder({ left: left + 24, top: top + 120, size: 36 })
+    this.addText({ text: author, fontSize: 13, fontWeight: '600', fill: '#111827', left: left + 72, top: top + 130, name: 'Author' })
+  }
+
+  // Feature 272: Create feature card with icon
+  addFeatureCard(title: string = 'Feature', description: string = 'Description text', options?: Partial<any>) {
+    const left = options?.left || 100
+    const top = options?.top || 100
+    const w = options?.width || 280
+    this.addCard({ width: w, height: 200, left, top })
+    this.addEllipse({ width: 48, height: 48, fill: '#EFF6FF', left: left + 24, top: top + 24, name: 'Icon Bg' })
+    this.addText({ text: title, fontSize: 18, fontWeight: 'bold', fill: '#111827', left: left + 24, top: top + 88, name: 'Feature Title' })
+    this.addText({ text: description, fontSize: 14, fill: '#6B7280', left: left + 24, top: top + 118, name: 'Feature Desc' })
+  }
+
+  // Feature 273: Create hero section
+  addHeroSection(options?: Partial<any>) {
+    const left = options?.left || 0
+    const top = options?.top || 0
+    const w = options?.width || 1200
+    const h = options?.height || 500
+    this.addRect({ width: w, height: h, fill: '#F8FAFC', left, top, name: 'Hero Bg' })
+    this.addText({ text: 'Your Product Name', fontSize: 48, fontWeight: 'bold', fill: '#0F172A', left: left + w / 4, top: top + h / 3, name: 'Hero Title' })
+    this.addText({ text: 'A brief description of your amazing product goes here.', fontSize: 18, fill: '#64748B', left: left + w / 4, top: top + h / 3 + 64, name: 'Hero Subtitle' })
+    this.addButton('Get Started', { left: left + w / 4, top: top + h / 3 + 120, width: 160, height: 48 })
+  }
+
+  // Feature 274: Create navigation bar
+  addNavBar(links: string[] = ['Home', 'About', 'Products', 'Contact'], options?: Partial<any>) {
+    const left = options?.left || 0
+    const top = options?.top || 0
+    const w = options?.width || 1200
+    this.addRect({ width: w, height: 64, fill: '#FFFFFF', stroke: '#E5E7EB', strokeWidth: 1, left, top, name: 'Nav Bar' })
+    this.addText({ text: 'Logo', fontSize: 18, fontWeight: 'bold', fill: '#111827', left: left + 24, top: top + 20, name: 'Logo' })
+    let linkX = left + w - 100 * links.length
+    links.forEach(link => {
+      this.addText({ text: link, fontSize: 14, fill: '#6B7280', left: linkX, top: top + 22, name: `Nav: ${link}` })
+      linkX += 100
+    })
+  }
+
+  // Feature 275: Create footer section
+  addFooter(options?: Partial<any>) {
+    const left = options?.left || 0
+    const top = options?.top || 800
+    const w = options?.width || 1200
+    this.addRect({ width: w, height: 200, fill: '#1F2937', left, top, name: 'Footer Bg' })
+    this.addText({ text: '© 2024 Company Name', fontSize: 14, fill: '#9CA3AF', left: left + 24, top: top + 160, name: 'Copyright' })
+    this.addText({ text: 'About  |  Terms  |  Privacy  |  Contact', fontSize: 13, fill: '#D1D5DB', left: left + 24, top: top + 24, name: 'Footer Links' })
+  }
+
+  // Feature 276: Create section heading with line
+  addSectionHeading(text: string = 'Section Title', options?: Partial<any>) {
+    const left = options?.left || 100
+    const top = options?.top || 100
+    this.addText({ text, fontSize: 24, fontWeight: 'bold', fill: '#111827', left, top, name: 'Section Heading' })
+    this.addDivider({ left, top: top + 36, width: options?.width || 200 })
+  }
+
+  // Feature 277: Create step/process indicator
+  addStepIndicator(steps: string[] = ['Step 1', 'Step 2', 'Step 3'], currentStep: number = 0, options?: Partial<any>) {
+    const left = options?.left || 100
+    const top = options?.top || 100
+    const gap = options?.gap || 120
+    steps.forEach((step, i) => {
+      const x = left + i * gap
+      this.addEllipse({
+        width: 32,
+        height: 32,
+        fill: i <= currentStep ? '#3B82F6' : '#E5E7EB',
+        left: x,
+        top,
+        name: `Step ${i + 1} Circle`,
+      })
+      this.addText({
+        text: String(i + 1),
+        fontSize: 14,
+        fontWeight: 'bold',
+        fill: i <= currentStep ? '#FFFFFF' : '#9CA3AF',
+        left: x + 10,
+        top: top + 8,
+        name: `Step ${i + 1} Number`,
+      })
+      this.addText({
+        text: step,
+        fontSize: 12,
+        fill: '#6B7280',
+        left: x,
+        top: top + 40,
+        name: `Step ${i + 1} Label`,
+      })
+      if (i < steps.length - 1) {
+        this.addLine({
+          x1: 0, y1: 0, x2: gap - 40, y2: 0,
+          stroke: i < currentStep ? '#3B82F6' : '#E5E7EB',
+          strokeWidth: 2,
+          left: x + 36,
+          top: top + 16,
+          name: `Step Line ${i + 1}`,
+        })
+      }
+    })
+  }
+
+  // Feature 278: Create star rating display
+  addStarRating(rating: number = 4, maxStars: number = 5, options?: Partial<any>) {
+    const left = options?.left || 100
+    const top = options?.top || 100
+    const size = options?.size || 24
+    for (let i = 0; i < maxStars; i++) {
+      this.addStar({
+        left: left + i * (size + 4),
+        top,
+        width: size,
+        height: size,
+        fill: i < rating ? '#F59E0B' : '#D1D5DB',
+        name: `Star ${i + 1}`,
+      })
+    }
+  }
+
+  // Feature 279: Create timeline item
+  addTimelineItem(title: string, description: string, index: number = 0, options?: Partial<any>) {
+    const left = options?.left || 100
+    const top = (options?.top || 100) + index * 100
+    // Dot
+    this.addEllipse({ width: 12, height: 12, fill: '#3B82F6', left: left, top: top + 4, name: 'Timeline Dot' })
+    // Line
+    if (index > 0) {
+      this.addLine({ x1: 0, y1: 0, x2: 0, y2: 80, stroke: '#D1D5DB', strokeWidth: 2, left: left + 5, top: top - 80, name: 'Timeline Line' })
+    }
+    // Text
+    this.addText({ text: title, fontSize: 16, fontWeight: '600', fill: '#111827', left: left + 24, top, name: 'Timeline Title' })
+    this.addText({ text: description, fontSize: 14, fill: '#6B7280', left: left + 24, top: top + 24, name: 'Timeline Desc' })
+  }
+
+  // Feature 280: Create stat/metric display
+  addStatDisplay(value: string = '1,234', label: string = 'Total Users', options?: Partial<any>) {
+    const left = options?.left || 100
+    const top = options?.top || 100
+    this.addText({ text: value, fontSize: 36, fontWeight: 'bold', fill: '#111827', left, top, name: 'Stat Value' })
+    this.addText({ text: label, fontSize: 14, fill: '#6B7280', left, top: top + 44, name: 'Stat Label' })
+  }
+
+  // Feature 281: Create profile card
+  addProfileCard(name: string = 'John Doe', role: string = 'Designer', options?: Partial<any>) {
+    const left = options?.left || 100
+    const top = options?.top || 100
+    const w = options?.width || 240
+    this.addCard({ width: w, height: 280, left, top })
+    this.addAvatarPlaceholder({ left: left + w / 2 - 36, top: top + 24, size: 72 })
+    this.addText({ text: name, fontSize: 18, fontWeight: 'bold', fill: '#111827', left: left + 24, top: top + 120, name: 'Profile Name' })
+    this.addText({ text: role, fontSize: 14, fill: '#6B7280', left: left + 24, top: top + 146, name: 'Profile Role' })
+    this.addDivider({ left: left + 24, top: top + 180, width: w - 48 })
+    this.addButton('Follow', { left: left + 24, top: top + 210, width: w - 48, height: 36 })
+  }
+
+  // Feature 282: Create notification/alert banner
+  addAlertBanner(message: string = 'This is an alert', type: 'info' | 'warning' | 'error' | 'success' = 'info', options?: Partial<any>) {
+    const colors: Record<string, { bg: string; text: string; border: string }> = {
+      info: { bg: '#EFF6FF', text: '#1E40AF', border: '#93C5FD' },
+      warning: { bg: '#FFFBEB', text: '#92400E', border: '#FCD34D' },
+      error: { bg: '#FEF2F2', text: '#991B1B', border: '#FCA5A5' },
+      success: { bg: '#F0FDF4', text: '#166534', border: '#86EFAC' },
+    }
+    const c = colors[type]
+    const left = options?.left || 100
+    const top = options?.top || 100
+    const w = options?.width || 400
+    this.addRect({ width: w, height: 44, fill: c.bg, stroke: c.border, strokeWidth: 1, rx: 8, ry: 8, left, top, name: `Alert: ${type}` })
+    this.addText({ text: message, fontSize: 14, fill: c.text, left: left + 16, top: top + 13, name: 'Alert Text' })
+  }
+
+  // Feature 283: Create empty state illustration placeholder
+  addEmptyState(message: string = 'No items found', options?: Partial<any>) {
+    const left = options?.left || 100
+    const top = options?.top || 100
+    const w = options?.width || 300
+    this.addEllipse({ width: 80, height: 80, fill: '#F3F4F6', left: left + w / 2 - 40, top, name: 'Empty State Icon' })
+    this.addText({ text: message, fontSize: 16, fill: '#6B7280', left: left + w / 4, top: top + 100, name: 'Empty State Text' })
+  }
+
+  // Feature 284: Sort selected objects by left position
+  sortByPosition(direction: 'left' | 'top' = 'left') {
+    const active = this.canvas.getActiveObject()
+    if (!active || !(active instanceof ActiveSelection)) return
+    const objects = active.getObjects()
+    const sorted = [...objects].sort((a, b) => (a[direction] || 0) - (b[direction] || 0))
+    sorted.forEach((obj, i) => {
+      this.canvas.moveTo(obj, i)
+    })
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 285: Reverse layer order of selected objects
+  reverseLayerOrder() {
+    const active = this.canvas.getActiveObject()
+    if (!active || !(active instanceof ActiveSelection)) return
+    const objects = active.getObjects()
+    const indices = objects.map(o => this.canvas.getObjects().indexOf(o)).sort((a, b) => a - b)
+    const reversed = [...objects].reverse()
+    reversed.forEach((obj, i) => {
+      this.canvas.moveTo(obj, indices[i])
+    })
+    this.canvas.renderAll()
+    this.saveHistory()
+  }
+
+  // Feature 286: Create a simple line connector between two objects
+  addConnector(id1: string, id2: string, options?: Partial<any>) {
+    const obj1 = this.getObjectById(id1)
+    const obj2 = this.getObjectById(id2)
+    if (!obj1 || !obj2) return null
+    const c1 = obj1.getCenterPoint()
+    const c2 = obj2.getCenterPoint()
+    return this.addLine({
+      x1: c1.x,
+      y1: c1.y,
+      x2: c2.x,
+      y2: c2.y,
+      stroke: options?.stroke || '#9CA3AF',
+      strokeWidth: options?.strokeWidth || 1,
+      strokeDashArray: options?.dashed ? [5, 5] : undefined,
+      name: 'Connector',
+      ...options,
+    })
+  }
+
+  // Feature 287: Create an arrow connector between two objects
+  addArrowConnector(id1: string, id2: string, options?: Partial<any>) {
+    const obj1 = this.getObjectById(id1)
+    const obj2 = this.getObjectById(id2)
+    if (!obj1 || !obj2) return null
+    const c1 = obj1.getCenterPoint()
+    const c2 = obj2.getCenterPoint()
+    return this.addArrow({
+      x1: c1.x,
+      y1: c1.y,
+      x2: c2.x,
+      y2: c2.y,
+      stroke: options?.stroke || '#6B7280',
+      strokeWidth: options?.strokeWidth || 2,
+      name: 'Arrow Connector',
+      ...options,
+    })
+  }
+
+  // Feature 288: Create flow chart box
+  addFlowchartBox(text: string = 'Process', type: 'process' | 'decision' | 'terminal' = 'process', options?: Partial<any>) {
+    const left = options?.left || 100
+    const top = options?.top || 100
+    if (type === 'terminal') {
+      this.addRect({ width: 140, height: 50, fill: '#DBEAFE', rx: 25, ry: 25, left, top, name: 'Terminal' })
+    } else if (type === 'decision') {
+      // Diamond shape using polygon
+      this.addDiamond({ width: 100, height: 80, fill: '#FEF3C7', left, top, ...options })
+    } else {
+      this.addRect({ width: 140, height: 50, fill: '#E0E7FF', rx: 4, ry: 4, left, top, name: 'Process' })
+    }
+    this.addText({ text, fontSize: 13, fill: '#1F2937', left: left + 20, top: top + 16, name: `Flow: ${text}` })
+  }
+
+  // Feature 289: Constrain proportions during resize
+  constrainProportions(constrained: boolean = true) {
+    const active = this.canvas.getActiveObject()
+    if (!active) return
+    ;(active as any).lockUniScaling = constrained
+    this.canvas.renderAll()
+  }
+
+  // Feature 290: Create ruler/measurement line
+  addMeasurementLine(length: number = 200, options?: Partial<any>) {
+    const left = options?.left || 100
+    const top = options?.top || 100
+    // Main line
+    this.addLine({ x1: 0, y1: 0, x2: length, y2: 0, stroke: '#EF4444', strokeWidth: 1, left, top, name: 'Measurement Line' })
+    // End caps
+    this.addLine({ x1: 0, y1: -5, x2: 0, y2: 5, stroke: '#EF4444', strokeWidth: 1, left, top, name: 'Measure Start' })
+    this.addLine({ x1: 0, y1: -5, x2: 0, y2: 5, stroke: '#EF4444', strokeWidth: 1, left: left + length, top, name: 'Measure End' })
+    // Label
+    this.addText({ text: `${length}px`, fontSize: 11, fill: '#EF4444', left: left + length / 2 - 15, top: top - 16, name: 'Measure Label' })
+  }
+
+  // Feature 291: Create annotation arrow
+  addAnnotationArrow(text: string = 'Note', options?: Partial<any>) {
+    const left = options?.left || 100
+    const top = options?.top || 100
+    this.addArrow({ x1: 0, y1: 0, x2: 80, y2: 40, stroke: '#EF4444', strokeWidth: 2, left, top, name: 'Annotation Arrow' })
+    this.addText({ text, fontSize: 12, fill: '#EF4444', left: left + 85, top: top + 35, name: 'Annotation Text' })
+  }
+
+  // Feature 292: Get all object IDs
+  getAllObjectIds(): string[] {
+    return this.canvas.getObjects()
+      .filter((o: any) => !o.isGrid && !o.isPreview)
+      .map((o: any) => o.id as string)
+      .filter(Boolean)
+  }
+
+  // Feature 293: Get all object names
+  getAllObjectNames(): string[] {
+    return this.canvas.getObjects()
+      .filter((o: any) => !o.isGrid && !o.isPreview)
+      .map((o: any) => (o.name || o.type || 'unnamed') as string)
+  }
+
+  // Feature 294: Find objects by name pattern
+  findObjectsByName(pattern: string): FabricObject[] {
+    const lower = pattern.toLowerCase()
+    return this.canvas.getObjects().filter((o: any) =>
+      !o.isGrid && !o.isPreview && (o.name || '').toLowerCase().includes(lower)
+    )
+  }
+
+  // Feature 295: Select objects by name pattern
+  selectByName(pattern: string) {
+    const objects = this.findObjectsByName(pattern)
+    if (objects.length === 0) return
+    if (objects.length === 1) {
+      this.canvas.setActiveObject(objects[0])
+    } else {
+      const selection = new ActiveSelection(objects, { canvas: this.canvas })
+      this.canvas.setActiveObject(selection)
+    }
+    this.canvas.renderAll()
+  }
+
+  // Feature 296: Duplicate and offset in a specific direction
+  async duplicateInDirection(direction: 'right' | 'down' | 'left' | 'up', offset: number = 20) {
+    const dx = direction === 'right' ? offset : direction === 'left' ? -offset : 0
+    const dy = direction === 'down' ? offset : direction === 'up' ? -offset : 0
+    await this.duplicateToOffset(dx, dy)
+  }
+
+  // Feature 297: Set canvas interactive mode
+  setInteractiveMode(interactive: boolean) {
+    this.canvas.selection = interactive
+    this.canvas.getObjects().forEach(o => {
+      if (!(o as any).isGrid) {
+        o.set({ selectable: interactive, evented: interactive })
+      }
+    })
+    this.canvas.renderAll()
+  }
+
+  // Feature 298: Get selected object's bounding rect
+  getSelectionBounds(): { left: number; top: number; width: number; height: number } | null {
+    const active = this.canvas.getActiveObject()
+    if (!active) return null
+    return active.getBoundingRect()
+  }
+
+  // Feature 299: Create a simple wireframe layout
+  addWireframeLayout(options?: Partial<any>) {
+    const left = options?.left || 50
+    const top = options?.top || 50
+    const w = options?.width || 800
+    // Header
+    this.addWireframeRect({ width: w, height: 60, left, top })
+    // Sidebar
+    this.addWireframeRect({ width: 200, height: 500, left, top: top + 70 })
+    // Content area
+    this.addWireframeRect({ width: w - 210, height: 500, left: left + 210, top: top + 70 })
+    // Footer
+    this.addWireframeRect({ width: w, height: 60, left, top: top + 580 })
+  }
+
+  // Feature 300: Create a sticky note
+  addStickyNote(text: string = 'Note', options?: Partial<any>) {
+    const colors = ['#FEF3C7', '#DBEAFE', '#D1FAE5', '#FCE7F3', '#EDE9FE']
+    const color = options?.color || colors[Math.floor(Math.random() * colors.length)]
+    const left = options?.left || 100
+    const top = options?.top || 100
+    this.addRect({
+      width: 150,
+      height: 150,
+      fill: color,
+      shadow: new Shadow({ color: 'rgba(0,0,0,0.1)', blur: 5, offsetX: 2, offsetY: 2 }),
+      left,
+      top,
+      name: 'Sticky Note',
+    })
+    this.addText({
+      text,
+      fontSize: 14,
+      fill: '#374151',
+      left: left + 12,
+      top: top + 12,
+      name: 'Sticky Text',
+    })
+  }
+
   // DISPOSE
   dispose() {
     this.canvas.dispose()

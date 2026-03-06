@@ -1,0 +1,6 @@
+'use client'
+interface Props { type: string; position: string; onTypeChange: (t: string) => void; onPositionChange: (p: string) => void }
+// Feature 578: ListStyleEditor
+export default function ListStyleEditor({ type, position, onTypeChange, onPositionChange }: Props) {
+  return (<div className="p-3 border-b"><div className="text-xs font-semibold text-gray-500 uppercase mb-2">List Style</div><div className="mb-2"><label className="text-xs text-gray-400">Type</label><select value={type} onChange={e => onTypeChange(e.target.value)} className="w-full text-xs border rounded px-2 py-1"><option>none</option><option>disc</option><option>circle</option><option>square</option><option>decimal</option><option>lower-alpha</option><option>upper-alpha</option></select></div><div><label className="text-xs text-gray-400">Position</label><div className="flex gap-1">{['inside','outside'].map(p => <button key={p} onClick={() => onPositionChange(p)} className={'px-2 py-0.5 text-xs rounded border capitalize ' + (position===p?'bg-blue-50 border-blue-300':'')}>{p}</button>)}</div></div></div>)
+}

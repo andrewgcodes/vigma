@@ -1,0 +1,6 @@
+'use client'
+interface Props { letterSpacing: number; lineHeight: number; onLetterSpacingChange: (v: number) => void; onLineHeightChange: (v: number) => void }
+// Feature 470: TextSpacingControls
+export default function TextSpacingControls({ letterSpacing, lineHeight, onLetterSpacingChange, onLineHeightChange }: Props) {
+  return (<div className="p-3 border-b"><div className="text-xs font-semibold text-gray-500 uppercase mb-2">Text Spacing</div><div className="flex items-center gap-2 mb-2"><span className="text-xs w-20">Letter</span><input type="range" min={-5} max={20} step={0.5} value={letterSpacing} onChange={e => onLetterSpacingChange(Number(e.target.value))} className="flex-1" /><span className="text-xs w-8 text-right">{letterSpacing}</span></div><div className="flex items-center gap-2"><span className="text-xs w-20">Line Height</span><input type="range" min={0.5} max={3} step={0.1} value={lineHeight} onChange={e => onLineHeightChange(Number(e.target.value))} className="flex-1" /><span className="text-xs w-8 text-right">{lineHeight.toFixed(1)}</span></div></div>)
+}
