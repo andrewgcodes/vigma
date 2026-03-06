@@ -163,6 +163,7 @@ export default function FeatureHub({
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      if (!useDesignStore.getState().keyboardShortcutsEnabled) return
       if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
         e.preventDefault()
         setShowCommandPalette(prev => !prev)

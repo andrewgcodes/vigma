@@ -1680,10 +1680,11 @@ export default function DesignPage() {
     const canvasH = engine.canvas.getHeight()
     const vpt = engine.canvas.viewportTransform
     if (vpt) {
-      vpt[4] = canvasW / 2 - x * z
-      vpt[5] = canvasH / 2 - y * z
-      engine.canvas.setViewportTransform(vpt)
-      engine.onViewportChange?.(z, vpt[4], vpt[5])
+      const newVpt = [...vpt] as typeof vpt
+      newVpt[4] = canvasW / 2 - x * z
+      newVpt[5] = canvasH / 2 - y * z
+      engine.canvas.setViewportTransform(newVpt)
+      engine.onViewportChange?.(z, newVpt[4], newVpt[5])
     }
   }, [])
 
