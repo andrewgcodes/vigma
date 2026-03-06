@@ -1267,7 +1267,7 @@ export default function DesignPage() {
       // (Critical shortcuts like Ctrl+Z, Ctrl+S, Delete, Escape, arrow keys remain active)
       if (useDesignStore.getState().keyboardShortcutsEnabled) {
         // Feature 90: ? key opens keyboard shortcuts dialog
-        if (e.key === '?' || (shift && e.key === '/')) {
+        if (!ctrl && (e.key === '?' || (shift && e.key === '/'))) {
           setShowKeyboardShortcuts(true)
           e.preventDefault()
           return
